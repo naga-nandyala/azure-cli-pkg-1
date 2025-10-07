@@ -1,0 +1,2126 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss create
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - --image --vm-sku --admin-username --admin-password -l -g -n --storage-sku
+        --orchestration-mode --lb-sku
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Compute/locations/westus/publishers/Debian/artifacttypes/vmimage/offers/debian-10/skus/10/versions?$top=1&$orderby=name%20desc&api-version=2024-11-01
+  response:
+    body:
+      string: "[\r\n  {\r\n    \"location\": \"westus\",\r\n    \"name\": \"0.20240430.1733\",\r\n
+        \   \"id\": \"/Subscriptions/00000000-0000-0000-0000-000000000000/Providers/Microsoft.Compute/Locations/westus/Publishers/Debian/ArtifactTypes/VMImage/Offers/debian-10/Skus/10/Versions/0.20240430.1733\"\r\n
+        \ }\r\n]"
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '273'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:38:48 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/northeurope/d679875f-673a-4e2a-8210-746ea07ad37a
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/ListVMImagesVersionsFromLocation3Min;15999,Microsoft.Compute/ListVMImagesVersionsFromLocation30Min;43995
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-msedge-ref:
+      - 'Ref A: 736E6BFA96204C42BA178B5DB814723C Ref B: TYO201151001040 Ref C: 2025-08-15T07:38:48Z'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss create
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - --image --vm-sku --admin-username --admin-password -l -g -n --storage-sku
+        --orchestration-mode --lb-sku
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Compute/locations/westus/publishers/Debian/artifacttypes/vmimage/offers/debian-10/skus/10/versions/0.20240430.1733?api-version=2024-11-01
+  response:
+    body:
+      string: "{\r\n  \"properties\": {\r\n    \"hyperVGeneration\": \"V1\",\r\n    \"architecture\":
+        \"x64\",\r\n    \"replicaType\": \"Unmanaged\",\r\n    \"disallowed\": {\r\n
+        \     \"vmDiskType\": \"None\"\r\n    },\r\n    \"automaticOSUpgradeProperties\":
+        {\r\n      \"automaticOSUpgradeSupported\": false\r\n    },\r\n    \"imageDeprecationStatus\":
+        {\r\n      \"imageState\": \"Active\"\r\n    },\r\n    \"features\": [\r\n
+        \     {\r\n        \"name\": \"IsAcceleratedNetworkSupported\",\r\n        \"value\":
+        \"True\"\r\n      },\r\n      {\r\n        \"name\": \"DiskControllerTypes\",\r\n
+        \       \"value\": \"SCSI\"\r\n      },\r\n      {\r\n        \"name\": \"IsHibernateSupported\",\r\n
+        \       \"value\": \"False\"\r\n      }\r\n    ],\r\n    \"osDiskImage\":
+        {\r\n      \"operatingSystem\": \"Linux\",\r\n      \"sizeInBytes\": 32212255232\r\n
+        \   },\r\n    \"dataDiskImages\": []\r\n  },\r\n  \"location\": \"westus\",\r\n
+        \ \"name\": \"0.20240430.1733\",\r\n  \"id\": \"/Subscriptions/00000000-0000-0000-0000-000000000000/Providers/Microsoft.Compute/Locations/westus/Publishers/Debian/ArtifactTypes/VMImage/Offers/debian-10/Skus/10/Versions/0.20240430.1733\"\r\n}"
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '1008'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:38:49 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/japaneast/6c69b439-f37e-4f1e-a1b3-acb83822ae2c
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/GetVMImageFromLocation3Min;12999,Microsoft.Compute/GetVMImageFromLocation30Min;73996
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-msedge-ref:
+      - 'Ref A: 88C7A6E291D443148F2AB320C37F0093 Ref B: TYO201100113011 Ref C: 2025-08-15T07:38:49Z'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss create
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - --image --vm-sku --admin-username --admin-password -l -g -n --storage-sku
+        --orchestration-mode --lb-sku
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks?api-version=2022-01-01
+  response:
+    body:
+      string: '{"value":[]}'
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '12'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:38:50 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-msedge-ref:
+      - 'Ref A: 8285A2AE85154E62A92BA06F7BE9AC5A Ref B: TYO201100114019 Ref C: 2025-08-15T07:38:50Z'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss create
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - --image --vm-sku --admin-username --admin-password -l -g -n --storage-sku
+        --orchestration-mode --lb-sku
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Compute/locations/westus/publishers/Debian/artifacttypes/vmimage/offers/debian-10/skus/10/versions?$top=1&$orderby=name%20desc&api-version=2024-11-01
+  response:
+    body:
+      string: "[\r\n  {\r\n    \"location\": \"westus\",\r\n    \"name\": \"0.20240430.1733\",\r\n
+        \   \"id\": \"/Subscriptions/00000000-0000-0000-0000-000000000000/Providers/Microsoft.Compute/Locations/westus/Publishers/Debian/ArtifactTypes/VMImage/Offers/debian-10/Skus/10/Versions/0.20240430.1733\"\r\n
+        \ }\r\n]"
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '273'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:38:51 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/northeurope/cc2e37ff-0347-4f3e-b7f0-0d4183c0cdfc
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/ListVMImagesVersionsFromLocation3Min;15998,Microsoft.Compute/ListVMImagesVersionsFromLocation30Min;43994
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-msedge-ref:
+      - 'Ref A: 7FE51787525F4A559CE92E66E5794440 Ref B: TYO201151001042 Ref C: 2025-08-15T07:38:51Z'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss create
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - --image --vm-sku --admin-username --admin-password -l -g -n --storage-sku
+        --orchestration-mode --lb-sku
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Compute/locations/westus/publishers/Debian/artifacttypes/vmimage/offers/debian-10/skus/10/versions/0.20240430.1733?api-version=2024-11-01
+  response:
+    body:
+      string: "{\r\n  \"properties\": {\r\n    \"hyperVGeneration\": \"V1\",\r\n    \"architecture\":
+        \"x64\",\r\n    \"replicaType\": \"Unmanaged\",\r\n    \"disallowed\": {\r\n
+        \     \"vmDiskType\": \"None\"\r\n    },\r\n    \"automaticOSUpgradeProperties\":
+        {\r\n      \"automaticOSUpgradeSupported\": false\r\n    },\r\n    \"imageDeprecationStatus\":
+        {\r\n      \"imageState\": \"Active\"\r\n    },\r\n    \"features\": [\r\n
+        \     {\r\n        \"name\": \"IsAcceleratedNetworkSupported\",\r\n        \"value\":
+        \"True\"\r\n      },\r\n      {\r\n        \"name\": \"DiskControllerTypes\",\r\n
+        \       \"value\": \"SCSI\"\r\n      },\r\n      {\r\n        \"name\": \"IsHibernateSupported\",\r\n
+        \       \"value\": \"False\"\r\n      }\r\n    ],\r\n    \"osDiskImage\":
+        {\r\n      \"operatingSystem\": \"Linux\",\r\n      \"sizeInBytes\": 32212255232\r\n
+        \   },\r\n    \"dataDiskImages\": []\r\n  },\r\n  \"location\": \"westus\",\r\n
+        \ \"name\": \"0.20240430.1733\",\r\n  \"id\": \"/Subscriptions/00000000-0000-0000-0000-000000000000/Providers/Microsoft.Compute/Locations/westus/Publishers/Debian/ArtifactTypes/VMImage/Offers/debian-10/Skus/10/Versions/0.20240430.1733\"\r\n}"
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '1008'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:38:53 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/northeurope/27ce3197-a0cd-4cb8-a786-19b88bdc1a90
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/GetVMImageFromLocation3Min;12998,Microsoft.Compute/GetVMImageFromLocation30Min;73995
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-msedge-ref:
+      - 'Ref A: 901352B319AD460DBF9DF4762BA9A929 Ref B: TYO201151001034 Ref C: 2025-08-15T07:38:52Z'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss create
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - --image --vm-sku --admin-username --admin-password -l -g -n --storage-sku
+        --orchestration-mode --lb-sku
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Compute/locations/westus/publishers/Debian/artifacttypes/vmimage/offers/debian-10/skus/10/versions?$top=1&$orderby=name%20desc&api-version=2024-11-01
+  response:
+    body:
+      string: "[\r\n  {\r\n    \"location\": \"westus\",\r\n    \"name\": \"0.20240430.1733\",\r\n
+        \   \"id\": \"/Subscriptions/00000000-0000-0000-0000-000000000000/Providers/Microsoft.Compute/Locations/westus/Publishers/Debian/ArtifactTypes/VMImage/Offers/debian-10/Skus/10/Versions/0.20240430.1733\"\r\n
+        \ }\r\n]"
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '273'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:38:56 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/northeurope/ca05a9d6-11a7-4ca3-9b6d-6dba4e4b8fa8
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/ListVMImagesVersionsFromLocation3Min;15997,Microsoft.Compute/ListVMImagesVersionsFromLocation30Min;43993
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-msedge-ref:
+      - 'Ref A: 02652EAF744245E2B22B8423246A6E31 Ref B: TYO201100117031 Ref C: 2025-08-15T07:38:55Z'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss create
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - --image --vm-sku --admin-username --admin-password -l -g -n --storage-sku
+        --orchestration-mode --lb-sku
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Compute/locations/westus/publishers/Debian/artifacttypes/vmimage/offers/debian-10/skus/10/versions/0.20240430.1733?api-version=2024-11-01
+  response:
+    body:
+      string: "{\r\n  \"properties\": {\r\n    \"hyperVGeneration\": \"V1\",\r\n    \"architecture\":
+        \"x64\",\r\n    \"replicaType\": \"Unmanaged\",\r\n    \"disallowed\": {\r\n
+        \     \"vmDiskType\": \"None\"\r\n    },\r\n    \"automaticOSUpgradeProperties\":
+        {\r\n      \"automaticOSUpgradeSupported\": false\r\n    },\r\n    \"imageDeprecationStatus\":
+        {\r\n      \"imageState\": \"Active\"\r\n    },\r\n    \"features\": [\r\n
+        \     {\r\n        \"name\": \"IsAcceleratedNetworkSupported\",\r\n        \"value\":
+        \"True\"\r\n      },\r\n      {\r\n        \"name\": \"DiskControllerTypes\",\r\n
+        \       \"value\": \"SCSI\"\r\n      },\r\n      {\r\n        \"name\": \"IsHibernateSupported\",\r\n
+        \       \"value\": \"False\"\r\n      }\r\n    ],\r\n    \"osDiskImage\":
+        {\r\n      \"operatingSystem\": \"Linux\",\r\n      \"sizeInBytes\": 32212255232\r\n
+        \   },\r\n    \"dataDiskImages\": []\r\n  },\r\n  \"location\": \"westus\",\r\n
+        \ \"name\": \"0.20240430.1733\",\r\n  \"id\": \"/Subscriptions/00000000-0000-0000-0000-000000000000/Providers/Microsoft.Compute/Locations/westus/Publishers/Debian/ArtifactTypes/VMImage/Offers/debian-10/Skus/10/Versions/0.20240430.1733\"\r\n}"
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '1008'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:38:57 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/japaneast/e48255f7-1479-4d1a-ae5c-346316446687
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/GetVMImageFromLocation3Min;12997,Microsoft.Compute/GetVMImageFromLocation30Min;73994
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-msedge-ref:
+      - 'Ref A: 3427CFB722C04AEE81037D4A2239FF09 Ref B: TYO201100113029 Ref C: 2025-08-15T07:38:57Z'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"properties": {"template": {"$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+      "contentVersion": "1.0.0.0", "parameters": {"adminPassword": {"type": "securestring",
+      "metadata": {"description": "Secure adminPassword"}}}, "variables": {}, "resources":
+      [{"name": "vmss000002VNET", "type": "Microsoft.Network/virtualNetworks", "location":
+      "westus", "apiVersion": "2015-06-15", "dependsOn": [], "tags": {}, "properties":
+      {"addressSpace": {"addressPrefixes": ["10.0.0.0/16"]}, "subnets": [{"name":
+      "vmss000002Subnet", "properties": {"addressPrefix": "10.0.0.0/24"}}]}}, {"apiVersion":
+      "2022-01-01", "type": "Microsoft.Network/publicIPAddresses", "name": "vmss000002LBPublicIP",
+      "location": "westus", "tags": {}, "dependsOn": [], "properties": {"publicIPAllocationMethod":
+      "Static"}, "sku": {"name": "Standard"}}, {"type": "Microsoft.Network/loadBalancers",
+      "name": "vmss000002LB", "location": "westus", "tags": {}, "apiVersion": "2022-01-01",
+      "dependsOn": ["Microsoft.Network/virtualNetworks/vmss000002VNET", "Microsoft.Network/publicIpAddresses/vmss000002LBPublicIP"],
+      "properties": {"backendAddressPools": [{"name": "vmss000002LBBEPool"}], "frontendIPConfigurations":
+      [{"name": "loadBalancerFrontEnd", "properties": {"publicIPAddress": {"id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/publicIPAddresses/vmss000002LBPublicIP"}}}],
+      "loadBalancingRules": [{"name": "LBRule", "properties": {"frontendIPConfiguration":
+      {"id": "[concat(resourceId(''Microsoft.Network/loadBalancers'', ''vmss000002LB''),
+      ''/frontendIPConfigurations/'', ''loadBalancerFrontEnd'')]"}, "backendAddressPool":
+      {"id": "[concat(resourceId(''Microsoft.Network/loadBalancers'', ''vmss000002LB''),
+      ''/backendAddressPools/'', ''vmss000002LBBEPool'')]"}, "protocol": "tcp", "frontendPort":
+      80, "backendPort": 80, "enableFloatingIP": false, "idleTimeoutInMinutes": 5}}]},
+      "sku": {"name": "Standard"}}, {"type": "Microsoft.Network/networkSecurityGroups",
+      "name": "vmss000002NSG", "apiVersion": "2015-06-15", "location": "westus", "tags":
+      {}, "dependsOn": [], "properties": {"securityRules": [{"name": "default-allow-ssh",
+      "properties": {"protocol": "Tcp", "sourcePortRange": "*", "destinationPortRange":
+      "22", "sourceAddressPrefix": "*", "destinationAddressPrefix": "*", "access":
+      "Allow", "priority": 1000, "direction": "Inbound"}}]}}, {"type": "Microsoft.Network/loadBalancers/inboundNatRules",
+      "apiVersion": "2022-01-01", "name": "vmss000002LB/NatRule", "location": "westus",
+      "properties": {"frontendIPConfiguration": {"id": "[concat(resourceId(''Microsoft.Network/loadBalancers'',
+      ''vmss000002LB''), ''/frontendIPConfigurations/'', ''loadBalancerFrontEnd'')]"},
+      "backendAddressPool": {"id": "[concat(resourceId(''Microsoft.Network/loadBalancers'',
+      ''vmss000002LB''), ''/backendAddressPools/'', ''vmss000002LBBEPool'')]"}, "backendPort":
+      22, "frontendPortRangeStart": "50000", "frontendPortRangeEnd": "50119", "protocol":
+      "tcp", "idleTimeoutInMinutes": 5}, "dependsOn": ["[concat(''Microsoft.Network/loadBalancers/'',
+      ''vmss000002LB'')]"]}, {"type": "Microsoft.Compute/virtualMachineScaleSets",
+      "name": "vmss000002", "location": "westus", "tags": {}, "apiVersion": "2024-11-01",
+      "dependsOn": ["Microsoft.Network/virtualNetworks/vmss000002VNET", "Microsoft.Network/loadBalancers/vmss000002LB",
+      "Microsoft.Network/networkSecurityGroups/vmss000002NSG"], "properties": {"overprovision":
+      true, "upgradePolicy": {"mode": "manual"}, "singlePlacementGroup": null, "virtualMachineProfile":
+      {"storageProfile": {"osDisk": {"createOption": "FromImage", "caching": "ReadWrite",
+      "managedDisk": {"storageAccountType": "Standard_LRS"}}, "imageReference": {"publisher":
+      "Debian", "offer": "debian-10", "sku": "10", "version": "latest"}}, "osProfile":
+      {"computerNamePrefix": "vmsssab20", "adminUsername": "clitest1", "adminPassword":
+      "[parameters(''adminPassword'')]"}, "networkProfile": {"networkInterfaceConfigurations":
+      [{"name": "vmsssab20Nic", "properties": {"ipConfigurations": [{"name": "vmsssab20IPConfig",
+      "properties": {"subnet": {"id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks/vmss000002VNET/subnets/vmss000002Subnet"},
+      "loadBalancerBackendAddressPools": [{"id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB/backendAddressPools/vmss000002LBBEPool"}]}}],
+      "networkSecurityGroup": {"id": "[resourceId(''Microsoft.Network/networkSecurityGroups'',
+      ''vmss000002NSG'')]"}, "primary": "true"}}]}}, "orchestrationMode": "Uniform"},
+      "sku": {"name": "Standard_B2ms", "capacity": 2}}], "outputs": {"VMSS": {"type":
+      "object", "value": "[reference(resourceId(''Microsoft.Compute/virtualMachineScaleSets'',
+      ''vmss000002''),providers(''Microsoft.Compute'', ''virtualMachineScaleSets'').apiVersions[0])]"}}},
+      "parameters": {"adminPassword": {"value": "testPassword0"}}, "mode": "incremental"}}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss create
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '5032'
+      Content-Type:
+      - application/json
+      ParameterSetName:
+      - --image --vm-sku --admin-username --admin-password -l -g -n --storage-sku
+        --orchestration-mode --lb-sku
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: PUT
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/cli_test_vmss_create_options000001/providers/Microsoft.Resources/deployments/mock-deployment?api-version=2024-11-01
+  response:
+    body:
+      string: '{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Resources/deployments/vmss_deploy_iV8V3Vzshg8hu0KRvk6RpCQ0OUHYJH3c","name":"vmss_deploy_iV8V3Vzshg8hu0KRvk6RpCQ0OUHYJH3c","type":"Microsoft.Resources/deployments","properties":{"templateHash":"8789681504996130832","parameters":{"adminPassword":{"type":"SecureString"}},"mode":"Incremental","provisioningState":"Accepted","timestamp":"2025-08-15T07:39:02.4864127Z","duration":"PT0.0009956S","correlationId":"c03b0aeb-cc72-4286-b360-6958a913087d","providers":[{"namespace":"Microsoft.Network","resourceTypes":[{"resourceType":"virtualNetworks","locations":["westus"]},{"resourceType":"publicIPAddresses","locations":["westus"]},{"resourceType":"loadBalancers","locations":["westus"]},{"resourceType":"networkSecurityGroups","locations":["westus"]},{"resourceType":"loadBalancers/inboundNatRules","locations":["westus"]}]},{"namespace":"Microsoft.Compute","resourceTypes":[{"resourceType":"virtualMachineScaleSets","locations":["westus"]}]}],"dependencies":[{"dependsOn":[{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks/vmss000002VNET","resourceType":"Microsoft.Network/virtualNetworks","resourceName":"vmss000002VNET"},{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/publicIPAddresses/vmss000002LBPublicIP","resourceType":"Microsoft.Network/publicIPAddresses","resourceName":"vmss000002LBPublicIP"}],"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB","resourceType":"Microsoft.Network/loadBalancers","resourceName":"vmss000002LB"},{"dependsOn":[{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB","resourceType":"Microsoft.Network/loadBalancers","resourceName":"vmss000002LB"}],"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB/inboundNatRules/NatRule","resourceType":"Microsoft.Network/loadBalancers/inboundNatRules","resourceName":"vmss000002LB/NatRule"},{"dependsOn":[{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks/vmss000002VNET","resourceType":"Microsoft.Network/virtualNetworks","resourceName":"vmss000002VNET"},{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB","resourceType":"Microsoft.Network/loadBalancers","resourceName":"vmss000002LB"},{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/networkSecurityGroups/vmss000002NSG","resourceType":"Microsoft.Network/networkSecurityGroups","resourceName":"vmss000002NSG"}],"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002","resourceType":"Microsoft.Compute/virtualMachineScaleSets","resourceName":"vmss000002"}]}}'
+    headers:
+      azure-asyncoperation:
+      - https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/cli_test_vmss_create_options000001/providers/Microsoft.Resources/deployments/vmss_deploy_iV8V3Vzshg8hu0KRvk6RpCQ0OUHYJH3c/operationStatuses/08584463633429764563?api-version=2024-11-01&t=638908403499863966&c=MIIHhzCCBm-gAwIBAgITfAh_GKqaYH8RwOhahQAACH8YqjANBgkqhkiG9w0BAQsFADBEMRMwEQYKCZImiZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQBGRYDQU1FMRgwFgYDVQQDEw9BTUUgSW5mcmEgQ0EgMDUwHhcNMjUwNzE3MDk1OTE3WhcNMjYwMTEzMDk1OTE3WjBAMT4wPAYDVQQDEzVhc3luY29wZXJhdGlvbnNpZ25pbmdjZXJ0aWZpY2F0ZS5tYW5hZ2VtZW50LmF6dXJlLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKuEt3wTriBe3SnGcgSXaxZXwy_Xvnx1kHhEe9cOTTajScq7IAVIz8UpcaaPf3UkWbuQCQ5VsrM6sjyPl1GO3EfreM0qta2mlQD1rV5xXCl0FW7D08thmIi5YvQI9disUj8UiltkhlG4H1dN7nL-JOsqMr23WAFO4WxBvzYCuFtlIscequZwOsF5BH4DEtri4FQLSMGZl_C0nRNntCtn_7vv6CnsqqUGIQ7fY7BIflesLUUbiRhZ8aQ-xzK4i5UPShfw4q5XcZ5maAk6jUAPK7Icf8liMlqJBLnG0DAIJsyI3QjAGaUDtyqoczOJU0bQN-wWv1NZAdwxsc-H1uBGohECAwEAAaOCBHQwggRwMCcGCSsGAQQBgjcVCgQaMBgwCgYIKwYBBQUHAwEwCgYIKwYBBQUHAwIwPQYJKwYBBAGCNxUHBDAwLgYmKwYBBAGCNxUIhpDjDYTVtHiE8Ys-hZvdFs6dEoFghfmRS4WsmTQCAWQCAQcwggHLBggrBgEFBQcBAQSCAb0wggG5MGMGCCsGAQUFBzAChldodHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtpaW5mcmEvQ2VydHMvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmwxLmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MFMGCCsGAQUFBzAChkdodHRwOi8vY3JsMi5hbWUuZ2JsL2FpYS9DTzFQS0lJTlRDQTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA1LmNydDBTBggrBgEFBQcwAoZHaHR0cDovL2NybDMuYW1lLmdibC9haWEvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmw0LmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MB0GA1UdDgQWBBQg5Jh8k3-r9HjagWiaVSjmv1ZYcTAOBgNVHQ8BAf8EBAMCBaAwggEmBgNVHR8EggEdMIIBGTCCARWgggERoIIBDYY_aHR0cDovL2NybC5taWNyb3NvZnQuY29tL3BraWluZnJhL0NSTC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMS5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMi5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMy5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsNC5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JsMIGdBgNVHSAEgZUwgZIwDAYKKwYBBAGCN3sBATBmBgorBgEEAYI3ewICMFgwVgYIKwYBBQUHAgIwSh5IADMAMwBlADAAMQA5ADIAMQAtADQAZAA2ADQALQA0AGYAOABjAC0AYQAwADUANQAtADUAYgBkAGEAZgBmAGQANQBlADMAMwBkMAwGCisGAQQBgjd7AwIwDAYKKwYBBAGCN3sEAjAfBgNVHSMEGDAWgBR61hmFKHlscXYeYPjzS--iBUIWHTAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwDQYJKoZIhvcNAQELBQADggEBAJbvINqtpqi3m39oJmFmOa_onaje780VTHmE4RkSs50__U5mxmv9jUP6-2x1veQp90S3Zh42P-p57rPpkmO1V_Xn6HzayHC9ODMpiLw71ICXy7pnBKPx96ToTpISwqhz9n2WMWpUZwtSamQgVgq4oILrbmLC2a2b7VZz0mhN27s3JGa5iLup-JUJRZeXb_ymwQ8AhiFfklb79EPa29qi54HkT_WpArA7K3hBrtnByNVXDNiHx1hlvxKSWNzD-BTq69yRckYW3OI-kDHfeDgV8HlteT1BU8h87LB484ZYDG50LlTpuivm57pdiEGxjerXEO8ZqTH9g1bQLR-y2yjWmyg&s=GejHMOfqWnPvSZZvFV5VOuPaXcnW2d-VGA91ry4mf8ehKPKIe9_P9NN9IfgwBZrviuDO0lIeiSoFg-8MMBeBhyKycUSoje3akyWQoxJhHYSGD5tnZz_aaosc4MGgBiuWO3n_HwMhoIT8AqNc3QZ6XO9WOoCcIPt4WXWSnM88Uph3jFMRrkinCIJik_QgApFDsossWW7-8x5a0d-oXwl6pIF-ZJ_N385jGpEs0fx6Jvhp6mAZU7XDCnhbpbEZz-MhBD2RdalMc8aE52yqU5tTURKxSwlEh10O7Yo7zabq5zzaML8mqulZm_rawSyjiPPXK37RsWREm7Z0uTEHTjxWfw&h=Z6btYz6lC7tiHpF8sGGg04IEzcE1YQA1b1D_v6WFhJs
+      cache-control:
+      - no-cache
+      content-length:
+      - '3455'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:39:09 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-deployment-engine-version:
+      - 1.430.0
+      x-ms-ratelimit-remaining-subscription-global-writes:
+      - '2999'
+      x-ms-ratelimit-remaining-subscription-writes:
+      - '199'
+      x-msedge-ref:
+      - 'Ref A: B164946661CE44E58DE519C00858C91E Ref B: TYO201100117051 Ref C: 2025-08-15T07:38:58Z'
+    status:
+      code: 201
+      message: Created
+- request:
+    body: null
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss create
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - --image --vm-sku --admin-username --admin-password -l -g -n --storage-sku
+        --orchestration-mode --lb-sku
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/cli_test_vmss_create_options000001/providers/Microsoft.Resources/deployments/mock-deployment/operationStatuses/08584463633429764563?api-version=2024-11-01&t=638908403499863966&c=MIIHhzCCBm-gAwIBAgITfAh_GKqaYH8RwOhahQAACH8YqjANBgkqhkiG9w0BAQsFADBEMRMwEQYKCZImiZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQBGRYDQU1FMRgwFgYDVQQDEw9BTUUgSW5mcmEgQ0EgMDUwHhcNMjUwNzE3MDk1OTE3WhcNMjYwMTEzMDk1OTE3WjBAMT4wPAYDVQQDEzVhc3luY29wZXJhdGlvbnNpZ25pbmdjZXJ0aWZpY2F0ZS5tYW5hZ2VtZW50LmF6dXJlLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKuEt3wTriBe3SnGcgSXaxZXwy_Xvnx1kHhEe9cOTTajScq7IAVIz8UpcaaPf3UkWbuQCQ5VsrM6sjyPl1GO3EfreM0qta2mlQD1rV5xXCl0FW7D08thmIi5YvQI9disUj8UiltkhlG4H1dN7nL-JOsqMr23WAFO4WxBvzYCuFtlIscequZwOsF5BH4DEtri4FQLSMGZl_C0nRNntCtn_7vv6CnsqqUGIQ7fY7BIflesLUUbiRhZ8aQ-xzK4i5UPShfw4q5XcZ5maAk6jUAPK7Icf8liMlqJBLnG0DAIJsyI3QjAGaUDtyqoczOJU0bQN-wWv1NZAdwxsc-H1uBGohECAwEAAaOCBHQwggRwMCcGCSsGAQQBgjcVCgQaMBgwCgYIKwYBBQUHAwEwCgYIKwYBBQUHAwIwPQYJKwYBBAGCNxUHBDAwLgYmKwYBBAGCNxUIhpDjDYTVtHiE8Ys-hZvdFs6dEoFghfmRS4WsmTQCAWQCAQcwggHLBggrBgEFBQcBAQSCAb0wggG5MGMGCCsGAQUFBzAChldodHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtpaW5mcmEvQ2VydHMvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmwxLmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MFMGCCsGAQUFBzAChkdodHRwOi8vY3JsMi5hbWUuZ2JsL2FpYS9DTzFQS0lJTlRDQTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA1LmNydDBTBggrBgEFBQcwAoZHaHR0cDovL2NybDMuYW1lLmdibC9haWEvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmw0LmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MB0GA1UdDgQWBBQg5Jh8k3-r9HjagWiaVSjmv1ZYcTAOBgNVHQ8BAf8EBAMCBaAwggEmBgNVHR8EggEdMIIBGTCCARWgggERoIIBDYY_aHR0cDovL2NybC5taWNyb3NvZnQuY29tL3BraWluZnJhL0NSTC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMS5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMi5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMy5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsNC5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JsMIGdBgNVHSAEgZUwgZIwDAYKKwYBBAGCN3sBATBmBgorBgEEAYI3ewICMFgwVgYIKwYBBQUHAgIwSh5IADMAMwBlADAAMQA5ADIAMQAtADQAZAA2ADQALQA0AGYAOABjAC0AYQAwADUANQAtADUAYgBkAGEAZgBmAGQANQBlADMAMwBkMAwGCisGAQQBgjd7AwIwDAYKKwYBBAGCN3sEAjAfBgNVHSMEGDAWgBR61hmFKHlscXYeYPjzS--iBUIWHTAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwDQYJKoZIhvcNAQELBQADggEBAJbvINqtpqi3m39oJmFmOa_onaje780VTHmE4RkSs50__U5mxmv9jUP6-2x1veQp90S3Zh42P-p57rPpkmO1V_Xn6HzayHC9ODMpiLw71ICXy7pnBKPx96ToTpISwqhz9n2WMWpUZwtSamQgVgq4oILrbmLC2a2b7VZz0mhN27s3JGa5iLup-JUJRZeXb_ymwQ8AhiFfklb79EPa29qi54HkT_WpArA7K3hBrtnByNVXDNiHx1hlvxKSWNzD-BTq69yRckYW3OI-kDHfeDgV8HlteT1BU8h87LB484ZYDG50LlTpuivm57pdiEGxjerXEO8ZqTH9g1bQLR-y2yjWmyg&s=GejHMOfqWnPvSZZvFV5VOuPaXcnW2d-VGA91ry4mf8ehKPKIe9_P9NN9IfgwBZrviuDO0lIeiSoFg-8MMBeBhyKycUSoje3akyWQoxJhHYSGD5tnZz_aaosc4MGgBiuWO3n_HwMhoIT8AqNc3QZ6XO9WOoCcIPt4WXWSnM88Uph3jFMRrkinCIJik_QgApFDsossWW7-8x5a0d-oXwl6pIF-ZJ_N385jGpEs0fx6Jvhp6mAZU7XDCnhbpbEZz-MhBD2RdalMc8aE52yqU5tTURKxSwlEh10O7Yo7zabq5zzaML8mqulZm_rawSyjiPPXK37RsWREm7Z0uTEHTjxWfw&h=Z6btYz6lC7tiHpF8sGGg04IEzcE1YQA1b1D_v6WFhJs
+  response:
+    body:
+      string: '{"status":"Running"}'
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '20'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:39:11 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-msedge-ref:
+      - 'Ref A: 70183E34AB734D58849DD3ADC7845274 Ref B: TYO201151004052 Ref C: 2025-08-15T07:39:11Z'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss create
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - --image --vm-sku --admin-username --admin-password -l -g -n --storage-sku
+        --orchestration-mode --lb-sku
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/cli_test_vmss_create_options000001/providers/Microsoft.Resources/deployments/mock-deployment/operationStatuses/08584463633429764563?api-version=2024-11-01&t=638908403499863966&c=MIIHhzCCBm-gAwIBAgITfAh_GKqaYH8RwOhahQAACH8YqjANBgkqhkiG9w0BAQsFADBEMRMwEQYKCZImiZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQBGRYDQU1FMRgwFgYDVQQDEw9BTUUgSW5mcmEgQ0EgMDUwHhcNMjUwNzE3MDk1OTE3WhcNMjYwMTEzMDk1OTE3WjBAMT4wPAYDVQQDEzVhc3luY29wZXJhdGlvbnNpZ25pbmdjZXJ0aWZpY2F0ZS5tYW5hZ2VtZW50LmF6dXJlLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKuEt3wTriBe3SnGcgSXaxZXwy_Xvnx1kHhEe9cOTTajScq7IAVIz8UpcaaPf3UkWbuQCQ5VsrM6sjyPl1GO3EfreM0qta2mlQD1rV5xXCl0FW7D08thmIi5YvQI9disUj8UiltkhlG4H1dN7nL-JOsqMr23WAFO4WxBvzYCuFtlIscequZwOsF5BH4DEtri4FQLSMGZl_C0nRNntCtn_7vv6CnsqqUGIQ7fY7BIflesLUUbiRhZ8aQ-xzK4i5UPShfw4q5XcZ5maAk6jUAPK7Icf8liMlqJBLnG0DAIJsyI3QjAGaUDtyqoczOJU0bQN-wWv1NZAdwxsc-H1uBGohECAwEAAaOCBHQwggRwMCcGCSsGAQQBgjcVCgQaMBgwCgYIKwYBBQUHAwEwCgYIKwYBBQUHAwIwPQYJKwYBBAGCNxUHBDAwLgYmKwYBBAGCNxUIhpDjDYTVtHiE8Ys-hZvdFs6dEoFghfmRS4WsmTQCAWQCAQcwggHLBggrBgEFBQcBAQSCAb0wggG5MGMGCCsGAQUFBzAChldodHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtpaW5mcmEvQ2VydHMvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmwxLmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MFMGCCsGAQUFBzAChkdodHRwOi8vY3JsMi5hbWUuZ2JsL2FpYS9DTzFQS0lJTlRDQTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA1LmNydDBTBggrBgEFBQcwAoZHaHR0cDovL2NybDMuYW1lLmdibC9haWEvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmw0LmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MB0GA1UdDgQWBBQg5Jh8k3-r9HjagWiaVSjmv1ZYcTAOBgNVHQ8BAf8EBAMCBaAwggEmBgNVHR8EggEdMIIBGTCCARWgggERoIIBDYY_aHR0cDovL2NybC5taWNyb3NvZnQuY29tL3BraWluZnJhL0NSTC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMS5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMi5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMy5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsNC5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JsMIGdBgNVHSAEgZUwgZIwDAYKKwYBBAGCN3sBATBmBgorBgEEAYI3ewICMFgwVgYIKwYBBQUHAgIwSh5IADMAMwBlADAAMQA5ADIAMQAtADQAZAA2ADQALQA0AGYAOABjAC0AYQAwADUANQAtADUAYgBkAGEAZgBmAGQANQBlADMAMwBkMAwGCisGAQQBgjd7AwIwDAYKKwYBBAGCN3sEAjAfBgNVHSMEGDAWgBR61hmFKHlscXYeYPjzS--iBUIWHTAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwDQYJKoZIhvcNAQELBQADggEBAJbvINqtpqi3m39oJmFmOa_onaje780VTHmE4RkSs50__U5mxmv9jUP6-2x1veQp90S3Zh42P-p57rPpkmO1V_Xn6HzayHC9ODMpiLw71ICXy7pnBKPx96ToTpISwqhz9n2WMWpUZwtSamQgVgq4oILrbmLC2a2b7VZz0mhN27s3JGa5iLup-JUJRZeXb_ymwQ8AhiFfklb79EPa29qi54HkT_WpArA7K3hBrtnByNVXDNiHx1hlvxKSWNzD-BTq69yRckYW3OI-kDHfeDgV8HlteT1BU8h87LB484ZYDG50LlTpuivm57pdiEGxjerXEO8ZqTH9g1bQLR-y2yjWmyg&s=GejHMOfqWnPvSZZvFV5VOuPaXcnW2d-VGA91ry4mf8ehKPKIe9_P9NN9IfgwBZrviuDO0lIeiSoFg-8MMBeBhyKycUSoje3akyWQoxJhHYSGD5tnZz_aaosc4MGgBiuWO3n_HwMhoIT8AqNc3QZ6XO9WOoCcIPt4WXWSnM88Uph3jFMRrkinCIJik_QgApFDsossWW7-8x5a0d-oXwl6pIF-ZJ_N385jGpEs0fx6Jvhp6mAZU7XDCnhbpbEZz-MhBD2RdalMc8aE52yqU5tTURKxSwlEh10O7Yo7zabq5zzaML8mqulZm_rawSyjiPPXK37RsWREm7Z0uTEHTjxWfw&h=Z6btYz6lC7tiHpF8sGGg04IEzcE1YQA1b1D_v6WFhJs
+  response:
+    body:
+      string: '{"status":"Running"}'
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '20'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:39:43 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-msedge-ref:
+      - 'Ref A: 6B2D12E02FA24575B61F1040C1684D4F Ref B: TYO201151003025 Ref C: 2025-08-15T07:39:43Z'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss create
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - --image --vm-sku --admin-username --admin-password -l -g -n --storage-sku
+        --orchestration-mode --lb-sku
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/cli_test_vmss_create_options000001/providers/Microsoft.Resources/deployments/mock-deployment/operationStatuses/08584463633429764563?api-version=2024-11-01&t=638908403499863966&c=MIIHhzCCBm-gAwIBAgITfAh_GKqaYH8RwOhahQAACH8YqjANBgkqhkiG9w0BAQsFADBEMRMwEQYKCZImiZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQBGRYDQU1FMRgwFgYDVQQDEw9BTUUgSW5mcmEgQ0EgMDUwHhcNMjUwNzE3MDk1OTE3WhcNMjYwMTEzMDk1OTE3WjBAMT4wPAYDVQQDEzVhc3luY29wZXJhdGlvbnNpZ25pbmdjZXJ0aWZpY2F0ZS5tYW5hZ2VtZW50LmF6dXJlLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKuEt3wTriBe3SnGcgSXaxZXwy_Xvnx1kHhEe9cOTTajScq7IAVIz8UpcaaPf3UkWbuQCQ5VsrM6sjyPl1GO3EfreM0qta2mlQD1rV5xXCl0FW7D08thmIi5YvQI9disUj8UiltkhlG4H1dN7nL-JOsqMr23WAFO4WxBvzYCuFtlIscequZwOsF5BH4DEtri4FQLSMGZl_C0nRNntCtn_7vv6CnsqqUGIQ7fY7BIflesLUUbiRhZ8aQ-xzK4i5UPShfw4q5XcZ5maAk6jUAPK7Icf8liMlqJBLnG0DAIJsyI3QjAGaUDtyqoczOJU0bQN-wWv1NZAdwxsc-H1uBGohECAwEAAaOCBHQwggRwMCcGCSsGAQQBgjcVCgQaMBgwCgYIKwYBBQUHAwEwCgYIKwYBBQUHAwIwPQYJKwYBBAGCNxUHBDAwLgYmKwYBBAGCNxUIhpDjDYTVtHiE8Ys-hZvdFs6dEoFghfmRS4WsmTQCAWQCAQcwggHLBggrBgEFBQcBAQSCAb0wggG5MGMGCCsGAQUFBzAChldodHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtpaW5mcmEvQ2VydHMvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmwxLmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MFMGCCsGAQUFBzAChkdodHRwOi8vY3JsMi5hbWUuZ2JsL2FpYS9DTzFQS0lJTlRDQTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA1LmNydDBTBggrBgEFBQcwAoZHaHR0cDovL2NybDMuYW1lLmdibC9haWEvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmw0LmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MB0GA1UdDgQWBBQg5Jh8k3-r9HjagWiaVSjmv1ZYcTAOBgNVHQ8BAf8EBAMCBaAwggEmBgNVHR8EggEdMIIBGTCCARWgggERoIIBDYY_aHR0cDovL2NybC5taWNyb3NvZnQuY29tL3BraWluZnJhL0NSTC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMS5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMi5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMy5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsNC5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JsMIGdBgNVHSAEgZUwgZIwDAYKKwYBBAGCN3sBATBmBgorBgEEAYI3ewICMFgwVgYIKwYBBQUHAgIwSh5IADMAMwBlADAAMQA5ADIAMQAtADQAZAA2ADQALQA0AGYAOABjAC0AYQAwADUANQAtADUAYgBkAGEAZgBmAGQANQBlADMAMwBkMAwGCisGAQQBgjd7AwIwDAYKKwYBBAGCN3sEAjAfBgNVHSMEGDAWgBR61hmFKHlscXYeYPjzS--iBUIWHTAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwDQYJKoZIhvcNAQELBQADggEBAJbvINqtpqi3m39oJmFmOa_onaje780VTHmE4RkSs50__U5mxmv9jUP6-2x1veQp90S3Zh42P-p57rPpkmO1V_Xn6HzayHC9ODMpiLw71ICXy7pnBKPx96ToTpISwqhz9n2WMWpUZwtSamQgVgq4oILrbmLC2a2b7VZz0mhN27s3JGa5iLup-JUJRZeXb_ymwQ8AhiFfklb79EPa29qi54HkT_WpArA7K3hBrtnByNVXDNiHx1hlvxKSWNzD-BTq69yRckYW3OI-kDHfeDgV8HlteT1BU8h87LB484ZYDG50LlTpuivm57pdiEGxjerXEO8ZqTH9g1bQLR-y2yjWmyg&s=GejHMOfqWnPvSZZvFV5VOuPaXcnW2d-VGA91ry4mf8ehKPKIe9_P9NN9IfgwBZrviuDO0lIeiSoFg-8MMBeBhyKycUSoje3akyWQoxJhHYSGD5tnZz_aaosc4MGgBiuWO3n_HwMhoIT8AqNc3QZ6XO9WOoCcIPt4WXWSnM88Uph3jFMRrkinCIJik_QgApFDsossWW7-8x5a0d-oXwl6pIF-ZJ_N385jGpEs0fx6Jvhp6mAZU7XDCnhbpbEZz-MhBD2RdalMc8aE52yqU5tTURKxSwlEh10O7Yo7zabq5zzaML8mqulZm_rawSyjiPPXK37RsWREm7Z0uTEHTjxWfw&h=Z6btYz6lC7tiHpF8sGGg04IEzcE1YQA1b1D_v6WFhJs
+  response:
+    body:
+      string: '{"status":"Succeeded"}'
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '22'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:40:15 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-msedge-ref:
+      - 'Ref A: A19AFC8B6D7042FA99D4C80169D77BCB Ref B: TYO201100114047 Ref C: 2025-08-15T07:40:15Z'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss create
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - --image --vm-sku --admin-username --admin-password -l -g -n --storage-sku
+        --orchestration-mode --lb-sku
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/cli_test_vmss_create_options000001/providers/Microsoft.Resources/deployments/mock-deployment?api-version=2024-11-01
+  response:
+    body:
+      string: '{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Resources/deployments/vmss_deploy_iV8V3Vzshg8hu0KRvk6RpCQ0OUHYJH3c","name":"vmss_deploy_iV8V3Vzshg8hu0KRvk6RpCQ0OUHYJH3c","type":"Microsoft.Resources/deployments","properties":{"templateHash":"8789681504996130832","parameters":{"adminPassword":{"type":"SecureString"}},"mode":"Incremental","provisioningState":"Succeeded","timestamp":"2025-08-15T07:40:08.9702801Z","duration":"PT1M6.4838674S","correlationId":"c03b0aeb-cc72-4286-b360-6958a913087d","providers":[{"namespace":"Microsoft.Network","resourceTypes":[{"resourceType":"virtualNetworks","locations":["westus"]},{"resourceType":"publicIPAddresses","locations":["westus"]},{"resourceType":"loadBalancers","locations":["westus"]},{"resourceType":"networkSecurityGroups","locations":["westus"]},{"resourceType":"loadBalancers/inboundNatRules","locations":["westus"]}]},{"namespace":"Microsoft.Compute","resourceTypes":[{"resourceType":"virtualMachineScaleSets","locations":["westus"]}]}],"dependencies":[{"dependsOn":[{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks/vmss000002VNET","resourceType":"Microsoft.Network/virtualNetworks","resourceName":"vmss000002VNET"},{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/publicIPAddresses/vmss000002LBPublicIP","resourceType":"Microsoft.Network/publicIPAddresses","resourceName":"vmss000002LBPublicIP"}],"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB","resourceType":"Microsoft.Network/loadBalancers","resourceName":"vmss000002LB"},{"dependsOn":[{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB","resourceType":"Microsoft.Network/loadBalancers","resourceName":"vmss000002LB"}],"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB/inboundNatRules/NatRule","resourceType":"Microsoft.Network/loadBalancers/inboundNatRules","resourceName":"vmss000002LB/NatRule"},{"dependsOn":[{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks/vmss000002VNET","resourceType":"Microsoft.Network/virtualNetworks","resourceName":"vmss000002VNET"},{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB","resourceType":"Microsoft.Network/loadBalancers","resourceName":"vmss000002LB"},{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/networkSecurityGroups/vmss000002NSG","resourceType":"Microsoft.Network/networkSecurityGroups","resourceName":"vmss000002NSG"}],"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002","resourceType":"Microsoft.Compute/virtualMachineScaleSets","resourceName":"vmss000002"}],"outputs":{"vmss":{"type":"Object","value":{"singlePlacementGroup":true,"orchestrationMode":"Uniform","upgradePolicy":{"mode":"Manual"},"virtualMachineProfile":{"osProfile":{"computerNamePrefix":"vmsssab20","adminUsername":"clitest1","linuxConfiguration":{"disablePasswordAuthentication":false,"provisionVMAgent":true},"secrets":[],"allowExtensionOperations":true,"requireGuestProvisionSignal":true},"storageProfile":{"osDisk":{"osType":"Linux","createOption":"FromImage","caching":"ReadWrite","managedDisk":{"storageAccountType":"Standard_LRS"},"diskSizeGB":30},"imageReference":{"publisher":"Debian","offer":"debian-10","sku":"10","version":"latest"}},"networkProfile":{"networkInterfaceConfigurations":[{"name":"vmsssab20Nic","properties":{"primary":true,"disableTcpStateTracking":false,"networkSecurityGroup":{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/networkSecurityGroups/vmss000002NSG"},"dnsSettings":{"dnsServers":[]},"enableIPForwarding":false,"ipConfigurations":[{"name":"vmsssab20IPConfig","properties":{"subnet":{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks/vmss000002VNET/subnets/vmss000002Subnet"},"privateIPAddressVersion":"IPv4","loadBalancerBackendAddressPools":[{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB/backendAddressPools/vmss000002LBBEPool"}]}}]}}]},"timeCreated":"2025-08-15T07:39:20.6435031+00:00"},"provisioningState":"Succeeded","overprovision":true,"doNotRunExtensionsOnOverprovisionedVMs":false,"uniqueId":"85bade03-d0c1-44a3-990b-ee158c961225","platformFaultDomainCount":5,"timeCreated":"2025-08-15T07:39:20.6435031+00:00"}}},"outputResources":[{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002"},{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB"},{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB/inboundNatRules/NatRule"},{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/networkSecurityGroups/vmss000002NSG"},{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/publicIPAddresses/vmss000002LBPublicIP"},{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks/vmss000002VNET"}]}}'
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '6408'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:40:17 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-msedge-ref:
+      - 'Ref A: 9D3DF87B9E1C45A7982BB73DF3289D8A Ref B: TYO201151006062 Ref C: 2025-08-15T07:40:17Z'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - disk create
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - -g -n --size-gb --sku
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/cli_test_vmss_create_options000001?api-version=2024-11-01
+  response:
+    body:
+      string: '{"id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001","name":"cli_test_vmss_create_options000001","type":"Microsoft.Resources/resourceGroups","location":"westus","tags":{"product":"azurecli","cause":"automation","test":"test_vmss_update_instance_disks","date":"2025-08-15T07:38:37Z","module":"vm"},"properties":{"provisioningState":"Succeeded"}}'
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '401'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:40:19 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-msedge-ref:
+      - 'Ref A: 42928628D4E44E2D996A122F149E9E66 Ref B: TYO201151006060 Ref C: 2025-08-15T07:40:19Z'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"location": "westus", "properties": {"creationData": {"createOption":
+      "Empty"}, "diskSizeGB": 1}, "sku": {"name": "Standard_LRS"}, "tags": {}}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - disk create
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '143'
+      Content-Type:
+      - application/json
+      ParameterSetName:
+      - -g -n --size-gb --sku
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: PUT
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/disk000003?api-version=2025-01-02
+  response:
+    body:
+      string: "{\r\n  \"name\": \"disk000003\",\r\n  \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/disk000003\",\r\n
+        \ \"type\": \"Microsoft.Compute/disks\",\r\n  \"location\": \"westus\",\r\n
+        \ \"tags\": {},\r\n  \"sku\": {\r\n    \"name\": \"Standard_LRS\"\r\n  },\r\n
+        \ \"properties\": {\r\n    \"creationData\": {\r\n      \"createOption\":
+        \"Empty\"\r\n    },\r\n    \"diskSizeGB\": 1,\r\n    \"provisioningState\":
+        \"Updating\"\r\n  }\r\n}"
+    headers:
+      azure-asyncoperation:
+      - https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Compute/locations/westus/DiskOperations/dc80c33c-5db8-4b64-8a22-925059c28924?p=98b95826-9f92-41ba-82e9-438afe89cae9&api-version=2025-01-02&t=638908404237397271&c=MIIHhzCCBm-gAwIBAgITfAh_GKqaYH8RwOhahQAACH8YqjANBgkqhkiG9w0BAQsFADBEMRMwEQYKCZImiZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQBGRYDQU1FMRgwFgYDVQQDEw9BTUUgSW5mcmEgQ0EgMDUwHhcNMjUwNzE3MDk1OTE3WhcNMjYwMTEzMDk1OTE3WjBAMT4wPAYDVQQDEzVhc3luY29wZXJhdGlvbnNpZ25pbmdjZXJ0aWZpY2F0ZS5tYW5hZ2VtZW50LmF6dXJlLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKuEt3wTriBe3SnGcgSXaxZXwy_Xvnx1kHhEe9cOTTajScq7IAVIz8UpcaaPf3UkWbuQCQ5VsrM6sjyPl1GO3EfreM0qta2mlQD1rV5xXCl0FW7D08thmIi5YvQI9disUj8UiltkhlG4H1dN7nL-JOsqMr23WAFO4WxBvzYCuFtlIscequZwOsF5BH4DEtri4FQLSMGZl_C0nRNntCtn_7vv6CnsqqUGIQ7fY7BIflesLUUbiRhZ8aQ-xzK4i5UPShfw4q5XcZ5maAk6jUAPK7Icf8liMlqJBLnG0DAIJsyI3QjAGaUDtyqoczOJU0bQN-wWv1NZAdwxsc-H1uBGohECAwEAAaOCBHQwggRwMCcGCSsGAQQBgjcVCgQaMBgwCgYIKwYBBQUHAwEwCgYIKwYBBQUHAwIwPQYJKwYBBAGCNxUHBDAwLgYmKwYBBAGCNxUIhpDjDYTVtHiE8Ys-hZvdFs6dEoFghfmRS4WsmTQCAWQCAQcwggHLBggrBgEFBQcBAQSCAb0wggG5MGMGCCsGAQUFBzAChldodHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtpaW5mcmEvQ2VydHMvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmwxLmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MFMGCCsGAQUFBzAChkdodHRwOi8vY3JsMi5hbWUuZ2JsL2FpYS9DTzFQS0lJTlRDQTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA1LmNydDBTBggrBgEFBQcwAoZHaHR0cDovL2NybDMuYW1lLmdibC9haWEvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmw0LmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MB0GA1UdDgQWBBQg5Jh8k3-r9HjagWiaVSjmv1ZYcTAOBgNVHQ8BAf8EBAMCBaAwggEmBgNVHR8EggEdMIIBGTCCARWgggERoIIBDYY_aHR0cDovL2NybC5taWNyb3NvZnQuY29tL3BraWluZnJhL0NSTC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMS5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMi5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMy5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsNC5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JsMIGdBgNVHSAEgZUwgZIwDAYKKwYBBAGCN3sBATBmBgorBgEEAYI3ewICMFgwVgYIKwYBBQUHAgIwSh5IADMAMwBlADAAMQA5ADIAMQAtADQAZAA2ADQALQA0AGYAOABjAC0AYQAwADUANQAtADUAYgBkAGEAZgBmAGQANQBlADMAMwBkMAwGCisGAQQBgjd7AwIwDAYKKwYBBAGCN3sEAjAfBgNVHSMEGDAWgBR61hmFKHlscXYeYPjzS--iBUIWHTAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwDQYJKoZIhvcNAQELBQADggEBAJbvINqtpqi3m39oJmFmOa_onaje780VTHmE4RkSs50__U5mxmv9jUP6-2x1veQp90S3Zh42P-p57rPpkmO1V_Xn6HzayHC9ODMpiLw71ICXy7pnBKPx96ToTpISwqhz9n2WMWpUZwtSamQgVgq4oILrbmLC2a2b7VZz0mhN27s3JGa5iLup-JUJRZeXb_ymwQ8AhiFfklb79EPa29qi54HkT_WpArA7K3hBrtnByNVXDNiHx1hlvxKSWNzD-BTq69yRckYW3OI-kDHfeDgV8HlteT1BU8h87LB484ZYDG50LlTpuivm57pdiEGxjerXEO8ZqTH9g1bQLR-y2yjWmyg&s=h51MJsQdCH0p7HCDNwm4WnBGRm8IyyToczJlI6DW-JxMdV1kiZaOXh7I3q-24o9Vnu_k8fWePPlYoxY1DpRMLNFhxd6xxQkHjuwmrLBaFKbllQgpw7UHhEpWKdoe3ffbTC6UR5Nggd9BtRaaS_pR8JkihvdA_ukcn2niFKijWMhStwV6V6dpPH_rhtc1Xtfk_sXNi3u2_RXN0xymYHSpIb97WdUl_FL-xYpbKDwFzZwHR78D-qwlo-Gd9WOReLuU8AxzumLFPBYVGIAqPtVRzph2LHVyN_TldQd3k--atWFFG3RzfiSUlXaE1VOP7vWI4wBGNVvO0cj_ZhIddCkZPw&h=AuzqFwfG6aT7ecZwIQxU4ZaotiIliuFi1jLBkEiqXRc
+      cache-control:
+      - no-cache
+      content-length:
+      - '457'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:40:23 GMT
+      expires:
+      - '-1'
+      location:
+      - https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Compute/locations/westus/DiskOperations/dc80c33c-5db8-4b64-8a22-925059c28924?p=98b95826-9f92-41ba-82e9-438afe89cae9&monitor=true&api-version=2025-01-02&t=638908404237397271&c=MIIHhzCCBm-gAwIBAgITfAh_GKqaYH8RwOhahQAACH8YqjANBgkqhkiG9w0BAQsFADBEMRMwEQYKCZImiZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQBGRYDQU1FMRgwFgYDVQQDEw9BTUUgSW5mcmEgQ0EgMDUwHhcNMjUwNzE3MDk1OTE3WhcNMjYwMTEzMDk1OTE3WjBAMT4wPAYDVQQDEzVhc3luY29wZXJhdGlvbnNpZ25pbmdjZXJ0aWZpY2F0ZS5tYW5hZ2VtZW50LmF6dXJlLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKuEt3wTriBe3SnGcgSXaxZXwy_Xvnx1kHhEe9cOTTajScq7IAVIz8UpcaaPf3UkWbuQCQ5VsrM6sjyPl1GO3EfreM0qta2mlQD1rV5xXCl0FW7D08thmIi5YvQI9disUj8UiltkhlG4H1dN7nL-JOsqMr23WAFO4WxBvzYCuFtlIscequZwOsF5BH4DEtri4FQLSMGZl_C0nRNntCtn_7vv6CnsqqUGIQ7fY7BIflesLUUbiRhZ8aQ-xzK4i5UPShfw4q5XcZ5maAk6jUAPK7Icf8liMlqJBLnG0DAIJsyI3QjAGaUDtyqoczOJU0bQN-wWv1NZAdwxsc-H1uBGohECAwEAAaOCBHQwggRwMCcGCSsGAQQBgjcVCgQaMBgwCgYIKwYBBQUHAwEwCgYIKwYBBQUHAwIwPQYJKwYBBAGCNxUHBDAwLgYmKwYBBAGCNxUIhpDjDYTVtHiE8Ys-hZvdFs6dEoFghfmRS4WsmTQCAWQCAQcwggHLBggrBgEFBQcBAQSCAb0wggG5MGMGCCsGAQUFBzAChldodHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtpaW5mcmEvQ2VydHMvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmwxLmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MFMGCCsGAQUFBzAChkdodHRwOi8vY3JsMi5hbWUuZ2JsL2FpYS9DTzFQS0lJTlRDQTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA1LmNydDBTBggrBgEFBQcwAoZHaHR0cDovL2NybDMuYW1lLmdibC9haWEvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmw0LmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MB0GA1UdDgQWBBQg5Jh8k3-r9HjagWiaVSjmv1ZYcTAOBgNVHQ8BAf8EBAMCBaAwggEmBgNVHR8EggEdMIIBGTCCARWgggERoIIBDYY_aHR0cDovL2NybC5taWNyb3NvZnQuY29tL3BraWluZnJhL0NSTC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMS5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMi5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMy5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsNC5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JsMIGdBgNVHSAEgZUwgZIwDAYKKwYBBAGCN3sBATBmBgorBgEEAYI3ewICMFgwVgYIKwYBBQUHAgIwSh5IADMAMwBlADAAMQA5ADIAMQAtADQAZAA2ADQALQA0AGYAOABjAC0AYQAwADUANQAtADUAYgBkAGEAZgBmAGQANQBlADMAMwBkMAwGCisGAQQBgjd7AwIwDAYKKwYBBAGCN3sEAjAfBgNVHSMEGDAWgBR61hmFKHlscXYeYPjzS--iBUIWHTAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwDQYJKoZIhvcNAQELBQADggEBAJbvINqtpqi3m39oJmFmOa_onaje780VTHmE4RkSs50__U5mxmv9jUP6-2x1veQp90S3Zh42P-p57rPpkmO1V_Xn6HzayHC9ODMpiLw71ICXy7pnBKPx96ToTpISwqhz9n2WMWpUZwtSamQgVgq4oILrbmLC2a2b7VZz0mhN27s3JGa5iLup-JUJRZeXb_ymwQ8AhiFfklb79EPa29qi54HkT_WpArA7K3hBrtnByNVXDNiHx1hlvxKSWNzD-BTq69yRckYW3OI-kDHfeDgV8HlteT1BU8h87LB484ZYDG50LlTpuivm57pdiEGxjerXEO8ZqTH9g1bQLR-y2yjWmyg&s=h51MJsQdCH0p7HCDNwm4WnBGRm8IyyToczJlI6DW-JxMdV1kiZaOXh7I3q-24o9Vnu_k8fWePPlYoxY1DpRMLNFhxd6xxQkHjuwmrLBaFKbllQgpw7UHhEpWKdoe3ffbTC6UR5Nggd9BtRaaS_pR8JkihvdA_ukcn2niFKijWMhStwV6V6dpPH_rhtc1Xtfk_sXNi3u2_RXN0xymYHSpIb97WdUl_FL-xYpbKDwFzZwHR78D-qwlo-Gd9WOReLuU8AxzumLFPBYVGIAqPtVRzph2LHVyN_TldQd3k--atWFFG3RzfiSUlXaE1VOP7vWI4wBGNVvO0cj_ZhIddCkZPw&h=AuzqFwfG6aT7ecZwIQxU4ZaotiIliuFi1jLBkEiqXRc
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/northeurope/3d5c5bdb-3dc4-4a52-bb83-bdc756f9c7cd
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/CreateUpdateDisks3Min;2999,Microsoft.Compute/CreateUpdateDisks30Min;24999
+      x-ms-ratelimit-remaining-subscription-global-writes:
+      - '2999'
+      x-ms-ratelimit-remaining-subscription-writes:
+      - '199'
+      x-msedge-ref:
+      - 'Ref A: 63BDFD9BDEE140378CA4B7D4B96523DD Ref B: TYO201100117017 Ref C: 2025-08-15T07:40:20Z'
+    status:
+      code: 202
+      message: Accepted
+- request:
+    body: null
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - disk create
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - -g -n --size-gb --sku
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Compute/locations/westus/DiskOperations/dc80c33c-5db8-4b64-8a22-925059c28924?p=98b95826-9f92-41ba-82e9-438afe89cae9&api-version=2025-01-02&t=638908404237397271&c=MIIHhzCCBm-gAwIBAgITfAh_GKqaYH8RwOhahQAACH8YqjANBgkqhkiG9w0BAQsFADBEMRMwEQYKCZImiZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQBGRYDQU1FMRgwFgYDVQQDEw9BTUUgSW5mcmEgQ0EgMDUwHhcNMjUwNzE3MDk1OTE3WhcNMjYwMTEzMDk1OTE3WjBAMT4wPAYDVQQDEzVhc3luY29wZXJhdGlvbnNpZ25pbmdjZXJ0aWZpY2F0ZS5tYW5hZ2VtZW50LmF6dXJlLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKuEt3wTriBe3SnGcgSXaxZXwy_Xvnx1kHhEe9cOTTajScq7IAVIz8UpcaaPf3UkWbuQCQ5VsrM6sjyPl1GO3EfreM0qta2mlQD1rV5xXCl0FW7D08thmIi5YvQI9disUj8UiltkhlG4H1dN7nL-JOsqMr23WAFO4WxBvzYCuFtlIscequZwOsF5BH4DEtri4FQLSMGZl_C0nRNntCtn_7vv6CnsqqUGIQ7fY7BIflesLUUbiRhZ8aQ-xzK4i5UPShfw4q5XcZ5maAk6jUAPK7Icf8liMlqJBLnG0DAIJsyI3QjAGaUDtyqoczOJU0bQN-wWv1NZAdwxsc-H1uBGohECAwEAAaOCBHQwggRwMCcGCSsGAQQBgjcVCgQaMBgwCgYIKwYBBQUHAwEwCgYIKwYBBQUHAwIwPQYJKwYBBAGCNxUHBDAwLgYmKwYBBAGCNxUIhpDjDYTVtHiE8Ys-hZvdFs6dEoFghfmRS4WsmTQCAWQCAQcwggHLBggrBgEFBQcBAQSCAb0wggG5MGMGCCsGAQUFBzAChldodHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtpaW5mcmEvQ2VydHMvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmwxLmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MFMGCCsGAQUFBzAChkdodHRwOi8vY3JsMi5hbWUuZ2JsL2FpYS9DTzFQS0lJTlRDQTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA1LmNydDBTBggrBgEFBQcwAoZHaHR0cDovL2NybDMuYW1lLmdibC9haWEvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmw0LmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MB0GA1UdDgQWBBQg5Jh8k3-r9HjagWiaVSjmv1ZYcTAOBgNVHQ8BAf8EBAMCBaAwggEmBgNVHR8EggEdMIIBGTCCARWgggERoIIBDYY_aHR0cDovL2NybC5taWNyb3NvZnQuY29tL3BraWluZnJhL0NSTC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMS5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMi5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMy5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsNC5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JsMIGdBgNVHSAEgZUwgZIwDAYKKwYBBAGCN3sBATBmBgorBgEEAYI3ewICMFgwVgYIKwYBBQUHAgIwSh5IADMAMwBlADAAMQA5ADIAMQAtADQAZAA2ADQALQA0AGYAOABjAC0AYQAwADUANQAtADUAYgBkAGEAZgBmAGQANQBlADMAMwBkMAwGCisGAQQBgjd7AwIwDAYKKwYBBAGCN3sEAjAfBgNVHSMEGDAWgBR61hmFKHlscXYeYPjzS--iBUIWHTAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwDQYJKoZIhvcNAQELBQADggEBAJbvINqtpqi3m39oJmFmOa_onaje780VTHmE4RkSs50__U5mxmv9jUP6-2x1veQp90S3Zh42P-p57rPpkmO1V_Xn6HzayHC9ODMpiLw71ICXy7pnBKPx96ToTpISwqhz9n2WMWpUZwtSamQgVgq4oILrbmLC2a2b7VZz0mhN27s3JGa5iLup-JUJRZeXb_ymwQ8AhiFfklb79EPa29qi54HkT_WpArA7K3hBrtnByNVXDNiHx1hlvxKSWNzD-BTq69yRckYW3OI-kDHfeDgV8HlteT1BU8h87LB484ZYDG50LlTpuivm57pdiEGxjerXEO8ZqTH9g1bQLR-y2yjWmyg&s=h51MJsQdCH0p7HCDNwm4WnBGRm8IyyToczJlI6DW-JxMdV1kiZaOXh7I3q-24o9Vnu_k8fWePPlYoxY1DpRMLNFhxd6xxQkHjuwmrLBaFKbllQgpw7UHhEpWKdoe3ffbTC6UR5Nggd9BtRaaS_pR8JkihvdA_ukcn2niFKijWMhStwV6V6dpPH_rhtc1Xtfk_sXNi3u2_RXN0xymYHSpIb97WdUl_FL-xYpbKDwFzZwHR78D-qwlo-Gd9WOReLuU8AxzumLFPBYVGIAqPtVRzph2LHVyN_TldQd3k--atWFFG3RzfiSUlXaE1VOP7vWI4wBGNVvO0cj_ZhIddCkZPw&h=AuzqFwfG6aT7ecZwIQxU4ZaotiIliuFi1jLBkEiqXRc
+  response:
+    body:
+      string: "{\r\n  \"startTime\": \"2025-08-15T07:40:23.6265537+00:00\",\r\n  \"endTime\":
+        \"2025-08-15T07:40:23.7359322+00:00\",\r\n  \"status\": \"Succeeded\",\r\n
+        \ \"properties\": {\r\n    \"output\": {\r\n  \"name\": \"disk000003\",\r\n
+        \ \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/disk000003\",\r\n
+        \ \"type\": \"Microsoft.Compute/disks\",\r\n  \"location\": \"westus\",\r\n
+        \ \"tags\": {},\r\n  \"sku\": {\r\n    \"name\": \"Standard_LRS\",\r\n    \"tier\":
+        \"Standard\"\r\n  },\r\n  \"properties\": {\r\n    \"creationData\": {\r\n
+        \     \"createOption\": \"Empty\"\r\n    },\r\n    \"diskSizeGB\": 1,\r\n
+        \   \"diskIOPSReadWrite\": 500,\r\n    \"diskMBpsReadWrite\": 60,\r\n    \"encryption\":
+        {\r\n      \"type\": \"EncryptionAtRestWithPlatformKey\"\r\n    },\r\n    \"networkAccessPolicy\":
+        \"AllowAll\",\r\n    \"publicNetworkAccess\": \"Enabled\",\r\n    \"timeCreated\":
+        \"2025-08-15T07:40:23.6265537+00:00\",\r\n    \"provisioningState\": \"Succeeded\",\r\n
+        \   \"diskState\": \"Unattached\",\r\n    \"diskSizeBytes\": 1073741824,\r\n
+        \   \"uniqueId\": \"adf622b7-1553-440f-881d-d46bf9c2a220\"\r\n  }\r\n}\r\n
+        \ },\r\n  \"name\": \"dc80c33c-5db8-4b64-8a22-925059c28924\"\r\n}"
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '1106'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:40:25 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/northeurope/aa07b4c6-3791-41e3-bda7-9d60bad36c6a
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/GetOperation3Min;49999,Microsoft.Compute/GetOperation30Min;399999
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-msedge-ref:
+      - 'Ref A: D90C5802F30D4FAD8E0730EC8CC57ADD Ref B: TYO201100116037 Ref C: 2025-08-15T07:40:24Z'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - disk create
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - -g -n --size-gb --sku
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Compute/locations/westus/DiskOperations/dc80c33c-5db8-4b64-8a22-925059c28924?p=98b95826-9f92-41ba-82e9-438afe89cae9&monitor=true&api-version=2025-01-02&t=638908404237397271&c=MIIHhzCCBm-gAwIBAgITfAh_GKqaYH8RwOhahQAACH8YqjANBgkqhkiG9w0BAQsFADBEMRMwEQYKCZImiZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQBGRYDQU1FMRgwFgYDVQQDEw9BTUUgSW5mcmEgQ0EgMDUwHhcNMjUwNzE3MDk1OTE3WhcNMjYwMTEzMDk1OTE3WjBAMT4wPAYDVQQDEzVhc3luY29wZXJhdGlvbnNpZ25pbmdjZXJ0aWZpY2F0ZS5tYW5hZ2VtZW50LmF6dXJlLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKuEt3wTriBe3SnGcgSXaxZXwy_Xvnx1kHhEe9cOTTajScq7IAVIz8UpcaaPf3UkWbuQCQ5VsrM6sjyPl1GO3EfreM0qta2mlQD1rV5xXCl0FW7D08thmIi5YvQI9disUj8UiltkhlG4H1dN7nL-JOsqMr23WAFO4WxBvzYCuFtlIscequZwOsF5BH4DEtri4FQLSMGZl_C0nRNntCtn_7vv6CnsqqUGIQ7fY7BIflesLUUbiRhZ8aQ-xzK4i5UPShfw4q5XcZ5maAk6jUAPK7Icf8liMlqJBLnG0DAIJsyI3QjAGaUDtyqoczOJU0bQN-wWv1NZAdwxsc-H1uBGohECAwEAAaOCBHQwggRwMCcGCSsGAQQBgjcVCgQaMBgwCgYIKwYBBQUHAwEwCgYIKwYBBQUHAwIwPQYJKwYBBAGCNxUHBDAwLgYmKwYBBAGCNxUIhpDjDYTVtHiE8Ys-hZvdFs6dEoFghfmRS4WsmTQCAWQCAQcwggHLBggrBgEFBQcBAQSCAb0wggG5MGMGCCsGAQUFBzAChldodHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtpaW5mcmEvQ2VydHMvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmwxLmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MFMGCCsGAQUFBzAChkdodHRwOi8vY3JsMi5hbWUuZ2JsL2FpYS9DTzFQS0lJTlRDQTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA1LmNydDBTBggrBgEFBQcwAoZHaHR0cDovL2NybDMuYW1lLmdibC9haWEvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmw0LmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MB0GA1UdDgQWBBQg5Jh8k3-r9HjagWiaVSjmv1ZYcTAOBgNVHQ8BAf8EBAMCBaAwggEmBgNVHR8EggEdMIIBGTCCARWgggERoIIBDYY_aHR0cDovL2NybC5taWNyb3NvZnQuY29tL3BraWluZnJhL0NSTC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMS5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMi5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMy5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsNC5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JsMIGdBgNVHSAEgZUwgZIwDAYKKwYBBAGCN3sBATBmBgorBgEEAYI3ewICMFgwVgYIKwYBBQUHAgIwSh5IADMAMwBlADAAMQA5ADIAMQAtADQAZAA2ADQALQA0AGYAOABjAC0AYQAwADUANQAtADUAYgBkAGEAZgBmAGQANQBlADMAMwBkMAwGCisGAQQBgjd7AwIwDAYKKwYBBAGCN3sEAjAfBgNVHSMEGDAWgBR61hmFKHlscXYeYPjzS--iBUIWHTAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwDQYJKoZIhvcNAQELBQADggEBAJbvINqtpqi3m39oJmFmOa_onaje780VTHmE4RkSs50__U5mxmv9jUP6-2x1veQp90S3Zh42P-p57rPpkmO1V_Xn6HzayHC9ODMpiLw71ICXy7pnBKPx96ToTpISwqhz9n2WMWpUZwtSamQgVgq4oILrbmLC2a2b7VZz0mhN27s3JGa5iLup-JUJRZeXb_ymwQ8AhiFfklb79EPa29qi54HkT_WpArA7K3hBrtnByNVXDNiHx1hlvxKSWNzD-BTq69yRckYW3OI-kDHfeDgV8HlteT1BU8h87LB484ZYDG50LlTpuivm57pdiEGxjerXEO8ZqTH9g1bQLR-y2yjWmyg&s=h51MJsQdCH0p7HCDNwm4WnBGRm8IyyToczJlI6DW-JxMdV1kiZaOXh7I3q-24o9Vnu_k8fWePPlYoxY1DpRMLNFhxd6xxQkHjuwmrLBaFKbllQgpw7UHhEpWKdoe3ffbTC6UR5Nggd9BtRaaS_pR8JkihvdA_ukcn2niFKijWMhStwV6V6dpPH_rhtc1Xtfk_sXNi3u2_RXN0xymYHSpIb97WdUl_FL-xYpbKDwFzZwHR78D-qwlo-Gd9WOReLuU8AxzumLFPBYVGIAqPtVRzph2LHVyN_TldQd3k--atWFFG3RzfiSUlXaE1VOP7vWI4wBGNVvO0cj_ZhIddCkZPw&h=AuzqFwfG6aT7ecZwIQxU4ZaotiIliuFi1jLBkEiqXRc
+  response:
+    body:
+      string: '{"name":"disk000003","id":"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/disk000003","type":"Microsoft.Compute/disks","location":"westus","tags":{},"sku":{"name":"Standard_LRS","tier":"Standard"},"properties":{"creationData":{"createOption":"Empty"},"diskSizeGB":1,"diskIOPSReadWrite":500,"diskMBpsReadWrite":60,"encryption":{"type":"EncryptionAtRestWithPlatformKey"},"networkAccessPolicy":"AllowAll","publicNetworkAccess":"Enabled","timeCreated":"2025-08-15T07:40:23.6265537+00:00","provisioningState":"Succeeded","diskState":"Unattached","diskSizeBytes":1073741824,"uniqueId":"adf622b7-1553-440f-881d-d46bf9c2a220"}}'
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '708'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:40:26 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/japaneast/daae7a57-3865-4542-8f9b-f0d8cca683e3
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/GetOperation3Min;49997,Microsoft.Compute/GetOperation30Min;399997
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-msedge-ref:
+      - 'Ref A: 1924E46DF3A441689443474C6EAA15BB Ref B: TYO201151005034 Ref C: 2025-08-15T07:40:26Z'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss list-instances
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - -g -n
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines?api-version=2024-11-01
+  response:
+    body:
+      string: "{\r\n  \"value\": [\r\n    {\r\n      \"name\": \"vmss000002_1\",\r\n
+        \     \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1\",\r\n
+        \     \"type\": \"Microsoft.Compute/virtualMachineScaleSets/virtualMachines\",\r\n
+        \     \"location\": \"westus\",\r\n      \"tags\": {},\r\n      \"instanceId\":
+        \"1\",\r\n      \"sku\": {\r\n        \"name\": \"Standard_B2ms\",\r\n        \"tier\":
+        \"Standard\"\r\n      },\r\n      \"properties\": {\r\n        \"latestModelApplied\":
+        true,\r\n        \"modelDefinitionApplied\": \"VirtualMachineScaleSet\",\r\n
+        \       \"networkProfileConfiguration\": {\"networkInterfaceConfigurations\":[{\"name\":\"vmsssab20Nic\",\"properties\":{\"primary\":true,\"disableTcpStateTracking\":false,\"networkSecurityGroup\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/networkSecurityGroups/vmss000002NSG\"},\"dnsSettings\":{\"dnsServers\":[]},\"enableIPForwarding\":false,\"ipConfigurations\":[{\"name\":\"vmsssab20IPConfig\",\"properties\":{\"subnet\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks/vmss000002VNET/subnets/vmss000002Subnet\"},\"privateIPAddressVersion\":\"IPv4\",\"loadBalancerBackendAddressPools\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB/backendAddressPools/vmss000002LBBEPool\"}]}}]}}]},\r\n
+        \       \"provisioningState\": \"Updating\",\r\n        \"hardwareProfile\":
+        {\r\n          \"vmSize\": \"Standard_B2ms\"\r\n        },\r\n        \"resilientVMDeletionStatus\":
+        \"Disabled\",\r\n        \"vmId\": \"f3453067-bb98-4543-8808-7e1863f8849e\",\r\n
+        \       \"storageProfile\": {\r\n          \"imageReference\": {\r\n            \"publisher\":
+        \"Debian\",\r\n            \"offer\": \"debian-10\",\r\n            \"sku\":
+        \"10\",\r\n            \"version\": \"latest\",\r\n            \"exactVersion\":
+        \"0.20240430.1733\"\r\n          },\r\n          \"osDisk\": {\r\n            \"osType\":
+        \"Linux\",\r\n            \"name\": \"vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0\",\r\n
+        \           \"createOption\": \"FromImage\",\r\n            \"caching\": \"ReadWrite\",\r\n
+        \           \"managedDisk\": {\r\n              \"storageAccountType\": \"Standard_LRS\",\r\n
+        \             \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0\"\r\n
+        \           },\r\n            \"diskSizeGB\": 30\r\n          },\r\n          \"dataDisks\":
+        []\r\n        },\r\n        \"osProfile\": {\r\n          \"computerName\":
+        \"vmsssab20000001\",\r\n          \"adminUsername\": \"clitest1\",\r\n          \"linuxConfiguration\":
+        {\r\n            \"disablePasswordAuthentication\": false,\r\n            \"provisionVMAgent\":
+        true\r\n          },\r\n          \"secrets\": [],\r\n          \"allowExtensionOperations\":
+        true,\r\n          \"requireGuestProvisionSignal\": true\r\n        },\r\n
+        \       \"networkProfile\": {\"networkInterfaces\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1/networkInterfaces/vmsssab20Nic\"}]},\r\n
+        \       \"timeCreated\": \"2025-08-15T07:39:20.7372531+00:00\"\r\n      },\r\n
+        \     \"etag\": \"\\\"2\\\"\"\r\n    },\r\n    {\r\n      \"name\": \"vmss000002_2\",\r\n
+        \     \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/2\",\r\n
+        \     \"type\": \"Microsoft.Compute/virtualMachineScaleSets/virtualMachines\",\r\n
+        \     \"location\": \"westus\",\r\n      \"tags\": {},\r\n      \"instanceId\":
+        \"2\",\r\n      \"sku\": {\r\n        \"name\": \"Standard_B2ms\",\r\n        \"tier\":
+        \"Standard\"\r\n      },\r\n      \"properties\": {\r\n        \"latestModelApplied\":
+        true,\r\n        \"modelDefinitionApplied\": \"VirtualMachineScaleSet\",\r\n
+        \       \"networkProfileConfiguration\": {\"networkInterfaceConfigurations\":[{\"name\":\"vmsssab20Nic\",\"properties\":{\"primary\":true,\"disableTcpStateTracking\":false,\"networkSecurityGroup\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/networkSecurityGroups/vmss000002NSG\"},\"dnsSettings\":{\"dnsServers\":[]},\"enableIPForwarding\":false,\"ipConfigurations\":[{\"name\":\"vmsssab20IPConfig\",\"properties\":{\"subnet\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks/vmss000002VNET/subnets/vmss000002Subnet\"},\"privateIPAddressVersion\":\"IPv4\",\"loadBalancerBackendAddressPools\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB/backendAddressPools/vmss000002LBBEPool\"}]}}]}}]},\r\n
+        \       \"provisioningState\": \"Succeeded\",\r\n        \"hardwareProfile\":
+        {\r\n          \"vmSize\": \"Standard_B2ms\"\r\n        },\r\n        \"resilientVMDeletionStatus\":
+        \"Disabled\",\r\n        \"vmId\": \"60556da6-54a2-4cdd-96d3-4f12743898fa\",\r\n
+        \       \"storageProfile\": {\r\n          \"imageReference\": {\r\n            \"publisher\":
+        \"Debian\",\r\n            \"offer\": \"debian-10\",\r\n            \"sku\":
+        \"10\",\r\n            \"version\": \"latest\",\r\n            \"exactVersion\":
+        \"0.20240430.1733\"\r\n          },\r\n          \"osDisk\": {\r\n            \"osType\":
+        \"Linux\",\r\n            \"name\": \"vmss000002_vmss000002_2_OsDisk_1_09cb65e4f2a849f4b74b6ee608b0b8b1\",\r\n
+        \           \"createOption\": \"FromImage\",\r\n            \"caching\": \"ReadWrite\",\r\n
+        \           \"managedDisk\": {\r\n              \"storageAccountType\": \"Standard_LRS\",\r\n
+        \             \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/vmss000002_vmss000002_2_OsDisk_1_09cb65e4f2a849f4b74b6ee608b0b8b1\"\r\n
+        \           },\r\n            \"diskSizeGB\": 30\r\n          },\r\n          \"dataDisks\":
+        []\r\n        },\r\n        \"osProfile\": {\r\n          \"computerName\":
+        \"vmsssab20000002\",\r\n          \"adminUsername\": \"clitest1\",\r\n          \"linuxConfiguration\":
+        {\r\n            \"disablePasswordAuthentication\": false,\r\n            \"provisionVMAgent\":
+        true\r\n          },\r\n          \"secrets\": [],\r\n          \"allowExtensionOperations\":
+        true,\r\n          \"requireGuestProvisionSignal\": true\r\n        },\r\n
+        \       \"networkProfile\": {\"networkInterfaces\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/2/networkInterfaces/vmsssab20Nic\"}]},\r\n
+        \       \"timeCreated\": \"2025-08-15T07:39:20.7372531+00:00\"\r\n      },\r\n
+        \     \"etag\": \"\\\"2\\\"\"\r\n    }\r\n  ]\r\n}"
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '6877'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:40:28 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-need-to-refresh-epl-cache:
+      - 'False'
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/northeurope/16e0beab-101a-4d07-9392-c61ed4e7bf3b
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/HighCostGetVMScaleSetSubscriptionMaximum;1079,Microsoft.Compute/HighCostGetVMScaleSetResource;29,Microsoft.Compute/VMScaleSetVMViewsSubscriptionMaximum;29996
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-ms-request-charge:
+      - '4'
+      x-msedge-ref:
+      - 'Ref A: 20462BDC9C414055B744C4EADA3248F6 Ref B: TYO201100115025 Ref C: 2025-08-15T07:40:28Z'
+    status:
+      code: 200
+      message: ''
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss disk attach
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - -g --vmss-name --instance-id --disk --caching
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1?api-version=2024-11-01
+  response:
+    body:
+      string: "{\r\n  \"name\": \"vmss000002_1\",\r\n  \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1\",\r\n
+        \ \"type\": \"Microsoft.Compute/virtualMachineScaleSets/virtualMachines\",\r\n
+        \ \"location\": \"westus\",\r\n  \"tags\": {},\r\n  \"instanceId\": \"1\",\r\n
+        \ \"sku\": {\r\n    \"name\": \"Standard_B2ms\",\r\n    \"tier\": \"Standard\"\r\n
+        \ },\r\n  \"properties\": {\r\n    \"latestModelApplied\": true,\r\n    \"modelDefinitionApplied\":
+        \"VirtualMachineScaleSet\",\r\n    \"networkProfileConfiguration\": {\"networkInterfaceConfigurations\":[{\"name\":\"vmsssab20Nic\",\"properties\":{\"primary\":true,\"disableTcpStateTracking\":false,\"networkSecurityGroup\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/networkSecurityGroups/vmss000002NSG\"},\"dnsSettings\":{\"dnsServers\":[]},\"enableIPForwarding\":false,\"ipConfigurations\":[{\"name\":\"vmsssab20IPConfig\",\"properties\":{\"subnet\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks/vmss000002VNET/subnets/vmss000002Subnet\"},\"privateIPAddressVersion\":\"IPv4\",\"loadBalancerBackendAddressPools\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB/backendAddressPools/vmss000002LBBEPool\"}]}}]}}]},\r\n
+        \   \"provisioningState\": \"Succeeded\",\r\n    \"hardwareProfile\": {\r\n
+        \     \"vmSize\": \"Standard_B2ms\"\r\n    },\r\n    \"resilientVMDeletionStatus\":
+        \"Disabled\",\r\n    \"vmId\": \"f3453067-bb98-4543-8808-7e1863f8849e\",\r\n
+        \   \"storageProfile\": {\r\n      \"imageReference\": {\r\n        \"publisher\":
+        \"Debian\",\r\n        \"offer\": \"debian-10\",\r\n        \"sku\": \"10\",\r\n
+        \       \"version\": \"latest\",\r\n        \"exactVersion\": \"0.20240430.1733\"\r\n
+        \     },\r\n      \"osDisk\": {\r\n        \"osType\": \"Linux\",\r\n        \"name\":
+        \"vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0\",\r\n
+        \       \"createOption\": \"FromImage\",\r\n        \"caching\": \"ReadWrite\",\r\n
+        \       \"managedDisk\": {\r\n          \"storageAccountType\": \"Standard_LRS\",\r\n
+        \         \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0\"\r\n
+        \       },\r\n        \"diskSizeGB\": 30\r\n      },\r\n      \"dataDisks\":
+        []\r\n    },\r\n    \"osProfile\": {\r\n      \"computerName\": \"vmsssab20000001\",\r\n
+        \     \"adminUsername\": \"clitest1\",\r\n      \"linuxConfiguration\": {\r\n
+        \       \"disablePasswordAuthentication\": false,\r\n        \"provisionVMAgent\":
+        true\r\n      },\r\n      \"secrets\": [],\r\n      \"allowExtensionOperations\":
+        true,\r\n      \"requireGuestProvisionSignal\": true\r\n    },\r\n    \"networkProfile\":
+        {\"networkInterfaces\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1/networkInterfaces/vmsssab20Nic\"}]},\r\n
+        \   \"timeCreated\": \"2025-08-15T07:39:20.7372531+00:00\"\r\n  },\r\n  \"etag\":
+        \"\\\"2\\\"\"\r\n}"
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '3193'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:40:30 GMT
+      etag:
+      - '"2"'
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-need-to-refresh-epl-cache:
+      - 'False'
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/northeurope/1b4d6fa4-50e6-4668-8445-61890bb8a547
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/GetVMScaleSetVMSubscriptionMaximum;5999,Microsoft.Compute/GetVMScaleSetVMResource;35,Microsoft.Compute/VMScaleSetVMViewsSubscriptionMaximum;29995
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-ms-request-charge:
+      - '1'
+      x-msedge-ref:
+      - 'Ref A: 40FC9162CB1A46549F321D35D9617AA0 Ref B: TYO201100116033 Ref C: 2025-08-15T07:40:30Z'
+    status:
+      code: 200
+      message: ''
+- request:
+    body: '{"location": "westus", "tags": {}, "properties": {"hardwareProfile": {"vmSize":
+      "Standard_B2ms"}, "resilientVMDeletionStatus": "Disabled", "storageProfile":
+      {"osDisk": {"osType": "Linux", "name": "vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0",
+      "caching": "ReadWrite", "createOption": "FromImage", "diskSizeGB": 30, "managedDisk":
+      {"id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0",
+      "storageAccountType": "Standard_LRS"}}, "dataDisks": [{"lun": 0, "caching":
+      "ReadWrite", "createOption": "Attach", "managedDisk": {"id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/disk000003"}}]},
+      "osProfile": {"computerName": "vmsssab20000001", "adminUsername": "clitest1",
+      "linuxConfiguration": {"disablePasswordAuthentication": false, "provisionVMAgent":
+      true}, "secrets": [], "allowExtensionOperations": true, "requireGuestProvisionSignal":
+      true}, "networkProfile": {"networkInterfaces": [{"id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1/networkInterfaces/vmsssab20Nic"}]},
+      "networkProfileConfiguration": {"networkInterfaceConfigurations": [{"name":
+      "vmsssab20Nic", "properties": {"primary": true, "disableTcpStateTracking": false,
+      "networkSecurityGroup": {"id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/networkSecurityGroups/vmss000002NSG"},
+      "dnsSettings": {"dnsServers": []}, "ipConfigurations": [{"name": "vmsssab20IPConfig",
+      "properties": {"subnet": {"id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks/vmss000002VNET/subnets/vmss000002Subnet"},
+      "privateIPAddressVersion": "IPv4", "loadBalancerBackendAddressPools": [{"id":
+      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB/backendAddressPools/vmss000002LBBEPool"}]}}],
+      "enableIPForwarding": false}}]}}}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss disk attach
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '2359'
+      Content-Type:
+      - application/json
+      ParameterSetName:
+      - -g --vmss-name --instance-id --disk --caching
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: PUT
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1?api-version=2024-11-01
+  response:
+    body:
+      string: "{\r\n  \"name\": \"vmss000002_1\",\r\n  \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1\",\r\n
+        \ \"type\": \"Microsoft.Compute/virtualMachineScaleSets/virtualMachines\",\r\n
+        \ \"location\": \"westus\",\r\n  \"tags\": {},\r\n  \"instanceId\": \"1\",\r\n
+        \ \"sku\": {\r\n    \"name\": \"Standard_B2ms\",\r\n    \"tier\": \"Standard\"\r\n
+        \ },\r\n  \"properties\": {\r\n    \"latestModelApplied\": true,\r\n    \"modelDefinitionApplied\":
+        \"VirtualMachineScaleSet\",\r\n    \"networkProfileConfiguration\": {\"networkInterfaceConfigurations\":[{\"name\":\"vmsssab20Nic\",\"properties\":{\"primary\":true,\"disableTcpStateTracking\":false,\"networkSecurityGroup\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/networkSecurityGroups/vmss000002NSG\"},\"dnsSettings\":{\"dnsServers\":[]},\"enableIPForwarding\":false,\"ipConfigurations\":[{\"name\":\"vmsssab20IPConfig\",\"properties\":{\"subnet\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks/vmss000002VNET/subnets/vmss000002Subnet\"},\"privateIPAddressVersion\":\"IPv4\",\"loadBalancerBackendAddressPools\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB/backendAddressPools/vmss000002LBBEPool\"}]}}]}}]},\r\n
+        \   \"provisioningState\": \"Updating\",\r\n    \"hardwareProfile\": {\r\n
+        \     \"vmSize\": \"Standard_B2ms\"\r\n    },\r\n    \"resilientVMDeletionStatus\":
+        \"Disabled\",\r\n    \"vmId\": \"f3453067-bb98-4543-8808-7e1863f8849e\",\r\n
+        \   \"storageProfile\": {\r\n      \"imageReference\": {\r\n        \"publisher\":
+        \"Debian\",\r\n        \"offer\": \"debian-10\",\r\n        \"sku\": \"10\",\r\n
+        \       \"version\": \"latest\",\r\n        \"exactVersion\": \"0.20240430.1733\"\r\n
+        \     },\r\n      \"osDisk\": {\r\n        \"osType\": \"Linux\",\r\n        \"name\":
+        \"vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0\",\r\n
+        \       \"createOption\": \"FromImage\",\r\n        \"caching\": \"ReadWrite\",\r\n
+        \       \"managedDisk\": {\r\n          \"storageAccountType\": \"Standard_LRS\",\r\n
+        \         \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0\"\r\n
+        \       },\r\n        \"diskSizeGB\": 30\r\n      },\r\n      \"dataDisks\":
+        [\r\n        {\r\n          \"lun\": 0,\r\n          \"name\": \"disk000003\",\r\n
+        \         \"createOption\": \"Attach\",\r\n          \"caching\": \"ReadWrite\",\r\n
+        \         \"managedDisk\": {\r\n            \"storageAccountType\": \"Standard_LRS\",\r\n
+        \           \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/disk000003\"\r\n
+        \         },\r\n          \"diskSizeGB\": 1,\r\n          \"toBeDetached\":
+        false\r\n        }\r\n      ]\r\n    },\r\n    \"osProfile\": {\r\n      \"computerName\":
+        \"vmsssab20000001\",\r\n      \"adminUsername\": \"clitest1\",\r\n      \"linuxConfiguration\":
+        {\r\n        \"disablePasswordAuthentication\": false,\r\n        \"provisionVMAgent\":
+        true\r\n      },\r\n      \"secrets\": [],\r\n      \"allowExtensionOperations\":
+        true,\r\n      \"requireGuestProvisionSignal\": true\r\n    },\r\n    \"networkProfile\":
+        {\"networkInterfaces\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1/networkInterfaces/vmsssab20Nic\"}]},\r\n
+        \   \"timeCreated\": \"2025-08-15T07:39:20.7372531+00:00\"\r\n  },\r\n  \"etag\":
+        \"\\\"3\\\"\"\r\n}"
+    headers:
+      azure-asyncnotification:
+      - Enabled
+      azure-asyncoperation:
+      - https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Compute/locations/westus/operations/990688f0-2ba0-42e8-ac01-15dd22b9b24f?p=dd11a406-3651-4f42-bc22-2b29e0b71407&api-version=2024-11-01&t=638908404322410155&c=MIIIrzCCBpegAwIBAgITUQB9VQ7j8TP8msVbVQABAH1VDjANBgkqhkiG9w0BAQsFADBEMRMwEQYKCZImiZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQBGRYDQU1FMRgwFgYDVQQDEw9BTUUgSW5mcmEgQ0EgMDQwHhcNMjUwNzE3MTAxMTQxWhcNMjYwMTEzMTAxMTQxWjBAMT4wPAYDVQQDEzVhc3luY29wZXJhdGlvbnNpZ25pbmdjZXJ0aWZpY2F0ZS5tYW5hZ2VtZW50LmF6dXJlLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAN9uFRCckwovJWtl1-Qq22Rnc8i5ftzF4eCW9m-t2gMd0gI4H3ggHFS8o7Lgo7NFrSHde_fOw5TG4ClBFPIvYtP-yRXA_gQTjDDxbdEKLTNE3lXVjb2lGS92EXrq2q8SW9iUszX4c5rv7wvK4PYYmWBgrA0pnZoN3Sb-PCkHdwTiQ6s-KaN9TaDX22q-VAiBKtuEV3lfxq84cdn8poLqbGH9aJs3mwzZSvSnDtSic6XB7Wn2B9rEtP4D_EPxNAlrtE-8p4QQxJKsU4kvH2HkbDTA3s-9XDYPgpo-bc_TuPA79C9cwY_yDUwxeCiVXq6u1ouDEDRV8y-SdlEtMwA_L3kCAwEAAaOCBJwwggSYMCcGCSsGAQQBgjcVCgQaMBgwCgYIKwYBBQUHAwEwCgYIKwYBBQUHAwIwPQYJKwYBBAGCNxUHBDAwLgYmKwYBBAGCNxUIhpDjDYTVtHiE8Ys-hZvdFs6dEoFghfmRS4WsmTQCAWQCAQcwggHkBggrBgEFBQcBAQSCAdYwggHSMGgGCCsGAQUFBzAChlxodHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtpaW5mcmEvQ2VydHMvbWVsMDFwa2lpbnRjYTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNydDBYBggrBgEFBQcwAoZMaHR0cDovL2NybDEuYW1lLmdibC9haWEvbWVsMDFwa2lpbnRjYTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNydDBYBggrBgEFBQcwAoZMaHR0cDovL2NybDIuYW1lLmdibC9haWEvbWVsMDFwa2lpbnRjYTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNydDBYBggrBgEFBQcwAoZMaHR0cDovL2NybDMuYW1lLmdibC9haWEvbWVsMDFwa2lpbnRjYTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNydDBYBggrBgEFBQcwAoZMaHR0cDovL2NybDQuYW1lLmdibC9haWEvbWVsMDFwa2lpbnRjYTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNydDAdBgNVHQ4EFgQUb0zVsI6tU0Ya4PntQPSVi05azTgwDgYDVR0PAQH_BAQDAgWgMIIBNQYDVR0fBIIBLDCCASgwggEkoIIBIKCCARyGQmh0dHA6Ly9jcmwubWljcm9zb2Z0LmNvbS9wa2lpbmZyYS9DUkwvQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNybIY0aHR0cDovL2NybDEuYW1lLmdibC9jcmwvQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNybIY0aHR0cDovL2NybDIuYW1lLmdibC9jcmwvQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNybIY0aHR0cDovL2NybDMuYW1lLmdibC9jcmwvQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNybIY0aHR0cDovL2NybDQuYW1lLmdibC9jcmwvQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNybDCBnQYDVR0gBIGVMIGSMAwGCisGAQQBgjd7AQEwZgYKKwYBBAGCN3sCAjBYMFYGCCsGAQUFBwICMEoeSAAzADMAZQAwADEAOQAyADEALQA0AGQANgA0AC0ANABmADgAYwAtAGEAMAA1ADUALQA1AGIAZABhAGYAZgBkADUAZQAzADMAZDAMBgorBgEEAYI3ewMCMAwGCisGAQQBgjd7BAIwHwYDVR0jBBgwFoAUOXFdqRUQLcTffi9ZbkBNwN_vNpowHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMCMA0GCSqGSIb3DQEBCwUAA4ICAQDNOTwuwpaNg6Wb6rlDJvYkgpjYBgD7v-G5oudCTfWxa38GVpr03GvcKMMKXsPqS9r4NAOXfLjlf7xqYiwUCShYUrJU3IDKm0amgY_xtVwywcT-VPGF7VZHrEHKa7b6ZR0_aUw_msh7FWtVxpZNW3Lq26ebDEtB-rbUQ_BDwH2K2tb_oKc8WzIVNBwAoAWWDHyVWJKRoEVp59P5KYLdqvg8VrchPaYU3B1ZYbSol1dPcoTFBbiR1xTC4gihNsdye7dgkDwJThyhtefnZZ1zeiWxnXwiLxuZk6pf7cEKEN0xfBtqSBq-ShHoa0RC1xAzAdGngTv75eYqs7hVFdEIZwytl9j_DVoh7vDwgUi0D3gu_ArliQZQbJaOgadOSsCvfyC4FDs0zFzh5gJEl4CTM9fYPZWGJPQPaH1nAoBwgqHZE1WF0uh4144LhpYs9GlduCWQ3jQeVjXsFsZdZPSYXdPojWuL34Voqf1gb07y4lB4vNsjgX0MCWgmfG4Jm7I_MwoL3FGM3SQN_84HB4tHG58f3-ztGcxleLHe1VBfPj-Efh6FPeHNFg7Lyc28aIJf6Lti8Bv9FjBGl_x8j5VVCMC3OI6aRMl9fqjNw4qBFbYmAY9f42CiaGsbnlC2k4FIKuYBkHw9mEe9pG9jKYsbU8WWhYfmRSvsH_TDoUW9GnH_HA&s=E15SFqcpcuPpT5hKyOiLf1b7SPJ2niVwlMjmtTIt0tev7u7VnsNuMKjzkVhhECAjweeFEoP75ELkkhXcXNTf6P9qI50yTYR9Y12gOSSEKSYt3m_MUSUH3tkcBuQOE8l-Jri8vkHCKKw5iexI8ID7AoXKxKpZo2dI4-oTSpQk_PV-N4cyItj-62VwzSv1XFQN4udyJAmYm2wA2VEHIGLiQLQXsnTnS3ES66VbUo_1UufEFiCbM9dOmfThs1FohjPeEhIOdcn6RI7XY2ujIFZx758DMQwl1qV7gHydTdg0UW3IHWlZ3dsOgji68JM_6B9JwcnMOgE4x7JBabsFFQKM1w&h=VMBOLSvaGHeKEprx_4IA31ui5uAOfdniC5-l-0O4ASE
+      cache-control:
+      - no-cache
+      content-length:
+      - '3670'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:40:31 GMT
+      etag:
+      - '"3"'
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-need-to-refresh-epl-cache:
+      - 'False'
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/westus/bdb197be-95a1-4da2-b164-90798d3c270c
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/VMScaleSetVMActionsSubscriptionMaximum;1999,Microsoft.Compute/VMScaleSetVMActionsResource;11,Microsoft.Compute/VMScaleSetBatchedVMRequestsSubscriptionMaximum;5999,Microsoft.Compute/VmssQueuedVMOperations;0
+      x-ms-ratelimit-remaining-subscription-global-writes:
+      - '2999'
+      x-ms-ratelimit-remaining-subscription-writes:
+      - '199'
+      x-ms-request-charge:
+      - '1'
+      x-msedge-ref:
+      - 'Ref A: 77823C6A93D5470A980E75F33F7A079F Ref B: TYO201151006023 Ref C: 2025-08-15T07:40:31Z'
+    status:
+      code: 200
+      message: ''
+- request:
+    body: null
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss disk attach
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - -g --vmss-name --instance-id --disk --caching
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Compute/locations/westus/operations/990688f0-2ba0-42e8-ac01-15dd22b9b24f?p=dd11a406-3651-4f42-bc22-2b29e0b71407&api-version=2024-11-01&t=638908404322410155&c=MIIIrzCCBpegAwIBAgITUQB9VQ7j8TP8msVbVQABAH1VDjANBgkqhkiG9w0BAQsFADBEMRMwEQYKCZImiZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQBGRYDQU1FMRgwFgYDVQQDEw9BTUUgSW5mcmEgQ0EgMDQwHhcNMjUwNzE3MTAxMTQxWhcNMjYwMTEzMTAxMTQxWjBAMT4wPAYDVQQDEzVhc3luY29wZXJhdGlvbnNpZ25pbmdjZXJ0aWZpY2F0ZS5tYW5hZ2VtZW50LmF6dXJlLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAN9uFRCckwovJWtl1-Qq22Rnc8i5ftzF4eCW9m-t2gMd0gI4H3ggHFS8o7Lgo7NFrSHde_fOw5TG4ClBFPIvYtP-yRXA_gQTjDDxbdEKLTNE3lXVjb2lGS92EXrq2q8SW9iUszX4c5rv7wvK4PYYmWBgrA0pnZoN3Sb-PCkHdwTiQ6s-KaN9TaDX22q-VAiBKtuEV3lfxq84cdn8poLqbGH9aJs3mwzZSvSnDtSic6XB7Wn2B9rEtP4D_EPxNAlrtE-8p4QQxJKsU4kvH2HkbDTA3s-9XDYPgpo-bc_TuPA79C9cwY_yDUwxeCiVXq6u1ouDEDRV8y-SdlEtMwA_L3kCAwEAAaOCBJwwggSYMCcGCSsGAQQBgjcVCgQaMBgwCgYIKwYBBQUHAwEwCgYIKwYBBQUHAwIwPQYJKwYBBAGCNxUHBDAwLgYmKwYBBAGCNxUIhpDjDYTVtHiE8Ys-hZvdFs6dEoFghfmRS4WsmTQCAWQCAQcwggHkBggrBgEFBQcBAQSCAdYwggHSMGgGCCsGAQUFBzAChlxodHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtpaW5mcmEvQ2VydHMvbWVsMDFwa2lpbnRjYTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNydDBYBggrBgEFBQcwAoZMaHR0cDovL2NybDEuYW1lLmdibC9haWEvbWVsMDFwa2lpbnRjYTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNydDBYBggrBgEFBQcwAoZMaHR0cDovL2NybDIuYW1lLmdibC9haWEvbWVsMDFwa2lpbnRjYTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNydDBYBggrBgEFBQcwAoZMaHR0cDovL2NybDMuYW1lLmdibC9haWEvbWVsMDFwa2lpbnRjYTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNydDBYBggrBgEFBQcwAoZMaHR0cDovL2NybDQuYW1lLmdibC9haWEvbWVsMDFwa2lpbnRjYTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNydDAdBgNVHQ4EFgQUb0zVsI6tU0Ya4PntQPSVi05azTgwDgYDVR0PAQH_BAQDAgWgMIIBNQYDVR0fBIIBLDCCASgwggEkoIIBIKCCARyGQmh0dHA6Ly9jcmwubWljcm9zb2Z0LmNvbS9wa2lpbmZyYS9DUkwvQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNybIY0aHR0cDovL2NybDEuYW1lLmdibC9jcmwvQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNybIY0aHR0cDovL2NybDIuYW1lLmdibC9jcmwvQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNybIY0aHR0cDovL2NybDMuYW1lLmdibC9jcmwvQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNybIY0aHR0cDovL2NybDQuYW1lLmdibC9jcmwvQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNybDCBnQYDVR0gBIGVMIGSMAwGCisGAQQBgjd7AQEwZgYKKwYBBAGCN3sCAjBYMFYGCCsGAQUFBwICMEoeSAAzADMAZQAwADEAOQAyADEALQA0AGQANgA0AC0ANABmADgAYwAtAGEAMAA1ADUALQA1AGIAZABhAGYAZgBkADUAZQAzADMAZDAMBgorBgEEAYI3ewMCMAwGCisGAQQBgjd7BAIwHwYDVR0jBBgwFoAUOXFdqRUQLcTffi9ZbkBNwN_vNpowHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMCMA0GCSqGSIb3DQEBCwUAA4ICAQDNOTwuwpaNg6Wb6rlDJvYkgpjYBgD7v-G5oudCTfWxa38GVpr03GvcKMMKXsPqS9r4NAOXfLjlf7xqYiwUCShYUrJU3IDKm0amgY_xtVwywcT-VPGF7VZHrEHKa7b6ZR0_aUw_msh7FWtVxpZNW3Lq26ebDEtB-rbUQ_BDwH2K2tb_oKc8WzIVNBwAoAWWDHyVWJKRoEVp59P5KYLdqvg8VrchPaYU3B1ZYbSol1dPcoTFBbiR1xTC4gihNsdye7dgkDwJThyhtefnZZ1zeiWxnXwiLxuZk6pf7cEKEN0xfBtqSBq-ShHoa0RC1xAzAdGngTv75eYqs7hVFdEIZwytl9j_DVoh7vDwgUi0D3gu_ArliQZQbJaOgadOSsCvfyC4FDs0zFzh5gJEl4CTM9fYPZWGJPQPaH1nAoBwgqHZE1WF0uh4144LhpYs9GlduCWQ3jQeVjXsFsZdZPSYXdPojWuL34Voqf1gb07y4lB4vNsjgX0MCWgmfG4Jm7I_MwoL3FGM3SQN_84HB4tHG58f3-ztGcxleLHe1VBfPj-Efh6FPeHNFg7Lyc28aIJf6Lti8Bv9FjBGl_x8j5VVCMC3OI6aRMl9fqjNw4qBFbYmAY9f42CiaGsbnlC2k4FIKuYBkHw9mEe9pG9jKYsbU8WWhYfmRSvsH_TDoUW9GnH_HA&s=E15SFqcpcuPpT5hKyOiLf1b7SPJ2niVwlMjmtTIt0tev7u7VnsNuMKjzkVhhECAjweeFEoP75ELkkhXcXNTf6P9qI50yTYR9Y12gOSSEKSYt3m_MUSUH3tkcBuQOE8l-Jri8vkHCKKw5iexI8ID7AoXKxKpZo2dI4-oTSpQk_PV-N4cyItj-62VwzSv1XFQN4udyJAmYm2wA2VEHIGLiQLQXsnTnS3ES66VbUo_1UufEFiCbM9dOmfThs1FohjPeEhIOdcn6RI7XY2ujIFZx758DMQwl1qV7gHydTdg0UW3IHWlZ3dsOgji68JM_6B9JwcnMOgE4x7JBabsFFQKM1w&h=VMBOLSvaGHeKEprx_4IA31ui5uAOfdniC5-l-0O4ASE
+  response:
+    body:
+      string: "{\r\n  \"startTime\": \"2025-08-15T07:40:32.0348694+00:00\",\r\n  \"status\":
+        \"InProgress\",\r\n  \"name\": \"990688f0-2ba0-42e8-ac01-15dd22b9b24f\"\r\n}"
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '134'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:40:34 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-need-to-refresh-epl-cache:
+      - 'False'
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/northeurope/8260a24f-0597-4de5-b6ea-9a867ff2cd40
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/GetOperationResource;44,Microsoft.Compute/GetOperationSubscriptionMaximum;14997
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-msedge-ref:
+      - 'Ref A: 75A9D22BE813441AA32C6AC498EDFFA2 Ref B: TYO201100117021 Ref C: 2025-08-15T07:40:33Z'
+    status:
+      code: 200
+      message: ''
+- request:
+    body: null
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss disk attach
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - -g --vmss-name --instance-id --disk --caching
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Compute/locations/westus/operations/990688f0-2ba0-42e8-ac01-15dd22b9b24f?p=dd11a406-3651-4f42-bc22-2b29e0b71407&api-version=2024-11-01&t=638908404322410155&c=MIIIrzCCBpegAwIBAgITUQB9VQ7j8TP8msVbVQABAH1VDjANBgkqhkiG9w0BAQsFADBEMRMwEQYKCZImiZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQBGRYDQU1FMRgwFgYDVQQDEw9BTUUgSW5mcmEgQ0EgMDQwHhcNMjUwNzE3MTAxMTQxWhcNMjYwMTEzMTAxMTQxWjBAMT4wPAYDVQQDEzVhc3luY29wZXJhdGlvbnNpZ25pbmdjZXJ0aWZpY2F0ZS5tYW5hZ2VtZW50LmF6dXJlLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAN9uFRCckwovJWtl1-Qq22Rnc8i5ftzF4eCW9m-t2gMd0gI4H3ggHFS8o7Lgo7NFrSHde_fOw5TG4ClBFPIvYtP-yRXA_gQTjDDxbdEKLTNE3lXVjb2lGS92EXrq2q8SW9iUszX4c5rv7wvK4PYYmWBgrA0pnZoN3Sb-PCkHdwTiQ6s-KaN9TaDX22q-VAiBKtuEV3lfxq84cdn8poLqbGH9aJs3mwzZSvSnDtSic6XB7Wn2B9rEtP4D_EPxNAlrtE-8p4QQxJKsU4kvH2HkbDTA3s-9XDYPgpo-bc_TuPA79C9cwY_yDUwxeCiVXq6u1ouDEDRV8y-SdlEtMwA_L3kCAwEAAaOCBJwwggSYMCcGCSsGAQQBgjcVCgQaMBgwCgYIKwYBBQUHAwEwCgYIKwYBBQUHAwIwPQYJKwYBBAGCNxUHBDAwLgYmKwYBBAGCNxUIhpDjDYTVtHiE8Ys-hZvdFs6dEoFghfmRS4WsmTQCAWQCAQcwggHkBggrBgEFBQcBAQSCAdYwggHSMGgGCCsGAQUFBzAChlxodHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtpaW5mcmEvQ2VydHMvbWVsMDFwa2lpbnRjYTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNydDBYBggrBgEFBQcwAoZMaHR0cDovL2NybDEuYW1lLmdibC9haWEvbWVsMDFwa2lpbnRjYTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNydDBYBggrBgEFBQcwAoZMaHR0cDovL2NybDIuYW1lLmdibC9haWEvbWVsMDFwa2lpbnRjYTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNydDBYBggrBgEFBQcwAoZMaHR0cDovL2NybDMuYW1lLmdibC9haWEvbWVsMDFwa2lpbnRjYTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNydDBYBggrBgEFBQcwAoZMaHR0cDovL2NybDQuYW1lLmdibC9haWEvbWVsMDFwa2lpbnRjYTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNydDAdBgNVHQ4EFgQUb0zVsI6tU0Ya4PntQPSVi05azTgwDgYDVR0PAQH_BAQDAgWgMIIBNQYDVR0fBIIBLDCCASgwggEkoIIBIKCCARyGQmh0dHA6Ly9jcmwubWljcm9zb2Z0LmNvbS9wa2lpbmZyYS9DUkwvQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNybIY0aHR0cDovL2NybDEuYW1lLmdibC9jcmwvQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNybIY0aHR0cDovL2NybDIuYW1lLmdibC9jcmwvQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNybIY0aHR0cDovL2NybDMuYW1lLmdibC9jcmwvQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNybIY0aHR0cDovL2NybDQuYW1lLmdibC9jcmwvQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNybDCBnQYDVR0gBIGVMIGSMAwGCisGAQQBgjd7AQEwZgYKKwYBBAGCN3sCAjBYMFYGCCsGAQUFBwICMEoeSAAzADMAZQAwADEAOQAyADEALQA0AGQANgA0AC0ANABmADgAYwAtAGEAMAA1ADUALQA1AGIAZABhAGYAZgBkADUAZQAzADMAZDAMBgorBgEEAYI3ewMCMAwGCisGAQQBgjd7BAIwHwYDVR0jBBgwFoAUOXFdqRUQLcTffi9ZbkBNwN_vNpowHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMCMA0GCSqGSIb3DQEBCwUAA4ICAQDNOTwuwpaNg6Wb6rlDJvYkgpjYBgD7v-G5oudCTfWxa38GVpr03GvcKMMKXsPqS9r4NAOXfLjlf7xqYiwUCShYUrJU3IDKm0amgY_xtVwywcT-VPGF7VZHrEHKa7b6ZR0_aUw_msh7FWtVxpZNW3Lq26ebDEtB-rbUQ_BDwH2K2tb_oKc8WzIVNBwAoAWWDHyVWJKRoEVp59P5KYLdqvg8VrchPaYU3B1ZYbSol1dPcoTFBbiR1xTC4gihNsdye7dgkDwJThyhtefnZZ1zeiWxnXwiLxuZk6pf7cEKEN0xfBtqSBq-ShHoa0RC1xAzAdGngTv75eYqs7hVFdEIZwytl9j_DVoh7vDwgUi0D3gu_ArliQZQbJaOgadOSsCvfyC4FDs0zFzh5gJEl4CTM9fYPZWGJPQPaH1nAoBwgqHZE1WF0uh4144LhpYs9GlduCWQ3jQeVjXsFsZdZPSYXdPojWuL34Voqf1gb07y4lB4vNsjgX0MCWgmfG4Jm7I_MwoL3FGM3SQN_84HB4tHG58f3-ztGcxleLHe1VBfPj-Efh6FPeHNFg7Lyc28aIJf6Lti8Bv9FjBGl_x8j5VVCMC3OI6aRMl9fqjNw4qBFbYmAY9f42CiaGsbnlC2k4FIKuYBkHw9mEe9pG9jKYsbU8WWhYfmRSvsH_TDoUW9GnH_HA&s=E15SFqcpcuPpT5hKyOiLf1b7SPJ2niVwlMjmtTIt0tev7u7VnsNuMKjzkVhhECAjweeFEoP75ELkkhXcXNTf6P9qI50yTYR9Y12gOSSEKSYt3m_MUSUH3tkcBuQOE8l-Jri8vkHCKKw5iexI8ID7AoXKxKpZo2dI4-oTSpQk_PV-N4cyItj-62VwzSv1XFQN4udyJAmYm2wA2VEHIGLiQLQXsnTnS3ES66VbUo_1UufEFiCbM9dOmfThs1FohjPeEhIOdcn6RI7XY2ujIFZx758DMQwl1qV7gHydTdg0UW3IHWlZ3dsOgji68JM_6B9JwcnMOgE4x7JBabsFFQKM1w&h=VMBOLSvaGHeKEprx_4IA31ui5uAOfdniC5-l-0O4ASE
+  response:
+    body:
+      string: "{\r\n  \"startTime\": \"2025-08-15T07:40:32.0348694+00:00\",\r\n  \"status\":
+        \"InProgress\",\r\n  \"name\": \"990688f0-2ba0-42e8-ac01-15dd22b9b24f\"\r\n}"
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '134'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:40:37 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-need-to-refresh-epl-cache:
+      - 'False'
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/japaneast/bcd20a83-9304-4e4c-a597-8904928a551b
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/GetOperationResource;43,Microsoft.Compute/GetOperationSubscriptionMaximum;14996
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-msedge-ref:
+      - 'Ref A: 9A7A383E51D1456FA9361F698FD53173 Ref B: TYO201151005023 Ref C: 2025-08-15T07:40:37Z'
+    status:
+      code: 200
+      message: ''
+- request:
+    body: null
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss disk attach
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - -g --vmss-name --instance-id --disk --caching
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Compute/locations/westus/operations/990688f0-2ba0-42e8-ac01-15dd22b9b24f?p=dd11a406-3651-4f42-bc22-2b29e0b71407&api-version=2024-11-01&t=638908404322410155&c=MIIIrzCCBpegAwIBAgITUQB9VQ7j8TP8msVbVQABAH1VDjANBgkqhkiG9w0BAQsFADBEMRMwEQYKCZImiZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQBGRYDQU1FMRgwFgYDVQQDEw9BTUUgSW5mcmEgQ0EgMDQwHhcNMjUwNzE3MTAxMTQxWhcNMjYwMTEzMTAxMTQxWjBAMT4wPAYDVQQDEzVhc3luY29wZXJhdGlvbnNpZ25pbmdjZXJ0aWZpY2F0ZS5tYW5hZ2VtZW50LmF6dXJlLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAN9uFRCckwovJWtl1-Qq22Rnc8i5ftzF4eCW9m-t2gMd0gI4H3ggHFS8o7Lgo7NFrSHde_fOw5TG4ClBFPIvYtP-yRXA_gQTjDDxbdEKLTNE3lXVjb2lGS92EXrq2q8SW9iUszX4c5rv7wvK4PYYmWBgrA0pnZoN3Sb-PCkHdwTiQ6s-KaN9TaDX22q-VAiBKtuEV3lfxq84cdn8poLqbGH9aJs3mwzZSvSnDtSic6XB7Wn2B9rEtP4D_EPxNAlrtE-8p4QQxJKsU4kvH2HkbDTA3s-9XDYPgpo-bc_TuPA79C9cwY_yDUwxeCiVXq6u1ouDEDRV8y-SdlEtMwA_L3kCAwEAAaOCBJwwggSYMCcGCSsGAQQBgjcVCgQaMBgwCgYIKwYBBQUHAwEwCgYIKwYBBQUHAwIwPQYJKwYBBAGCNxUHBDAwLgYmKwYBBAGCNxUIhpDjDYTVtHiE8Ys-hZvdFs6dEoFghfmRS4WsmTQCAWQCAQcwggHkBggrBgEFBQcBAQSCAdYwggHSMGgGCCsGAQUFBzAChlxodHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtpaW5mcmEvQ2VydHMvbWVsMDFwa2lpbnRjYTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNydDBYBggrBgEFBQcwAoZMaHR0cDovL2NybDEuYW1lLmdibC9haWEvbWVsMDFwa2lpbnRjYTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNydDBYBggrBgEFBQcwAoZMaHR0cDovL2NybDIuYW1lLmdibC9haWEvbWVsMDFwa2lpbnRjYTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNydDBYBggrBgEFBQcwAoZMaHR0cDovL2NybDMuYW1lLmdibC9haWEvbWVsMDFwa2lpbnRjYTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNydDBYBggrBgEFBQcwAoZMaHR0cDovL2NybDQuYW1lLmdibC9haWEvbWVsMDFwa2lpbnRjYTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNydDAdBgNVHQ4EFgQUb0zVsI6tU0Ya4PntQPSVi05azTgwDgYDVR0PAQH_BAQDAgWgMIIBNQYDVR0fBIIBLDCCASgwggEkoIIBIKCCARyGQmh0dHA6Ly9jcmwubWljcm9zb2Z0LmNvbS9wa2lpbmZyYS9DUkwvQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNybIY0aHR0cDovL2NybDEuYW1lLmdibC9jcmwvQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNybIY0aHR0cDovL2NybDIuYW1lLmdibC9jcmwvQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNybIY0aHR0cDovL2NybDMuYW1lLmdibC9jcmwvQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNybIY0aHR0cDovL2NybDQuYW1lLmdibC9jcmwvQU1FJTIwSW5mcmElMjBDQSUyMDA0KDEpLmNybDCBnQYDVR0gBIGVMIGSMAwGCisGAQQBgjd7AQEwZgYKKwYBBAGCN3sCAjBYMFYGCCsGAQUFBwICMEoeSAAzADMAZQAwADEAOQAyADEALQA0AGQANgA0AC0ANABmADgAYwAtAGEAMAA1ADUALQA1AGIAZABhAGYAZgBkADUAZQAzADMAZDAMBgorBgEEAYI3ewMCMAwGCisGAQQBgjd7BAIwHwYDVR0jBBgwFoAUOXFdqRUQLcTffi9ZbkBNwN_vNpowHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMCMA0GCSqGSIb3DQEBCwUAA4ICAQDNOTwuwpaNg6Wb6rlDJvYkgpjYBgD7v-G5oudCTfWxa38GVpr03GvcKMMKXsPqS9r4NAOXfLjlf7xqYiwUCShYUrJU3IDKm0amgY_xtVwywcT-VPGF7VZHrEHKa7b6ZR0_aUw_msh7FWtVxpZNW3Lq26ebDEtB-rbUQ_BDwH2K2tb_oKc8WzIVNBwAoAWWDHyVWJKRoEVp59P5KYLdqvg8VrchPaYU3B1ZYbSol1dPcoTFBbiR1xTC4gihNsdye7dgkDwJThyhtefnZZ1zeiWxnXwiLxuZk6pf7cEKEN0xfBtqSBq-ShHoa0RC1xAzAdGngTv75eYqs7hVFdEIZwytl9j_DVoh7vDwgUi0D3gu_ArliQZQbJaOgadOSsCvfyC4FDs0zFzh5gJEl4CTM9fYPZWGJPQPaH1nAoBwgqHZE1WF0uh4144LhpYs9GlduCWQ3jQeVjXsFsZdZPSYXdPojWuL34Voqf1gb07y4lB4vNsjgX0MCWgmfG4Jm7I_MwoL3FGM3SQN_84HB4tHG58f3-ztGcxleLHe1VBfPj-Efh6FPeHNFg7Lyc28aIJf6Lti8Bv9FjBGl_x8j5VVCMC3OI6aRMl9fqjNw4qBFbYmAY9f42CiaGsbnlC2k4FIKuYBkHw9mEe9pG9jKYsbU8WWhYfmRSvsH_TDoUW9GnH_HA&s=E15SFqcpcuPpT5hKyOiLf1b7SPJ2niVwlMjmtTIt0tev7u7VnsNuMKjzkVhhECAjweeFEoP75ELkkhXcXNTf6P9qI50yTYR9Y12gOSSEKSYt3m_MUSUH3tkcBuQOE8l-Jri8vkHCKKw5iexI8ID7AoXKxKpZo2dI4-oTSpQk_PV-N4cyItj-62VwzSv1XFQN4udyJAmYm2wA2VEHIGLiQLQXsnTnS3ES66VbUo_1UufEFiCbM9dOmfThs1FohjPeEhIOdcn6RI7XY2ujIFZx758DMQwl1qV7gHydTdg0UW3IHWlZ3dsOgji68JM_6B9JwcnMOgE4x7JBabsFFQKM1w&h=VMBOLSvaGHeKEprx_4IA31ui5uAOfdniC5-l-0O4ASE
+  response:
+    body:
+      string: "{\r\n  \"startTime\": \"2025-08-15T07:40:32.0348694+00:00\",\r\n  \"endTime\":
+        \"2025-08-15T07:40:41.2537111+00:00\",\r\n  \"status\": \"Succeeded\",\r\n
+        \ \"name\": \"990688f0-2ba0-42e8-ac01-15dd22b9b24f\"\r\n}"
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '184'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:40:41 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-need-to-refresh-epl-cache:
+      - 'False'
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/northeurope/cbaff4c5-af32-47e7-8537-271c8053dc57
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/GetOperationResource;42,Microsoft.Compute/GetOperationSubscriptionMaximum;14995
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3748'
+      x-msedge-ref:
+      - 'Ref A: A652F7DB43834D6E98DE48668566E2FC Ref B: TYO201100115049 Ref C: 2025-08-15T07:40:41Z'
+    status:
+      code: 200
+      message: ''
+- request:
+    body: null
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss disk attach
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - -g --vmss-name --instance-id --disk --caching
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1?api-version=2024-11-01
+  response:
+    body:
+      string: "{\r\n  \"name\": \"vmss000002_1\",\r\n  \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1\",\r\n
+        \ \"type\": \"Microsoft.Compute/virtualMachineScaleSets/virtualMachines\",\r\n
+        \ \"location\": \"westus\",\r\n  \"tags\": {},\r\n  \"instanceId\": \"1\",\r\n
+        \ \"sku\": {\r\n    \"name\": \"Standard_B2ms\",\r\n    \"tier\": \"Standard\"\r\n
+        \ },\r\n  \"properties\": {\r\n    \"latestModelApplied\": true,\r\n    \"modelDefinitionApplied\":
+        \"VirtualMachineScaleSet\",\r\n    \"networkProfileConfiguration\": {\"networkInterfaceConfigurations\":[{\"name\":\"vmsssab20Nic\",\"properties\":{\"primary\":true,\"disableTcpStateTracking\":false,\"networkSecurityGroup\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/networkSecurityGroups/vmss000002NSG\"},\"dnsSettings\":{\"dnsServers\":[]},\"enableIPForwarding\":false,\"ipConfigurations\":[{\"name\":\"vmsssab20IPConfig\",\"properties\":{\"subnet\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks/vmss000002VNET/subnets/vmss000002Subnet\"},\"privateIPAddressVersion\":\"IPv4\",\"loadBalancerBackendAddressPools\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB/backendAddressPools/vmss000002LBBEPool\"}]}}]}}]},\r\n
+        \   \"provisioningState\": \"Succeeded\",\r\n    \"hardwareProfile\": {\r\n
+        \     \"vmSize\": \"Standard_B2ms\"\r\n    },\r\n    \"resilientVMDeletionStatus\":
+        \"Disabled\",\r\n    \"vmId\": \"f3453067-bb98-4543-8808-7e1863f8849e\",\r\n
+        \   \"storageProfile\": {\r\n      \"imageReference\": {\r\n        \"publisher\":
+        \"Debian\",\r\n        \"offer\": \"debian-10\",\r\n        \"sku\": \"10\",\r\n
+        \       \"version\": \"latest\",\r\n        \"exactVersion\": \"0.20240430.1733\"\r\n
+        \     },\r\n      \"osDisk\": {\r\n        \"osType\": \"Linux\",\r\n        \"name\":
+        \"vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0\",\r\n
+        \       \"createOption\": \"FromImage\",\r\n        \"caching\": \"ReadWrite\",\r\n
+        \       \"managedDisk\": {\r\n          \"storageAccountType\": \"Standard_LRS\",\r\n
+        \         \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0\"\r\n
+        \       },\r\n        \"diskSizeGB\": 30\r\n      },\r\n      \"dataDisks\":
+        [\r\n        {\r\n          \"lun\": 0,\r\n          \"name\": \"disk000003\",\r\n
+        \         \"createOption\": \"Attach\",\r\n          \"caching\": \"ReadWrite\",\r\n
+        \         \"managedDisk\": {\r\n            \"storageAccountType\": \"Standard_LRS\",\r\n
+        \           \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/disk000003\"\r\n
+        \         },\r\n          \"diskSizeGB\": 1,\r\n          \"toBeDetached\":
+        false\r\n        }\r\n      ]\r\n    },\r\n    \"osProfile\": {\r\n      \"computerName\":
+        \"vmsssab20000001\",\r\n      \"adminUsername\": \"clitest1\",\r\n      \"linuxConfiguration\":
+        {\r\n        \"disablePasswordAuthentication\": false,\r\n        \"provisionVMAgent\":
+        true\r\n      },\r\n      \"secrets\": [],\r\n      \"allowExtensionOperations\":
+        true,\r\n      \"requireGuestProvisionSignal\": true\r\n    },\r\n    \"networkProfile\":
+        {\"networkInterfaces\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1/networkInterfaces/vmsssab20Nic\"}]},\r\n
+        \   \"timeCreated\": \"2025-08-15T07:39:20.7372531+00:00\"\r\n  },\r\n  \"etag\":
+        \"\\\"3\\\"\"\r\n}"
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '3671'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:40:42 GMT
+      etag:
+      - '"3"'
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-need-to-refresh-epl-cache:
+      - 'False'
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/westus/6d784805-dc4c-4faa-9a3b-3965967feb28
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/GetVMScaleSetVMSubscriptionMaximum;5998,Microsoft.Compute/GetVMScaleSetVMResource;34,Microsoft.Compute/VMScaleSetVMViewsSubscriptionMaximum;29994
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-ms-request-charge:
+      - '1'
+      x-msedge-ref:
+      - 'Ref A: 5C3625A62F194B7680A160CA76A07991 Ref B: TYO201151006031 Ref C: 2025-08-15T07:40:42Z'
+    status:
+      code: 200
+      message: ''
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss list-instances
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - -g -n --query
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines?api-version=2024-11-01
+  response:
+    body:
+      string: "{\r\n  \"value\": [\r\n    {\r\n      \"name\": \"vmss000002_1\",\r\n
+        \     \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1\",\r\n
+        \     \"type\": \"Microsoft.Compute/virtualMachineScaleSets/virtualMachines\",\r\n
+        \     \"location\": \"westus\",\r\n      \"tags\": {},\r\n      \"instanceId\":
+        \"1\",\r\n      \"sku\": {\r\n        \"name\": \"Standard_B2ms\",\r\n        \"tier\":
+        \"Standard\"\r\n      },\r\n      \"properties\": {\r\n        \"latestModelApplied\":
+        true,\r\n        \"modelDefinitionApplied\": \"VirtualMachineScaleSet\",\r\n
+        \       \"networkProfileConfiguration\": {\"networkInterfaceConfigurations\":[{\"name\":\"vmsssab20Nic\",\"properties\":{\"primary\":true,\"disableTcpStateTracking\":false,\"networkSecurityGroup\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/networkSecurityGroups/vmss000002NSG\"},\"dnsSettings\":{\"dnsServers\":[]},\"enableIPForwarding\":false,\"ipConfigurations\":[{\"name\":\"vmsssab20IPConfig\",\"properties\":{\"subnet\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks/vmss000002VNET/subnets/vmss000002Subnet\"},\"privateIPAddressVersion\":\"IPv4\",\"loadBalancerBackendAddressPools\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB/backendAddressPools/vmss000002LBBEPool\"}]}}]}}]},\r\n
+        \       \"provisioningState\": \"Succeeded\",\r\n        \"hardwareProfile\":
+        {\r\n          \"vmSize\": \"Standard_B2ms\"\r\n        },\r\n        \"resilientVMDeletionStatus\":
+        \"Disabled\",\r\n        \"vmId\": \"f3453067-bb98-4543-8808-7e1863f8849e\",\r\n
+        \       \"storageProfile\": {\r\n          \"imageReference\": {\r\n            \"publisher\":
+        \"Debian\",\r\n            \"offer\": \"debian-10\",\r\n            \"sku\":
+        \"10\",\r\n            \"version\": \"latest\",\r\n            \"exactVersion\":
+        \"0.20240430.1733\"\r\n          },\r\n          \"osDisk\": {\r\n            \"osType\":
+        \"Linux\",\r\n            \"name\": \"vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0\",\r\n
+        \           \"createOption\": \"FromImage\",\r\n            \"caching\": \"ReadWrite\",\r\n
+        \           \"managedDisk\": {\r\n              \"storageAccountType\": \"Standard_LRS\",\r\n
+        \             \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0\"\r\n
+        \           },\r\n            \"diskSizeGB\": 30\r\n          },\r\n          \"dataDisks\":
+        [\r\n            {\r\n              \"lun\": 0,\r\n              \"name\":
+        \"disk000003\",\r\n              \"createOption\": \"Attach\",\r\n              \"caching\":
+        \"ReadWrite\",\r\n              \"managedDisk\": {\r\n                \"storageAccountType\":
+        \"Standard_LRS\",\r\n                \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/disk000003\"\r\n
+        \             },\r\n              \"diskSizeGB\": 1,\r\n              \"toBeDetached\":
+        false\r\n            }\r\n          ]\r\n        },\r\n        \"osProfile\":
+        {\r\n          \"computerName\": \"vmsssab20000001\",\r\n          \"adminUsername\":
+        \"clitest1\",\r\n          \"linuxConfiguration\": {\r\n            \"disablePasswordAuthentication\":
+        false,\r\n            \"provisionVMAgent\": true\r\n          },\r\n          \"secrets\":
+        [],\r\n          \"allowExtensionOperations\": true,\r\n          \"requireGuestProvisionSignal\":
+        true\r\n        },\r\n        \"networkProfile\": {\"networkInterfaces\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1/networkInterfaces/vmsssab20Nic\"}]},\r\n
+        \       \"timeCreated\": \"2025-08-15T07:39:20.7372531+00:00\"\r\n      },\r\n
+        \     \"etag\": \"\\\"3\\\"\"\r\n    },\r\n    {\r\n      \"name\": \"vmss000002_2\",\r\n
+        \     \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/2\",\r\n
+        \     \"type\": \"Microsoft.Compute/virtualMachineScaleSets/virtualMachines\",\r\n
+        \     \"location\": \"westus\",\r\n      \"tags\": {},\r\n      \"instanceId\":
+        \"2\",\r\n      \"sku\": {\r\n        \"name\": \"Standard_B2ms\",\r\n        \"tier\":
+        \"Standard\"\r\n      },\r\n      \"properties\": {\r\n        \"latestModelApplied\":
+        true,\r\n        \"modelDefinitionApplied\": \"VirtualMachineScaleSet\",\r\n
+        \       \"networkProfileConfiguration\": {\"networkInterfaceConfigurations\":[{\"name\":\"vmsssab20Nic\",\"properties\":{\"primary\":true,\"disableTcpStateTracking\":false,\"networkSecurityGroup\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/networkSecurityGroups/vmss000002NSG\"},\"dnsSettings\":{\"dnsServers\":[]},\"enableIPForwarding\":false,\"ipConfigurations\":[{\"name\":\"vmsssab20IPConfig\",\"properties\":{\"subnet\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks/vmss000002VNET/subnets/vmss000002Subnet\"},\"privateIPAddressVersion\":\"IPv4\",\"loadBalancerBackendAddressPools\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB/backendAddressPools/vmss000002LBBEPool\"}]}}]}}]},\r\n
+        \       \"provisioningState\": \"Succeeded\",\r\n        \"hardwareProfile\":
+        {\r\n          \"vmSize\": \"Standard_B2ms\"\r\n        },\r\n        \"resilientVMDeletionStatus\":
+        \"Disabled\",\r\n        \"vmId\": \"60556da6-54a2-4cdd-96d3-4f12743898fa\",\r\n
+        \       \"storageProfile\": {\r\n          \"imageReference\": {\r\n            \"publisher\":
+        \"Debian\",\r\n            \"offer\": \"debian-10\",\r\n            \"sku\":
+        \"10\",\r\n            \"version\": \"latest\",\r\n            \"exactVersion\":
+        \"0.20240430.1733\"\r\n          },\r\n          \"osDisk\": {\r\n            \"osType\":
+        \"Linux\",\r\n            \"name\": \"vmss000002_vmss000002_2_OsDisk_1_09cb65e4f2a849f4b74b6ee608b0b8b1\",\r\n
+        \           \"createOption\": \"FromImage\",\r\n            \"caching\": \"ReadWrite\",\r\n
+        \           \"managedDisk\": {\r\n              \"storageAccountType\": \"Standard_LRS\",\r\n
+        \             \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/vmss000002_vmss000002_2_OsDisk_1_09cb65e4f2a849f4b74b6ee608b0b8b1\"\r\n
+        \           },\r\n            \"diskSizeGB\": 30\r\n          },\r\n          \"dataDisks\":
+        []\r\n        },\r\n        \"osProfile\": {\r\n          \"computerName\":
+        \"vmsssab20000002\",\r\n          \"adminUsername\": \"clitest1\",\r\n          \"linuxConfiguration\":
+        {\r\n            \"disablePasswordAuthentication\": false,\r\n            \"provisionVMAgent\":
+        true\r\n          },\r\n          \"secrets\": [],\r\n          \"allowExtensionOperations\":
+        true,\r\n          \"requireGuestProvisionSignal\": true\r\n        },\r\n
+        \       \"networkProfile\": {\"networkInterfaces\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/2/networkInterfaces/vmsssab20Nic\"}]},\r\n
+        \       \"timeCreated\": \"2025-08-15T07:39:20.7372531+00:00\"\r\n      },\r\n
+        \     \"etag\": \"\\\"2\\\"\"\r\n    }\r\n  ]\r\n}"
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '7408'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:40:44 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-need-to-refresh-epl-cache:
+      - 'False'
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/japaneast/1e72caa7-fc85-4bc9-a08f-ad3487e286ba
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/HighCostGetVMScaleSetSubscriptionMaximum;1078,Microsoft.Compute/HighCostGetVMScaleSetResource;28,Microsoft.Compute/VMScaleSetVMViewsSubscriptionMaximum;29992
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-ms-request-charge:
+      - '2'
+      x-msedge-ref:
+      - 'Ref A: C5DA57F6F8B244DA83C808C35A8329C6 Ref B: TYO201100113049 Ref C: 2025-08-15T07:40:43Z'
+    status:
+      code: 200
+      message: ''
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss disk detach
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - -g --vmss-name --instance-id --lun
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1?api-version=2024-11-01
+  response:
+    body:
+      string: "{\r\n  \"name\": \"vmss000002_1\",\r\n  \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1\",\r\n
+        \ \"type\": \"Microsoft.Compute/virtualMachineScaleSets/virtualMachines\",\r\n
+        \ \"location\": \"westus\",\r\n  \"tags\": {},\r\n  \"instanceId\": \"1\",\r\n
+        \ \"sku\": {\r\n    \"name\": \"Standard_B2ms\",\r\n    \"tier\": \"Standard\"\r\n
+        \ },\r\n  \"properties\": {\r\n    \"latestModelApplied\": true,\r\n    \"modelDefinitionApplied\":
+        \"VirtualMachineScaleSet\",\r\n    \"networkProfileConfiguration\": {\"networkInterfaceConfigurations\":[{\"name\":\"vmsssab20Nic\",\"properties\":{\"primary\":true,\"disableTcpStateTracking\":false,\"networkSecurityGroup\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/networkSecurityGroups/vmss000002NSG\"},\"dnsSettings\":{\"dnsServers\":[]},\"enableIPForwarding\":false,\"ipConfigurations\":[{\"name\":\"vmsssab20IPConfig\",\"properties\":{\"subnet\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks/vmss000002VNET/subnets/vmss000002Subnet\"},\"privateIPAddressVersion\":\"IPv4\",\"loadBalancerBackendAddressPools\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB/backendAddressPools/vmss000002LBBEPool\"}]}}]}}]},\r\n
+        \   \"provisioningState\": \"Succeeded\",\r\n    \"hardwareProfile\": {\r\n
+        \     \"vmSize\": \"Standard_B2ms\"\r\n    },\r\n    \"resilientVMDeletionStatus\":
+        \"Disabled\",\r\n    \"vmId\": \"f3453067-bb98-4543-8808-7e1863f8849e\",\r\n
+        \   \"storageProfile\": {\r\n      \"imageReference\": {\r\n        \"publisher\":
+        \"Debian\",\r\n        \"offer\": \"debian-10\",\r\n        \"sku\": \"10\",\r\n
+        \       \"version\": \"latest\",\r\n        \"exactVersion\": \"0.20240430.1733\"\r\n
+        \     },\r\n      \"osDisk\": {\r\n        \"osType\": \"Linux\",\r\n        \"name\":
+        \"vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0\",\r\n
+        \       \"createOption\": \"FromImage\",\r\n        \"caching\": \"ReadWrite\",\r\n
+        \       \"managedDisk\": {\r\n          \"storageAccountType\": \"Standard_LRS\",\r\n
+        \         \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0\"\r\n
+        \       },\r\n        \"diskSizeGB\": 30\r\n      },\r\n      \"dataDisks\":
+        [\r\n        {\r\n          \"lun\": 0,\r\n          \"name\": \"disk000003\",\r\n
+        \         \"createOption\": \"Attach\",\r\n          \"caching\": \"ReadWrite\",\r\n
+        \         \"managedDisk\": {\r\n            \"storageAccountType\": \"Standard_LRS\",\r\n
+        \           \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/disk000003\"\r\n
+        \         },\r\n          \"diskSizeGB\": 1,\r\n          \"toBeDetached\":
+        false\r\n        }\r\n      ]\r\n    },\r\n    \"osProfile\": {\r\n      \"computerName\":
+        \"vmsssab20000001\",\r\n      \"adminUsername\": \"clitest1\",\r\n      \"linuxConfiguration\":
+        {\r\n        \"disablePasswordAuthentication\": false,\r\n        \"provisionVMAgent\":
+        true\r\n      },\r\n      \"secrets\": [],\r\n      \"allowExtensionOperations\":
+        true,\r\n      \"requireGuestProvisionSignal\": true\r\n    },\r\n    \"networkProfile\":
+        {\"networkInterfaces\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1/networkInterfaces/vmsssab20Nic\"}]},\r\n
+        \   \"timeCreated\": \"2025-08-15T07:39:20.7372531+00:00\"\r\n  },\r\n  \"etag\":
+        \"\\\"3\\\"\"\r\n}"
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '3671'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:40:44 GMT
+      etag:
+      - '"3"'
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-need-to-refresh-epl-cache:
+      - 'False'
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/northeurope/f062a6fd-6a24-4ee1-8664-601eab93cdc1
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/GetVMScaleSetVMSubscriptionMaximum;5997,Microsoft.Compute/GetVMScaleSetVMResource;33,Microsoft.Compute/VMScaleSetVMViewsSubscriptionMaximum;29991
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-ms-request-charge:
+      - '1'
+      x-msedge-ref:
+      - 'Ref A: 7B681C8661364A1082245773E71321C4 Ref B: TYO201100117047 Ref C: 2025-08-15T07:40:44Z'
+    status:
+      code: 200
+      message: ''
+- request:
+    body: '{"location": "westus", "tags": {}, "properties": {"hardwareProfile": {"vmSize":
+      "Standard_B2ms"}, "resilientVMDeletionStatus": "Disabled", "storageProfile":
+      {"osDisk": {"osType": "Linux", "name": "vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0",
+      "caching": "ReadWrite", "createOption": "FromImage", "diskSizeGB": 30, "managedDisk":
+      {"id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0",
+      "storageAccountType": "Standard_LRS"}}, "dataDisks": []}, "osProfile": {"computerName":
+      "vmsssab20000001", "adminUsername": "clitest1", "linuxConfiguration": {"disablePasswordAuthentication":
+      false, "provisionVMAgent": true}, "secrets": [], "allowExtensionOperations":
+      true, "requireGuestProvisionSignal": true}, "networkProfile": {"networkInterfaces":
+      [{"id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1/networkInterfaces/vmsssab20Nic"}]},
+      "networkProfileConfiguration": {"networkInterfaceConfigurations": [{"name":
+      "vmsssab20Nic", "properties": {"primary": true, "disableTcpStateTracking": false,
+      "networkSecurityGroup": {"id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/networkSecurityGroups/vmss000002NSG"},
+      "dnsSettings": {"dnsServers": []}, "ipConfigurations": [{"name": "vmsssab20IPConfig",
+      "properties": {"subnet": {"id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks/vmss000002VNET/subnets/vmss000002Subnet"},
+      "privateIPAddressVersion": "IPv4", "loadBalancerBackendAddressPools": [{"id":
+      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB/backendAddressPools/vmss000002LBBEPool"}]}}],
+      "enableIPForwarding": false}}]}}}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss disk detach
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '2126'
+      Content-Type:
+      - application/json
+      ParameterSetName:
+      - -g --vmss-name --instance-id --lun
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: PUT
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1?api-version=2024-11-01
+  response:
+    body:
+      string: "{\r\n  \"name\": \"vmss000002_1\",\r\n  \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1\",\r\n
+        \ \"type\": \"Microsoft.Compute/virtualMachineScaleSets/virtualMachines\",\r\n
+        \ \"location\": \"westus\",\r\n  \"tags\": {},\r\n  \"instanceId\": \"1\",\r\n
+        \ \"sku\": {\r\n    \"name\": \"Standard_B2ms\",\r\n    \"tier\": \"Standard\"\r\n
+        \ },\r\n  \"properties\": {\r\n    \"latestModelApplied\": true,\r\n    \"modelDefinitionApplied\":
+        \"VirtualMachineScaleSet\",\r\n    \"networkProfileConfiguration\": {\"networkInterfaceConfigurations\":[{\"name\":\"vmsssab20Nic\",\"properties\":{\"primary\":true,\"disableTcpStateTracking\":false,\"networkSecurityGroup\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/networkSecurityGroups/vmss000002NSG\"},\"dnsSettings\":{\"dnsServers\":[]},\"enableIPForwarding\":false,\"ipConfigurations\":[{\"name\":\"vmsssab20IPConfig\",\"properties\":{\"subnet\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks/vmss000002VNET/subnets/vmss000002Subnet\"},\"privateIPAddressVersion\":\"IPv4\",\"loadBalancerBackendAddressPools\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB/backendAddressPools/vmss000002LBBEPool\"}]}}]}}]},\r\n
+        \   \"provisioningState\": \"Updating\",\r\n    \"hardwareProfile\": {\r\n
+        \     \"vmSize\": \"Standard_B2ms\"\r\n    },\r\n    \"resilientVMDeletionStatus\":
+        \"Disabled\",\r\n    \"vmId\": \"f3453067-bb98-4543-8808-7e1863f8849e\",\r\n
+        \   \"storageProfile\": {\r\n      \"imageReference\": {\r\n        \"publisher\":
+        \"Debian\",\r\n        \"offer\": \"debian-10\",\r\n        \"sku\": \"10\",\r\n
+        \       \"version\": \"latest\",\r\n        \"exactVersion\": \"0.20240430.1733\"\r\n
+        \     },\r\n      \"osDisk\": {\r\n        \"osType\": \"Linux\",\r\n        \"name\":
+        \"vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0\",\r\n
+        \       \"createOption\": \"FromImage\",\r\n        \"caching\": \"ReadWrite\",\r\n
+        \       \"managedDisk\": {\r\n          \"storageAccountType\": \"Standard_LRS\",\r\n
+        \         \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0\"\r\n
+        \       },\r\n        \"diskSizeGB\": 30\r\n      },\r\n      \"dataDisks\":
+        [\r\n        {\r\n          \"lun\": 0,\r\n          \"name\": \"disk000003\",\r\n
+        \         \"createOption\": \"Attach\",\r\n          \"caching\": \"ReadWrite\",\r\n
+        \         \"managedDisk\": {\r\n            \"storageAccountType\": \"Standard_LRS\",\r\n
+        \           \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/disk000003\"\r\n
+        \         },\r\n          \"diskSizeGB\": 1,\r\n          \"toBeDetached\":
+        true\r\n        }\r\n      ]\r\n    },\r\n    \"osProfile\": {\r\n      \"computerName\":
+        \"vmsssab20000001\",\r\n      \"adminUsername\": \"clitest1\",\r\n      \"linuxConfiguration\":
+        {\r\n        \"disablePasswordAuthentication\": false,\r\n        \"provisionVMAgent\":
+        true\r\n      },\r\n      \"secrets\": [],\r\n      \"allowExtensionOperations\":
+        true,\r\n      \"requireGuestProvisionSignal\": true\r\n    },\r\n    \"networkProfile\":
+        {\"networkInterfaces\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1/networkInterfaces/vmsssab20Nic\"}]},\r\n
+        \   \"timeCreated\": \"2025-08-15T07:39:20.7372531+00:00\"\r\n  },\r\n  \"etag\":
+        \"\\\"4\\\"\"\r\n}"
+    headers:
+      azure-asyncnotification:
+      - Enabled
+      azure-asyncoperation:
+      - https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Compute/locations/westus/operations/26baf2aa-b5fe-4387-951d-989a86407236?p=dd11a406-3651-4f42-bc22-2b29e0b71407&api-version=2024-11-01&t=638908404491921369&c=MIIHhzCCBm-gAwIBAgITfAh_GKqaYH8RwOhahQAACH8YqjANBgkqhkiG9w0BAQsFADBEMRMwEQYKCZImiZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQBGRYDQU1FMRgwFgYDVQQDEw9BTUUgSW5mcmEgQ0EgMDUwHhcNMjUwNzE3MDk1OTE3WhcNMjYwMTEzMDk1OTE3WjBAMT4wPAYDVQQDEzVhc3luY29wZXJhdGlvbnNpZ25pbmdjZXJ0aWZpY2F0ZS5tYW5hZ2VtZW50LmF6dXJlLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKuEt3wTriBe3SnGcgSXaxZXwy_Xvnx1kHhEe9cOTTajScq7IAVIz8UpcaaPf3UkWbuQCQ5VsrM6sjyPl1GO3EfreM0qta2mlQD1rV5xXCl0FW7D08thmIi5YvQI9disUj8UiltkhlG4H1dN7nL-JOsqMr23WAFO4WxBvzYCuFtlIscequZwOsF5BH4DEtri4FQLSMGZl_C0nRNntCtn_7vv6CnsqqUGIQ7fY7BIflesLUUbiRhZ8aQ-xzK4i5UPShfw4q5XcZ5maAk6jUAPK7Icf8liMlqJBLnG0DAIJsyI3QjAGaUDtyqoczOJU0bQN-wWv1NZAdwxsc-H1uBGohECAwEAAaOCBHQwggRwMCcGCSsGAQQBgjcVCgQaMBgwCgYIKwYBBQUHAwEwCgYIKwYBBQUHAwIwPQYJKwYBBAGCNxUHBDAwLgYmKwYBBAGCNxUIhpDjDYTVtHiE8Ys-hZvdFs6dEoFghfmRS4WsmTQCAWQCAQcwggHLBggrBgEFBQcBAQSCAb0wggG5MGMGCCsGAQUFBzAChldodHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtpaW5mcmEvQ2VydHMvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmwxLmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MFMGCCsGAQUFBzAChkdodHRwOi8vY3JsMi5hbWUuZ2JsL2FpYS9DTzFQS0lJTlRDQTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA1LmNydDBTBggrBgEFBQcwAoZHaHR0cDovL2NybDMuYW1lLmdibC9haWEvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmw0LmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MB0GA1UdDgQWBBQg5Jh8k3-r9HjagWiaVSjmv1ZYcTAOBgNVHQ8BAf8EBAMCBaAwggEmBgNVHR8EggEdMIIBGTCCARWgggERoIIBDYY_aHR0cDovL2NybC5taWNyb3NvZnQuY29tL3BraWluZnJhL0NSTC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMS5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMi5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMy5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsNC5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JsMIGdBgNVHSAEgZUwgZIwDAYKKwYBBAGCN3sBATBmBgorBgEEAYI3ewICMFgwVgYIKwYBBQUHAgIwSh5IADMAMwBlADAAMQA5ADIAMQAtADQAZAA2ADQALQA0AGYAOABjAC0AYQAwADUANQAtADUAYgBkAGEAZgBmAGQANQBlADMAMwBkMAwGCisGAQQBgjd7AwIwDAYKKwYBBAGCN3sEAjAfBgNVHSMEGDAWgBR61hmFKHlscXYeYPjzS--iBUIWHTAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwDQYJKoZIhvcNAQELBQADggEBAJbvINqtpqi3m39oJmFmOa_onaje780VTHmE4RkSs50__U5mxmv9jUP6-2x1veQp90S3Zh42P-p57rPpkmO1V_Xn6HzayHC9ODMpiLw71ICXy7pnBKPx96ToTpISwqhz9n2WMWpUZwtSamQgVgq4oILrbmLC2a2b7VZz0mhN27s3JGa5iLup-JUJRZeXb_ymwQ8AhiFfklb79EPa29qi54HkT_WpArA7K3hBrtnByNVXDNiHx1hlvxKSWNzD-BTq69yRckYW3OI-kDHfeDgV8HlteT1BU8h87LB484ZYDG50LlTpuivm57pdiEGxjerXEO8ZqTH9g1bQLR-y2yjWmyg&s=JZfMmN14xbJMaMik-sg6HeAf5CVDTZZI9oXBip7gh9jdwb3lK6h8LWD6HDl5vnXM0AeyV4y_oPRdMZ_y3KXV5j80XZ9pppT5uZmFwY6pSeZrCSec-Y0KpdXIQN8sthBiCGI39THWwZSgJYG-9kVXreF8uicLOQ8Qs3_3Nyg5kt6_07WRrVHca9Lo8WdGgG6QXnCrz1bzfh4b0UEHunxtVA9sxehpgL4dB3d6miB0jt8u4nVRfXiHAObwC6EDZhHF93QHq6aKeM3HOaIRiRgvalvKuO7EEWQq5v9ZhgWZ9xuQ-O4PjpG0pEC92FOrw-N1V_FM3Ysc74m7611swNH9Zw&h=CcJeraBu9o9g-oA62hPpvqpRB_RNnORMWZPUrZhWmTE
+      cache-control:
+      - no-cache
+      content-length:
+      - '3669'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:40:48 GMT
+      etag:
+      - '"4"'
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-need-to-refresh-epl-cache:
+      - 'False'
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/northeurope/8033afd9-652b-47e7-805d-55b09ac3612d
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/VMScaleSetVMActionsSubscriptionMaximum;1998,Microsoft.Compute/VMScaleSetVMActionsResource;10,Microsoft.Compute/VMScaleSetBatchedVMRequestsSubscriptionMaximum;5998,Microsoft.Compute/VmssQueuedVMOperations;0
+      x-ms-ratelimit-remaining-subscription-global-writes:
+      - '2999'
+      x-ms-ratelimit-remaining-subscription-writes:
+      - '199'
+      x-ms-request-charge:
+      - '1'
+      x-msedge-ref:
+      - 'Ref A: FD12157AFD5E4347BB93F8F9DD5C5829 Ref B: TYO201100115023 Ref C: 2025-08-15T07:40:46Z'
+    status:
+      code: 200
+      message: ''
+- request:
+    body: null
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss disk detach
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - -g --vmss-name --instance-id --lun
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Compute/locations/westus/operations/26baf2aa-b5fe-4387-951d-989a86407236?p=dd11a406-3651-4f42-bc22-2b29e0b71407&api-version=2024-11-01&t=638908404491921369&c=MIIHhzCCBm-gAwIBAgITfAh_GKqaYH8RwOhahQAACH8YqjANBgkqhkiG9w0BAQsFADBEMRMwEQYKCZImiZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQBGRYDQU1FMRgwFgYDVQQDEw9BTUUgSW5mcmEgQ0EgMDUwHhcNMjUwNzE3MDk1OTE3WhcNMjYwMTEzMDk1OTE3WjBAMT4wPAYDVQQDEzVhc3luY29wZXJhdGlvbnNpZ25pbmdjZXJ0aWZpY2F0ZS5tYW5hZ2VtZW50LmF6dXJlLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKuEt3wTriBe3SnGcgSXaxZXwy_Xvnx1kHhEe9cOTTajScq7IAVIz8UpcaaPf3UkWbuQCQ5VsrM6sjyPl1GO3EfreM0qta2mlQD1rV5xXCl0FW7D08thmIi5YvQI9disUj8UiltkhlG4H1dN7nL-JOsqMr23WAFO4WxBvzYCuFtlIscequZwOsF5BH4DEtri4FQLSMGZl_C0nRNntCtn_7vv6CnsqqUGIQ7fY7BIflesLUUbiRhZ8aQ-xzK4i5UPShfw4q5XcZ5maAk6jUAPK7Icf8liMlqJBLnG0DAIJsyI3QjAGaUDtyqoczOJU0bQN-wWv1NZAdwxsc-H1uBGohECAwEAAaOCBHQwggRwMCcGCSsGAQQBgjcVCgQaMBgwCgYIKwYBBQUHAwEwCgYIKwYBBQUHAwIwPQYJKwYBBAGCNxUHBDAwLgYmKwYBBAGCNxUIhpDjDYTVtHiE8Ys-hZvdFs6dEoFghfmRS4WsmTQCAWQCAQcwggHLBggrBgEFBQcBAQSCAb0wggG5MGMGCCsGAQUFBzAChldodHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtpaW5mcmEvQ2VydHMvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmwxLmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MFMGCCsGAQUFBzAChkdodHRwOi8vY3JsMi5hbWUuZ2JsL2FpYS9DTzFQS0lJTlRDQTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA1LmNydDBTBggrBgEFBQcwAoZHaHR0cDovL2NybDMuYW1lLmdibC9haWEvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmw0LmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MB0GA1UdDgQWBBQg5Jh8k3-r9HjagWiaVSjmv1ZYcTAOBgNVHQ8BAf8EBAMCBaAwggEmBgNVHR8EggEdMIIBGTCCARWgggERoIIBDYY_aHR0cDovL2NybC5taWNyb3NvZnQuY29tL3BraWluZnJhL0NSTC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMS5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMi5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMy5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsNC5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JsMIGdBgNVHSAEgZUwgZIwDAYKKwYBBAGCN3sBATBmBgorBgEEAYI3ewICMFgwVgYIKwYBBQUHAgIwSh5IADMAMwBlADAAMQA5ADIAMQAtADQAZAA2ADQALQA0AGYAOABjAC0AYQAwADUANQAtADUAYgBkAGEAZgBmAGQANQBlADMAMwBkMAwGCisGAQQBgjd7AwIwDAYKKwYBBAGCN3sEAjAfBgNVHSMEGDAWgBR61hmFKHlscXYeYPjzS--iBUIWHTAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwDQYJKoZIhvcNAQELBQADggEBAJbvINqtpqi3m39oJmFmOa_onaje780VTHmE4RkSs50__U5mxmv9jUP6-2x1veQp90S3Zh42P-p57rPpkmO1V_Xn6HzayHC9ODMpiLw71ICXy7pnBKPx96ToTpISwqhz9n2WMWpUZwtSamQgVgq4oILrbmLC2a2b7VZz0mhN27s3JGa5iLup-JUJRZeXb_ymwQ8AhiFfklb79EPa29qi54HkT_WpArA7K3hBrtnByNVXDNiHx1hlvxKSWNzD-BTq69yRckYW3OI-kDHfeDgV8HlteT1BU8h87LB484ZYDG50LlTpuivm57pdiEGxjerXEO8ZqTH9g1bQLR-y2yjWmyg&s=JZfMmN14xbJMaMik-sg6HeAf5CVDTZZI9oXBip7gh9jdwb3lK6h8LWD6HDl5vnXM0AeyV4y_oPRdMZ_y3KXV5j80XZ9pppT5uZmFwY6pSeZrCSec-Y0KpdXIQN8sthBiCGI39THWwZSgJYG-9kVXreF8uicLOQ8Qs3_3Nyg5kt6_07WRrVHca9Lo8WdGgG6QXnCrz1bzfh4b0UEHunxtVA9sxehpgL4dB3d6miB0jt8u4nVRfXiHAObwC6EDZhHF93QHq6aKeM3HOaIRiRgvalvKuO7EEWQq5v9ZhgWZ9xuQ-O4PjpG0pEC92FOrw-N1V_FM3Ysc74m7611swNH9Zw&h=CcJeraBu9o9g-oA62hPpvqpRB_RNnORMWZPUrZhWmTE
+  response:
+    body:
+      string: "{\r\n  \"startTime\": \"2025-08-15T07:40:48.0194061+00:00\",\r\n  \"status\":
+        \"InProgress\",\r\n  \"name\": \"26baf2aa-b5fe-4387-951d-989a86407236\"\r\n}"
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '134'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:40:50 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-need-to-refresh-epl-cache:
+      - 'False'
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/northeurope/8bf565ef-058f-4583-a39a-89384dd34afb
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/GetOperationResource;44,Microsoft.Compute/GetOperationSubscriptionMaximum;14994
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-msedge-ref:
+      - 'Ref A: 08A3FB220D5C4DA2AC8EED27DC84FDEF Ref B: TYO201151001054 Ref C: 2025-08-15T07:40:50Z'
+    status:
+      code: 200
+      message: ''
+- request:
+    body: null
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss disk detach
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - -g --vmss-name --instance-id --lun
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Compute/locations/westus/operations/26baf2aa-b5fe-4387-951d-989a86407236?p=dd11a406-3651-4f42-bc22-2b29e0b71407&api-version=2024-11-01&t=638908404491921369&c=MIIHhzCCBm-gAwIBAgITfAh_GKqaYH8RwOhahQAACH8YqjANBgkqhkiG9w0BAQsFADBEMRMwEQYKCZImiZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQBGRYDQU1FMRgwFgYDVQQDEw9BTUUgSW5mcmEgQ0EgMDUwHhcNMjUwNzE3MDk1OTE3WhcNMjYwMTEzMDk1OTE3WjBAMT4wPAYDVQQDEzVhc3luY29wZXJhdGlvbnNpZ25pbmdjZXJ0aWZpY2F0ZS5tYW5hZ2VtZW50LmF6dXJlLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKuEt3wTriBe3SnGcgSXaxZXwy_Xvnx1kHhEe9cOTTajScq7IAVIz8UpcaaPf3UkWbuQCQ5VsrM6sjyPl1GO3EfreM0qta2mlQD1rV5xXCl0FW7D08thmIi5YvQI9disUj8UiltkhlG4H1dN7nL-JOsqMr23WAFO4WxBvzYCuFtlIscequZwOsF5BH4DEtri4FQLSMGZl_C0nRNntCtn_7vv6CnsqqUGIQ7fY7BIflesLUUbiRhZ8aQ-xzK4i5UPShfw4q5XcZ5maAk6jUAPK7Icf8liMlqJBLnG0DAIJsyI3QjAGaUDtyqoczOJU0bQN-wWv1NZAdwxsc-H1uBGohECAwEAAaOCBHQwggRwMCcGCSsGAQQBgjcVCgQaMBgwCgYIKwYBBQUHAwEwCgYIKwYBBQUHAwIwPQYJKwYBBAGCNxUHBDAwLgYmKwYBBAGCNxUIhpDjDYTVtHiE8Ys-hZvdFs6dEoFghfmRS4WsmTQCAWQCAQcwggHLBggrBgEFBQcBAQSCAb0wggG5MGMGCCsGAQUFBzAChldodHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtpaW5mcmEvQ2VydHMvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmwxLmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MFMGCCsGAQUFBzAChkdodHRwOi8vY3JsMi5hbWUuZ2JsL2FpYS9DTzFQS0lJTlRDQTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA1LmNydDBTBggrBgEFBQcwAoZHaHR0cDovL2NybDMuYW1lLmdibC9haWEvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmw0LmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MB0GA1UdDgQWBBQg5Jh8k3-r9HjagWiaVSjmv1ZYcTAOBgNVHQ8BAf8EBAMCBaAwggEmBgNVHR8EggEdMIIBGTCCARWgggERoIIBDYY_aHR0cDovL2NybC5taWNyb3NvZnQuY29tL3BraWluZnJhL0NSTC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMS5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMi5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMy5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsNC5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JsMIGdBgNVHSAEgZUwgZIwDAYKKwYBBAGCN3sBATBmBgorBgEEAYI3ewICMFgwVgYIKwYBBQUHAgIwSh5IADMAMwBlADAAMQA5ADIAMQAtADQAZAA2ADQALQA0AGYAOABjAC0AYQAwADUANQAtADUAYgBkAGEAZgBmAGQANQBlADMAMwBkMAwGCisGAQQBgjd7AwIwDAYKKwYBBAGCN3sEAjAfBgNVHSMEGDAWgBR61hmFKHlscXYeYPjzS--iBUIWHTAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwDQYJKoZIhvcNAQELBQADggEBAJbvINqtpqi3m39oJmFmOa_onaje780VTHmE4RkSs50__U5mxmv9jUP6-2x1veQp90S3Zh42P-p57rPpkmO1V_Xn6HzayHC9ODMpiLw71ICXy7pnBKPx96ToTpISwqhz9n2WMWpUZwtSamQgVgq4oILrbmLC2a2b7VZz0mhN27s3JGa5iLup-JUJRZeXb_ymwQ8AhiFfklb79EPa29qi54HkT_WpArA7K3hBrtnByNVXDNiHx1hlvxKSWNzD-BTq69yRckYW3OI-kDHfeDgV8HlteT1BU8h87LB484ZYDG50LlTpuivm57pdiEGxjerXEO8ZqTH9g1bQLR-y2yjWmyg&s=JZfMmN14xbJMaMik-sg6HeAf5CVDTZZI9oXBip7gh9jdwb3lK6h8LWD6HDl5vnXM0AeyV4y_oPRdMZ_y3KXV5j80XZ9pppT5uZmFwY6pSeZrCSec-Y0KpdXIQN8sthBiCGI39THWwZSgJYG-9kVXreF8uicLOQ8Qs3_3Nyg5kt6_07WRrVHca9Lo8WdGgG6QXnCrz1bzfh4b0UEHunxtVA9sxehpgL4dB3d6miB0jt8u4nVRfXiHAObwC6EDZhHF93QHq6aKeM3HOaIRiRgvalvKuO7EEWQq5v9ZhgWZ9xuQ-O4PjpG0pEC92FOrw-N1V_FM3Ysc74m7611swNH9Zw&h=CcJeraBu9o9g-oA62hPpvqpRB_RNnORMWZPUrZhWmTE
+  response:
+    body:
+      string: "{\r\n  \"startTime\": \"2025-08-15T07:40:48.0194061+00:00\",\r\n  \"status\":
+        \"InProgress\",\r\n  \"name\": \"26baf2aa-b5fe-4387-951d-989a86407236\"\r\n}"
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '134'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:40:54 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-need-to-refresh-epl-cache:
+      - 'False'
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/northeurope/69c17a39-986c-436d-9d7c-113df7c3c8b0
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/GetOperationResource;43,Microsoft.Compute/GetOperationSubscriptionMaximum;14993
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-msedge-ref:
+      - 'Ref A: 8196B055ADA3493C9DB11E946D83C2EB Ref B: TYO201100116017 Ref C: 2025-08-15T07:40:54Z'
+    status:
+      code: 200
+      message: ''
+- request:
+    body: null
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss disk detach
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - -g --vmss-name --instance-id --lun
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Compute/locations/westus/operations/26baf2aa-b5fe-4387-951d-989a86407236?p=dd11a406-3651-4f42-bc22-2b29e0b71407&api-version=2024-11-01&t=638908404491921369&c=MIIHhzCCBm-gAwIBAgITfAh_GKqaYH8RwOhahQAACH8YqjANBgkqhkiG9w0BAQsFADBEMRMwEQYKCZImiZPyLGQBGRYDR0JMMRMwEQYKCZImiZPyLGQBGRYDQU1FMRgwFgYDVQQDEw9BTUUgSW5mcmEgQ0EgMDUwHhcNMjUwNzE3MDk1OTE3WhcNMjYwMTEzMDk1OTE3WjBAMT4wPAYDVQQDEzVhc3luY29wZXJhdGlvbnNpZ25pbmdjZXJ0aWZpY2F0ZS5tYW5hZ2VtZW50LmF6dXJlLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKuEt3wTriBe3SnGcgSXaxZXwy_Xvnx1kHhEe9cOTTajScq7IAVIz8UpcaaPf3UkWbuQCQ5VsrM6sjyPl1GO3EfreM0qta2mlQD1rV5xXCl0FW7D08thmIi5YvQI9disUj8UiltkhlG4H1dN7nL-JOsqMr23WAFO4WxBvzYCuFtlIscequZwOsF5BH4DEtri4FQLSMGZl_C0nRNntCtn_7vv6CnsqqUGIQ7fY7BIflesLUUbiRhZ8aQ-xzK4i5UPShfw4q5XcZ5maAk6jUAPK7Icf8liMlqJBLnG0DAIJsyI3QjAGaUDtyqoczOJU0bQN-wWv1NZAdwxsc-H1uBGohECAwEAAaOCBHQwggRwMCcGCSsGAQQBgjcVCgQaMBgwCgYIKwYBBQUHAwEwCgYIKwYBBQUHAwIwPQYJKwYBBAGCNxUHBDAwLgYmKwYBBAGCNxUIhpDjDYTVtHiE8Ys-hZvdFs6dEoFghfmRS4WsmTQCAWQCAQcwggHLBggrBgEFBQcBAQSCAb0wggG5MGMGCCsGAQUFBzAChldodHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtpaW5mcmEvQ2VydHMvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmwxLmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MFMGCCsGAQUFBzAChkdodHRwOi8vY3JsMi5hbWUuZ2JsL2FpYS9DTzFQS0lJTlRDQTAxLkFNRS5HQkxfQU1FJTIwSW5mcmElMjBDQSUyMDA1LmNydDBTBggrBgEFBQcwAoZHaHR0cDovL2NybDMuYW1lLmdibC9haWEvQ08xUEtJSU5UQ0EwMS5BTUUuR0JMX0FNRSUyMEluZnJhJTIwQ0ElMjAwNS5jcnQwUwYIKwYBBQUHMAKGR2h0dHA6Ly9jcmw0LmFtZS5nYmwvYWlhL0NPMVBLSUlOVENBMDEuQU1FLkdCTF9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3J0MB0GA1UdDgQWBBQg5Jh8k3-r9HjagWiaVSjmv1ZYcTAOBgNVHQ8BAf8EBAMCBaAwggEmBgNVHR8EggEdMIIBGTCCARWgggERoIIBDYY_aHR0cDovL2NybC5taWNyb3NvZnQuY29tL3BraWluZnJhL0NSTC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMS5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMi5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsMy5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JshjFodHRwOi8vY3JsNC5hbWUuZ2JsL2NybC9BTUUlMjBJbmZyYSUyMENBJTIwMDUuY3JsMIGdBgNVHSAEgZUwgZIwDAYKKwYBBAGCN3sBATBmBgorBgEEAYI3ewICMFgwVgYIKwYBBQUHAgIwSh5IADMAMwBlADAAMQA5ADIAMQAtADQAZAA2ADQALQA0AGYAOABjAC0AYQAwADUANQAtADUAYgBkAGEAZgBmAGQANQBlADMAMwBkMAwGCisGAQQBgjd7AwIwDAYKKwYBBAGCN3sEAjAfBgNVHSMEGDAWgBR61hmFKHlscXYeYPjzS--iBUIWHTAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwDQYJKoZIhvcNAQELBQADggEBAJbvINqtpqi3m39oJmFmOa_onaje780VTHmE4RkSs50__U5mxmv9jUP6-2x1veQp90S3Zh42P-p57rPpkmO1V_Xn6HzayHC9ODMpiLw71ICXy7pnBKPx96ToTpISwqhz9n2WMWpUZwtSamQgVgq4oILrbmLC2a2b7VZz0mhN27s3JGa5iLup-JUJRZeXb_ymwQ8AhiFfklb79EPa29qi54HkT_WpArA7K3hBrtnByNVXDNiHx1hlvxKSWNzD-BTq69yRckYW3OI-kDHfeDgV8HlteT1BU8h87LB484ZYDG50LlTpuivm57pdiEGxjerXEO8ZqTH9g1bQLR-y2yjWmyg&s=JZfMmN14xbJMaMik-sg6HeAf5CVDTZZI9oXBip7gh9jdwb3lK6h8LWD6HDl5vnXM0AeyV4y_oPRdMZ_y3KXV5j80XZ9pppT5uZmFwY6pSeZrCSec-Y0KpdXIQN8sthBiCGI39THWwZSgJYG-9kVXreF8uicLOQ8Qs3_3Nyg5kt6_07WRrVHca9Lo8WdGgG6QXnCrz1bzfh4b0UEHunxtVA9sxehpgL4dB3d6miB0jt8u4nVRfXiHAObwC6EDZhHF93QHq6aKeM3HOaIRiRgvalvKuO7EEWQq5v9ZhgWZ9xuQ-O4PjpG0pEC92FOrw-N1V_FM3Ysc74m7611swNH9Zw&h=CcJeraBu9o9g-oA62hPpvqpRB_RNnORMWZPUrZhWmTE
+  response:
+    body:
+      string: "{\r\n  \"startTime\": \"2025-08-15T07:40:48.0194061+00:00\",\r\n  \"endTime\":
+        \"2025-08-15T07:40:57.3163756+00:00\",\r\n  \"status\": \"Succeeded\",\r\n
+        \ \"name\": \"26baf2aa-b5fe-4387-951d-989a86407236\"\r\n}"
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '184'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:40:59 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-need-to-refresh-epl-cache:
+      - 'False'
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/northeurope/2f4d9ef2-d9f3-45d2-914c-424df23ec6b6
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/GetOperationResource;42,Microsoft.Compute/GetOperationSubscriptionMaximum;14992
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-msedge-ref:
+      - 'Ref A: FA420BD92E1E4AC6A1230672BEC8FB94 Ref B: TYO201100116027 Ref C: 2025-08-15T07:40:58Z'
+    status:
+      code: 200
+      message: ''
+- request:
+    body: null
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss disk detach
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - -g --vmss-name --instance-id --lun
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1?api-version=2024-11-01
+  response:
+    body:
+      string: "{\r\n  \"name\": \"vmss000002_1\",\r\n  \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1\",\r\n
+        \ \"type\": \"Microsoft.Compute/virtualMachineScaleSets/virtualMachines\",\r\n
+        \ \"location\": \"westus\",\r\n  \"tags\": {},\r\n  \"instanceId\": \"1\",\r\n
+        \ \"sku\": {\r\n    \"name\": \"Standard_B2ms\",\r\n    \"tier\": \"Standard\"\r\n
+        \ },\r\n  \"properties\": {\r\n    \"latestModelApplied\": true,\r\n    \"modelDefinitionApplied\":
+        \"VirtualMachineScaleSet\",\r\n    \"networkProfileConfiguration\": {\"networkInterfaceConfigurations\":[{\"name\":\"vmsssab20Nic\",\"properties\":{\"primary\":true,\"disableTcpStateTracking\":false,\"networkSecurityGroup\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/networkSecurityGroups/vmss000002NSG\"},\"dnsSettings\":{\"dnsServers\":[]},\"enableIPForwarding\":false,\"ipConfigurations\":[{\"name\":\"vmsssab20IPConfig\",\"properties\":{\"subnet\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks/vmss000002VNET/subnets/vmss000002Subnet\"},\"privateIPAddressVersion\":\"IPv4\",\"loadBalancerBackendAddressPools\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB/backendAddressPools/vmss000002LBBEPool\"}]}}]}}]},\r\n
+        \   \"provisioningState\": \"Succeeded\",\r\n    \"hardwareProfile\": {\r\n
+        \     \"vmSize\": \"Standard_B2ms\"\r\n    },\r\n    \"resilientVMDeletionStatus\":
+        \"Disabled\",\r\n    \"vmId\": \"f3453067-bb98-4543-8808-7e1863f8849e\",\r\n
+        \   \"storageProfile\": {\r\n      \"imageReference\": {\r\n        \"publisher\":
+        \"Debian\",\r\n        \"offer\": \"debian-10\",\r\n        \"sku\": \"10\",\r\n
+        \       \"version\": \"latest\",\r\n        \"exactVersion\": \"0.20240430.1733\"\r\n
+        \     },\r\n      \"osDisk\": {\r\n        \"osType\": \"Linux\",\r\n        \"name\":
+        \"vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0\",\r\n
+        \       \"createOption\": \"FromImage\",\r\n        \"caching\": \"ReadWrite\",\r\n
+        \       \"managedDisk\": {\r\n          \"storageAccountType\": \"Standard_LRS\",\r\n
+        \         \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0\"\r\n
+        \       },\r\n        \"diskSizeGB\": 30\r\n      },\r\n      \"dataDisks\":
+        []\r\n    },\r\n    \"osProfile\": {\r\n      \"computerName\": \"vmsssab20000001\",\r\n
+        \     \"adminUsername\": \"clitest1\",\r\n      \"linuxConfiguration\": {\r\n
+        \       \"disablePasswordAuthentication\": false,\r\n        \"provisionVMAgent\":
+        true\r\n      },\r\n      \"secrets\": [],\r\n      \"allowExtensionOperations\":
+        true,\r\n      \"requireGuestProvisionSignal\": true\r\n    },\r\n    \"networkProfile\":
+        {\"networkInterfaces\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1/networkInterfaces/vmsssab20Nic\"}]},\r\n
+        \   \"timeCreated\": \"2025-08-15T07:39:20.7372531+00:00\"\r\n  },\r\n  \"etag\":
+        \"\\\"5\\\"\"\r\n}"
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '3193'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:41:00 GMT
+      etag:
+      - '"5"'
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-need-to-refresh-epl-cache:
+      - 'False'
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/northeurope/777ab32b-5b0d-497d-9136-358edc37a958
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/GetVMScaleSetVMSubscriptionMaximum;5996,Microsoft.Compute/GetVMScaleSetVMResource;32,Microsoft.Compute/VMScaleSetVMViewsSubscriptionMaximum;29990
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-ms-request-charge:
+      - '1'
+      x-msedge-ref:
+      - 'Ref A: A49AA52C7ABD4B1295A99A090F760A60 Ref B: TYO201100116023 Ref C: 2025-08-15T07:40:59Z'
+    status:
+      code: 200
+      message: ''
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - vmss list-instances
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - -g -n --query
+      User-Agent:
+      - AZURECLI/2.76.0 azsdk-python-core/1.35.0 Python/3.10.11 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines?api-version=2024-11-01
+  response:
+    body:
+      string: "{\r\n  \"value\": [\r\n    {\r\n      \"name\": \"vmss000002_1\",\r\n
+        \     \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1\",\r\n
+        \     \"type\": \"Microsoft.Compute/virtualMachineScaleSets/virtualMachines\",\r\n
+        \     \"location\": \"westus\",\r\n      \"tags\": {},\r\n      \"instanceId\":
+        \"1\",\r\n      \"sku\": {\r\n        \"name\": \"Standard_B2ms\",\r\n        \"tier\":
+        \"Standard\"\r\n      },\r\n      \"properties\": {\r\n        \"latestModelApplied\":
+        true,\r\n        \"modelDefinitionApplied\": \"VirtualMachineScaleSet\",\r\n
+        \       \"networkProfileConfiguration\": {\"networkInterfaceConfigurations\":[{\"name\":\"vmsssab20Nic\",\"properties\":{\"primary\":true,\"disableTcpStateTracking\":false,\"networkSecurityGroup\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/networkSecurityGroups/vmss000002NSG\"},\"dnsSettings\":{\"dnsServers\":[]},\"enableIPForwarding\":false,\"ipConfigurations\":[{\"name\":\"vmsssab20IPConfig\",\"properties\":{\"subnet\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks/vmss000002VNET/subnets/vmss000002Subnet\"},\"privateIPAddressVersion\":\"IPv4\",\"loadBalancerBackendAddressPools\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB/backendAddressPools/vmss000002LBBEPool\"}]}}]}}]},\r\n
+        \       \"provisioningState\": \"Succeeded\",\r\n        \"hardwareProfile\":
+        {\r\n          \"vmSize\": \"Standard_B2ms\"\r\n        },\r\n        \"resilientVMDeletionStatus\":
+        \"Disabled\",\r\n        \"vmId\": \"f3453067-bb98-4543-8808-7e1863f8849e\",\r\n
+        \       \"storageProfile\": {\r\n          \"imageReference\": {\r\n            \"publisher\":
+        \"Debian\",\r\n            \"offer\": \"debian-10\",\r\n            \"sku\":
+        \"10\",\r\n            \"version\": \"latest\",\r\n            \"exactVersion\":
+        \"0.20240430.1733\"\r\n          },\r\n          \"osDisk\": {\r\n            \"osType\":
+        \"Linux\",\r\n            \"name\": \"vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0\",\r\n
+        \           \"createOption\": \"FromImage\",\r\n            \"caching\": \"ReadWrite\",\r\n
+        \           \"managedDisk\": {\r\n              \"storageAccountType\": \"Standard_LRS\",\r\n
+        \             \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/vmss000002_vmss000002_1_OsDisk_1_d52a89b84cc44520b167fe32dff857e0\"\r\n
+        \           },\r\n            \"diskSizeGB\": 30\r\n          },\r\n          \"dataDisks\":
+        []\r\n        },\r\n        \"osProfile\": {\r\n          \"computerName\":
+        \"vmsssab20000001\",\r\n          \"adminUsername\": \"clitest1\",\r\n          \"linuxConfiguration\":
+        {\r\n            \"disablePasswordAuthentication\": false,\r\n            \"provisionVMAgent\":
+        true\r\n          },\r\n          \"secrets\": [],\r\n          \"allowExtensionOperations\":
+        true,\r\n          \"requireGuestProvisionSignal\": true\r\n        },\r\n
+        \       \"networkProfile\": {\"networkInterfaces\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/1/networkInterfaces/vmsssab20Nic\"}]},\r\n
+        \       \"timeCreated\": \"2025-08-15T07:39:20.7372531+00:00\"\r\n      },\r\n
+        \     \"etag\": \"\\\"5\\\"\"\r\n    },\r\n    {\r\n      \"name\": \"vmss000002_2\",\r\n
+        \     \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/2\",\r\n
+        \     \"type\": \"Microsoft.Compute/virtualMachineScaleSets/virtualMachines\",\r\n
+        \     \"location\": \"westus\",\r\n      \"tags\": {},\r\n      \"instanceId\":
+        \"2\",\r\n      \"sku\": {\r\n        \"name\": \"Standard_B2ms\",\r\n        \"tier\":
+        \"Standard\"\r\n      },\r\n      \"properties\": {\r\n        \"latestModelApplied\":
+        true,\r\n        \"modelDefinitionApplied\": \"VirtualMachineScaleSet\",\r\n
+        \       \"networkProfileConfiguration\": {\"networkInterfaceConfigurations\":[{\"name\":\"vmsssab20Nic\",\"properties\":{\"primary\":true,\"disableTcpStateTracking\":false,\"networkSecurityGroup\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/networkSecurityGroups/vmss000002NSG\"},\"dnsSettings\":{\"dnsServers\":[]},\"enableIPForwarding\":false,\"ipConfigurations\":[{\"name\":\"vmsssab20IPConfig\",\"properties\":{\"subnet\":{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/virtualNetworks/vmss000002VNET/subnets/vmss000002Subnet\"},\"privateIPAddressVersion\":\"IPv4\",\"loadBalancerBackendAddressPools\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Network/loadBalancers/vmss000002LB/backendAddressPools/vmss000002LBBEPool\"}]}}]}}]},\r\n
+        \       \"provisioningState\": \"Succeeded\",\r\n        \"hardwareProfile\":
+        {\r\n          \"vmSize\": \"Standard_B2ms\"\r\n        },\r\n        \"resilientVMDeletionStatus\":
+        \"Disabled\",\r\n        \"vmId\": \"60556da6-54a2-4cdd-96d3-4f12743898fa\",\r\n
+        \       \"storageProfile\": {\r\n          \"imageReference\": {\r\n            \"publisher\":
+        \"Debian\",\r\n            \"offer\": \"debian-10\",\r\n            \"sku\":
+        \"10\",\r\n            \"version\": \"latest\",\r\n            \"exactVersion\":
+        \"0.20240430.1733\"\r\n          },\r\n          \"osDisk\": {\r\n            \"osType\":
+        \"Linux\",\r\n            \"name\": \"vmss000002_vmss000002_2_OsDisk_1_09cb65e4f2a849f4b74b6ee608b0b8b1\",\r\n
+        \           \"createOption\": \"FromImage\",\r\n            \"caching\": \"ReadWrite\",\r\n
+        \           \"managedDisk\": {\r\n              \"storageAccountType\": \"Standard_LRS\",\r\n
+        \             \"id\": \"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/disks/vmss000002_vmss000002_2_OsDisk_1_09cb65e4f2a849f4b74b6ee608b0b8b1\"\r\n
+        \           },\r\n            \"diskSizeGB\": 30\r\n          },\r\n          \"dataDisks\":
+        []\r\n        },\r\n        \"osProfile\": {\r\n          \"computerName\":
+        \"vmsssab20000002\",\r\n          \"adminUsername\": \"clitest1\",\r\n          \"linuxConfiguration\":
+        {\r\n            \"disablePasswordAuthentication\": false,\r\n            \"provisionVMAgent\":
+        true\r\n          },\r\n          \"secrets\": [],\r\n          \"allowExtensionOperations\":
+        true,\r\n          \"requireGuestProvisionSignal\": true\r\n        },\r\n
+        \       \"networkProfile\": {\"networkInterfaces\":[{\"id\":\"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/cli_test_vmss_create_options000001/providers/Microsoft.Compute/virtualMachineScaleSets/vmss000002/virtualMachines/2/networkInterfaces/vmsssab20Nic\"}]},\r\n
+        \       \"timeCreated\": \"2025-08-15T07:39:20.7372531+00:00\"\r\n      },\r\n
+        \     \"etag\": \"\\\"2\\\"\"\r\n    }\r\n  ]\r\n}"
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '6878'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Fri, 15 Aug 2025 07:41:02 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-need-to-refresh-epl-cache:
+      - 'False'
+      x-ms-operation-identifier:
+      - tenantId=213e87ed-8e08-4eb4-a63c-c073058f7b00,objectId=5c08bcb5-6bd6-45f5-b8be-e844d7d448d9/northeurope/5dea83d9-de2b-4245-8c26-1c769052fc22
+      x-ms-ratelimit-remaining-resource:
+      - Microsoft.Compute/HighCostGetVMScaleSetSubscriptionMaximum;1077,Microsoft.Compute/HighCostGetVMScaleSetResource;27,Microsoft.Compute/VMScaleSetVMViewsSubscriptionMaximum;29988
+      x-ms-ratelimit-remaining-subscription-global-reads:
+      - '3749'
+      x-ms-request-charge:
+      - '2'
+      x-msedge-ref:
+      - 'Ref A: A227BDC41EB840F9BF320F43738902C7 Ref B: TYO201100115011 Ref C: 2025-08-15T07:41:01Z'
+    status:
+      code: 200
+      message: ''
+version: 1

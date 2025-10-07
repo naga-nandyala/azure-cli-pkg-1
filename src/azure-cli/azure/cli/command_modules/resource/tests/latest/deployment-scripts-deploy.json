@@ -1,0 +1,53 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "scriptName": {
+           "type": "string",
+           "metadata": {
+                "description": "Deployment script name"
+            }
+        },
+        "utcValue": {
+            "type": "string",
+            "defaultValue": "[utcNow()]"
+        }
+    },
+    "resources": [
+        {
+            "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+            "apiVersion": "2023-01-31",
+            "name": "[parameters('scriptName')]",
+            "location": "[resourceGroup().location]"
+        },
+        {
+            "type": "Microsoft.Resources/deploymentScripts",
+            "apiVersion": "2020-10-01",
+            "name": "[parameters('scriptName')]",
+            "location": "[resourceGroup().location]",
+            "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                    "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('scriptName'))]": {}
+                }
+            },
+            "kind": "AzureCLI",
+            "properties": {
+                "forceUpdateTag": "[parameters('utcValue')]",
+                "containerSettings": {
+                    "containerGroupName": "mycustomaci"	
+                },
+                "AzCliVersion": "2.0.80",
+                "timeout": "PT30M",
+                "arguments": "'foo' 'bar'",
+                "scriptContent": "echo 'foo'",
+                "cleanupPreference": "OnExpiration",
+                "retentionInterval": "P1D"
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('scriptName'))]"
+            ]
+        }
+    ],
+    "outputs": {}
+}

@@ -1,0 +1,568 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - keyvault key create
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '0'
+      Content-Type:
+      - application/json
+      ParameterSetName:
+      - --kty --size -n --hsm-name --ops
+      User-Agent:
+      - AZURECLI/2.71.0 azsdk-python-core/1.31.0 Python/3.11.9 (Windows-10-10.0.26100-SP0)
+    method: POST
+    uri: https://clitesthsmkey000002.managedhsm.azure.net/keys/oct256key-000003/create?api-version=7.6-preview.2
+  response:
+    body:
+      string: ''
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '0'
+      content-security-policy:
+      - default-src 'self'
+      content-type:
+      - application/json; charset=utf-8
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      www-authenticate:
+      - Bearer authorization="https://login.microsoftonline.com/b5ee6c06-c2c2-4e3c-8606-5f170cee077a",
+        resource="https://managedhsm.azure.net"
+      x-content-type-options:
+      - nosniff
+      x-frame-options:
+      - SAMEORIGIN
+      x-ms-server-latency:
+      - '2'
+    status:
+      code: 401
+      message: Unauthorized
+- request:
+    body: '{"kty": "oct-HSM", "key_size": 256, "attributes": {"enabled": true}, "key_ops":
+      ["encrypt", "decrypt"]}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - keyvault key create
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '103'
+      Content-Type:
+      - application/json
+      ParameterSetName:
+      - --kty --size -n --hsm-name --ops
+      User-Agent:
+      - AZURECLI/2.71.0 azsdk-python-core/1.31.0 Python/3.11.9 (Windows-10-10.0.26100-SP0)
+    method: POST
+    uri: https://clitesthsmkey000002.managedhsm.azure.net/keys/oct256key-000003/create?api-version=7.6-preview.2
+  response:
+    body:
+      string: '{"attributes":{"created":1745229361,"enabled":true,"exportable":false,"recoverableDays":7,"recoveryLevel":"CustomizedRecoverable+Purgeable","updated":1745229361},"key":{"key_ops":["encrypt","decrypt"],"kid":"https://clitesthsmkey000002.managedhsm.azure.net/keys/oct256key-000003/09e20350fe320361273ca312d41f9e1a","kty":"oct-HSM"}}'
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '330'
+      content-security-policy:
+      - default-src 'self'
+      content-type:
+      - application/json; charset=utf-8
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-content-type-options:
+      - nosniff
+      x-frame-options:
+      - SAMEORIGIN
+      x-ms-keyvault-network-info:
+      - conn_type=Ipv4;addr=167.220.255.108;act_addr_fam=Ipv4;
+      x-ms-keyvault-region:
+      - uksouth
+      x-ms-server-latency:
+      - '52'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - keyvault key encrypt
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - -n --hsm-name -a --value --data-type --aad
+      User-Agent:
+      - AZURECLI/2.71.0 azsdk-python-core/1.31.0 Python/3.11.9 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://clitesthsmkey000002.managedhsm.azure.net/keys/oct256key-000003/?api-version=7.6-preview.2
+  response:
+    body:
+      string: '{"attributes":{"created":1745229361,"enabled":true,"exportable":false,"recoverableDays":7,"recoveryLevel":"CustomizedRecoverable+Purgeable","updated":1745229361},"key":{"key_ops":["decrypt","encrypt"],"kid":"https://clitesthsmkey000002.managedhsm.azure.net/keys/oct256key-000003/09e20350fe320361273ca312d41f9e1a","kty":"oct-HSM"}}'
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '330'
+      content-security-policy:
+      - default-src 'self'
+      content-type:
+      - application/json; charset=utf-8
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-content-type-options:
+      - nosniff
+      x-frame-options:
+      - SAMEORIGIN
+      x-ms-build-version:
+      - 1.0.20250326-1-0961b288-develop
+      x-ms-keyvault-network-info:
+      - conn_type=Ipv4;addr=167.220.255.108;act_addr_fam=Ipv4;
+      x-ms-keyvault-region:
+      - uksouth
+      x-ms-server-latency:
+      - '869'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"alg": "A256GCM", "value": "dGhpcyBpcyBwbGFpbnRleHQ", "aad": "EBESExQVFhcYGRobHB0eHw"}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - keyvault key encrypt
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '87'
+      Content-Type:
+      - application/json
+      ParameterSetName:
+      - -n --hsm-name -a --value --data-type --aad
+      User-Agent:
+      - AZURECLI/2.71.0 azsdk-python-core/1.31.0 Python/3.11.9 (Windows-10-10.0.26100-SP0)
+    method: POST
+    uri: https://clitesthsmkey000002.managedhsm.azure.net/keys/oct256key-000003/09e20350fe320361273ca312d41f9e1a/encrypt?api-version=7.6-preview.2
+  response:
+    body:
+      string: '{"aad":"EBESExQVFhcYGRobHB0eHw","alg":"A256GCM","iv":"RAOpl3dnj-CUibRo","kid":"https://clitesthsmkey000002.managedhsm.azure.net/keys/oct256key-000003/09e20350fe320361273ca312d41f9e1a","tag":"dXwbseoNh7z-vfRwBaxp6Q","value":"QPvWBhUB0FjVevjS7jSjICI"}'
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '249'
+      content-security-policy:
+      - default-src 'self'
+      content-type:
+      - application/json; charset=utf-8
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-content-type-options:
+      - nosniff
+      x-frame-options:
+      - SAMEORIGIN
+      x-ms-keyvault-network-info:
+      - conn_type=Ipv4;addr=167.220.255.108;act_addr_fam=Ipv4;
+      x-ms-keyvault-region:
+      - uksouth
+      x-ms-server-latency:
+      - '3'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - keyvault key encrypt
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - -n --hsm-name -a --value --data-type --aad
+      User-Agent:
+      - AZURECLI/2.71.0 azsdk-python-core/1.31.0 Python/3.11.9 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://clitesthsmkey000002.managedhsm.azure.net/keys/oct256key-000003/?api-version=7.6-preview.2
+  response:
+    body:
+      string: '{"attributes":{"created":1745229361,"enabled":true,"exportable":false,"recoverableDays":7,"recoveryLevel":"CustomizedRecoverable+Purgeable","updated":1745229361},"key":{"key_ops":["decrypt","encrypt"],"kid":"https://clitesthsmkey000002.managedhsm.azure.net/keys/oct256key-000003/09e20350fe320361273ca312d41f9e1a","kty":"oct-HSM"}}'
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '330'
+      content-security-policy:
+      - default-src 'self'
+      content-type:
+      - application/json; charset=utf-8
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-content-type-options:
+      - nosniff
+      x-frame-options:
+      - SAMEORIGIN
+      x-ms-build-version:
+      - 1.0.20250326-1-0961b288-develop
+      x-ms-keyvault-network-info:
+      - conn_type=Ipv4;addr=167.220.255.108;act_addr_fam=Ipv4;
+      x-ms-keyvault-region:
+      - uksouth
+      x-ms-server-latency:
+      - '5'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"alg": "A256GCM", "value": "dGhpcyBpcyBwbGFpbnRleHQ", "aad": "EBESExQVFhcYGRobHB0eHw"}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - keyvault key encrypt
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '87'
+      Content-Type:
+      - application/json
+      ParameterSetName:
+      - -n --hsm-name -a --value --data-type --aad
+      User-Agent:
+      - AZURECLI/2.71.0 azsdk-python-core/1.31.0 Python/3.11.9 (Windows-10-10.0.26100-SP0)
+    method: POST
+    uri: https://clitesthsmkey000002.managedhsm.azure.net/keys/oct256key-000003/09e20350fe320361273ca312d41f9e1a/encrypt?api-version=7.6-preview.2
+  response:
+    body:
+      string: '{"aad":"EBESExQVFhcYGRobHB0eHw","alg":"A256GCM","iv":"w2HFNc0TYwF6p-z1","kid":"https://clitesthsmkey000002.managedhsm.azure.net/keys/oct256key-000003/09e20350fe320361273ca312d41f9e1a","tag":"JnFwmbCUWqq_i1gv1IwkPA","value":"72nm89l8cbz2vGFeq9lyQzU"}'
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '249'
+      content-security-policy:
+      - default-src 'self'
+      content-type:
+      - application/json; charset=utf-8
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-content-type-options:
+      - nosniff
+      x-frame-options:
+      - SAMEORIGIN
+      x-ms-keyvault-network-info:
+      - conn_type=Ipv4;addr=167.220.255.108;act_addr_fam=Ipv4;
+      x-ms-keyvault-region:
+      - uksouth
+      x-ms-server-latency:
+      - '4'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - keyvault key decrypt
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - -n --hsm-name -a --value --data-type --iv --tag --aad
+      User-Agent:
+      - AZURECLI/2.71.0 azsdk-python-core/1.31.0 Python/3.11.9 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://clitesthsmkey000002.managedhsm.azure.net/keys/oct256key-000003/?api-version=7.6-preview.2
+  response:
+    body:
+      string: '{"attributes":{"created":1745229361,"enabled":true,"exportable":false,"recoverableDays":7,"recoveryLevel":"CustomizedRecoverable+Purgeable","updated":1745229361},"key":{"key_ops":["decrypt","encrypt"],"kid":"https://clitesthsmkey000002.managedhsm.azure.net/keys/oct256key-000003/09e20350fe320361273ca312d41f9e1a","kty":"oct-HSM"}}'
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '330'
+      content-security-policy:
+      - default-src 'self'
+      content-type:
+      - application/json; charset=utf-8
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-content-type-options:
+      - nosniff
+      x-frame-options:
+      - SAMEORIGIN
+      x-ms-build-version:
+      - 1.0.20250326-1-0961b288-develop
+      x-ms-keyvault-network-info:
+      - conn_type=Ipv4;addr=167.220.255.108;act_addr_fam=Ipv4;
+      x-ms-keyvault-region:
+      - uksouth
+      x-ms-server-latency:
+      - '1'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"alg": "A256GCM", "value": "QPvWBhUB0FjVevjS7jSjICI", "iv": "RAOpl3dnj-CUibRo",
+      "tag": "dXwbseoNh7z-vfRwBaxp6Q", "aad": "EBESExQVFhcYGRobHB0eHw"}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - keyvault key decrypt
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '146'
+      Content-Type:
+      - application/json
+      ParameterSetName:
+      - -n --hsm-name -a --value --data-type --iv --tag --aad
+      User-Agent:
+      - AZURECLI/2.71.0 azsdk-python-core/1.31.0 Python/3.11.9 (Windows-10-10.0.26100-SP0)
+    method: POST
+    uri: https://clitesthsmkey000002.managedhsm.azure.net/keys/oct256key-000003/09e20350fe320361273ca312d41f9e1a/decrypt?api-version=7.6-preview.2
+  response:
+    body:
+      string: '{"alg":"A256GCM","kid":"https://clitesthsmkey000002.managedhsm.azure.net/keys/oct256key-000003/09e20350fe320361273ca312d41f9e1a","value":"dGhpcyBpcyBwbGFpbnRleHQ"}'
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '163'
+      content-security-policy:
+      - default-src 'self'
+      content-type:
+      - application/json; charset=utf-8
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-content-type-options:
+      - nosniff
+      x-frame-options:
+      - SAMEORIGIN
+      x-ms-keyvault-network-info:
+      - conn_type=Ipv4;addr=167.220.255.108;act_addr_fam=Ipv4;
+      x-ms-keyvault-region:
+      - uksouth
+      x-ms-server-latency:
+      - '0'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - keyvault key decrypt
+      Connection:
+      - keep-alive
+      ParameterSetName:
+      - -n --hsm-name -a --value --data-type --iv --tag --aad
+      User-Agent:
+      - AZURECLI/2.71.0 azsdk-python-core/1.31.0 Python/3.11.9 (Windows-10-10.0.26100-SP0)
+    method: GET
+    uri: https://clitesthsmkey000002.managedhsm.azure.net/keys/oct256key-000003/?api-version=7.6-preview.2
+  response:
+    body:
+      string: '{"attributes":{"created":1745229361,"enabled":true,"exportable":false,"recoverableDays":7,"recoveryLevel":"CustomizedRecoverable+Purgeable","updated":1745229361},"key":{"key_ops":["decrypt","encrypt"],"kid":"https://clitesthsmkey000002.managedhsm.azure.net/keys/oct256key-000003/09e20350fe320361273ca312d41f9e1a","kty":"oct-HSM"}}'
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '330'
+      content-security-policy:
+      - default-src 'self'
+      content-type:
+      - application/json; charset=utf-8
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-content-type-options:
+      - nosniff
+      x-frame-options:
+      - SAMEORIGIN
+      x-ms-build-version:
+      - 1.0.20250326-1-0961b288-develop
+      x-ms-keyvault-network-info:
+      - conn_type=Ipv4;addr=167.220.255.108;act_addr_fam=Ipv4;
+      x-ms-keyvault-region:
+      - uksouth
+      x-ms-server-latency:
+      - '20'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"alg": "A256GCM", "value": "72nm89l8cbz2vGFeq9lyQzU", "iv": "w2HFNc0TYwF6p-z1",
+      "tag": "JnFwmbCUWqq_i1gv1IwkPA", "aad": "EBESExQVFhcYGRobHB0eHw"}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - keyvault key decrypt
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '146'
+      Content-Type:
+      - application/json
+      ParameterSetName:
+      - -n --hsm-name -a --value --data-type --iv --tag --aad
+      User-Agent:
+      - AZURECLI/2.71.0 azsdk-python-core/1.31.0 Python/3.11.9 (Windows-10-10.0.26100-SP0)
+    method: POST
+    uri: https://clitesthsmkey000002.managedhsm.azure.net/keys/oct256key-000003/09e20350fe320361273ca312d41f9e1a/decrypt?api-version=7.6-preview.2
+  response:
+    body:
+      string: '{"alg":"A256GCM","kid":"https://clitesthsmkey000002.managedhsm.azure.net/keys/oct256key-000003/09e20350fe320361273ca312d41f9e1a","value":"dGhpcyBpcyBwbGFpbnRleHQ"}'
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '163'
+      content-security-policy:
+      - default-src 'self'
+      content-type:
+      - application/json; charset=utf-8
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-content-type-options:
+      - nosniff
+      x-frame-options:
+      - SAMEORIGIN
+      x-ms-keyvault-network-info:
+      - conn_type=Ipv4;addr=167.220.255.108;act_addr_fam=Ipv4;
+      x-ms-keyvault-region:
+      - uksouth
+      x-ms-server-latency:
+      - '4'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - keyvault key delete
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '0'
+      ParameterSetName:
+      - -n --hsm-name
+      User-Agent:
+      - AZURECLI/2.71.0 azsdk-python-core/1.31.0 Python/3.11.9 (Windows-10-10.0.26100-SP0)
+    method: DELETE
+    uri: https://clitesthsmkey000002.managedhsm.azure.net/keys/oct256key-000003?api-version=7.6-preview.2
+  response:
+    body:
+      string: '{"attributes":{"created":1745229361,"enabled":true,"exportable":false,"recoverableDays":7,"recoveryLevel":"CustomizedRecoverable+Purgeable","updated":1745229361},"deletedDate":1745229370,"key":{"key_ops":["encrypt","decrypt"],"kid":"https://clitesthsmkey000002.managedhsm.azure.net/keys/oct256key-000003/09e20350fe320361273ca312d41f9e1a","kty":"oct-HSM"},"recoveryId":"https://clitesthsmkey000002.managedhsm.azure.net/deletedkeys/oct256key-000003","scheduledPurgeDate":1745834170}'
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '480'
+      content-security-policy:
+      - default-src 'self'
+      content-type:
+      - application/json; charset=utf-8
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-content-type-options:
+      - nosniff
+      x-frame-options:
+      - SAMEORIGIN
+      x-ms-keyvault-network-info:
+      - conn_type=Ipv4;addr=167.220.255.108;act_addr_fam=Ipv4;
+      x-ms-keyvault-region:
+      - uksouth
+      x-ms-server-latency:
+      - '26'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - keyvault key purge
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '0'
+      ParameterSetName:
+      - -n --hsm-name
+      User-Agent:
+      - AZURECLI/2.71.0 azsdk-python-core/1.31.0 Python/3.11.9 (Windows-10-10.0.26100-SP0)
+    method: DELETE
+    uri: https://clitesthsmkey000002.managedhsm.azure.net/deletedkeys/oct256key-000003?api-version=7.6-preview.2
+  response:
+    body:
+      string: ''
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '0'
+      content-security-policy:
+      - default-src 'self'
+      content-type:
+      - application/json; charset=utf-8
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-content-type-options:
+      - nosniff
+      x-frame-options:
+      - SAMEORIGIN
+      x-ms-keyvault-network-info:
+      - conn_type=Ipv4;addr=167.220.255.108;act_addr_fam=Ipv4;
+      x-ms-keyvault-region:
+      - uksouth
+      x-ms-server-latency:
+      - '55'
+    status:
+      code: 204
+      message: No Content
+version: 1

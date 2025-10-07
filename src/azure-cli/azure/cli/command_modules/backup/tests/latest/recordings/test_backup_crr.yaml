@@ -1,0 +1,57 @@
+interactions:
+- request:
+    body: '{"location": "centraluseuap"}'
+    headers:
+      Accept:
+      - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      CommandName:
+      - group create
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '29'
+      Content-Type:
+      - application/json
+      ParameterSetName:
+      - --location --name
+      User-Agent:
+      - AZURECLI/2.72.0 azsdk-python-core/1.31.0 Python/3.11.9 (Windows-10-10.0.26100-SP0)
+    method: PUT
+    uri: https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/clitest.rg000001?api-version=2024-11-01
+  response:
+    body:
+      string: '{"error":{"code":"AuthorizationFailed","message":"The client ''test@example.com''
+        with object id ''e4b0ef2e-1eff-4f7a-9410-567fbb1e226e'' does not have authorization
+        to perform action ''Microsoft.Resources/subscriptions/resourcegroups/write''
+        over scope ''/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/clitest.rg000001''
+        or the scope is invalid. If access was recently granted, please refresh your
+        credentials."}}'
+    headers:
+      cache-control:
+      - no-cache
+      content-length:
+      - '426'
+      content-type:
+      - application/json; charset=utf-8
+      date:
+      - Tue, 13 May 2025 05:12:14 GMT
+      expires:
+      - '-1'
+      pragma:
+      - no-cache
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      x-cache:
+      - CONFIG_NOCACHE
+      x-content-type-options:
+      - nosniff
+      x-ms-failure-cause:
+      - gateway
+      x-msedge-ref:
+      - 'Ref A: 991391C51541473EBC33689D8631DD43 Ref B: MAA201060515021 Ref C: 2025-05-13T05:12:14Z'
+    status:
+      code: 403
+      message: Forbidden
+version: 1

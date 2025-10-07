@@ -1,0 +1,38 @@
+{
+  "id": "azure-cli-test-json",
+  "vmSize": "STANDARD_D2S_V3",
+  "virtualMachineConfiguration": {
+    "imageReference": {
+      "publisher": "microsoftwindowsserver",
+      "offer": "windowsserver",
+      "sku": "2022-datacenter",
+      "version": "latest"
+    },
+    "nodeAgentSKUId": "batch.node.windows amd64",
+    "nodePlacementConfiguration": {
+      "policy": "regional"
+    },
+    "osDisk": {
+      "caching": "none",
+      "managedDisk": {
+        "storageAccountType": "premium_lrs"
+      }
+    }
+  },
+  "targetDedicatedNodes": 0,
+  "taskSlotsPerNode": 3,
+  "startTask": {
+    "commandLine": "cmd /c echo test",
+    "waitForSuccess": true,
+    "userIdentity": {
+      "username": "cliTestUser"
+    }
+  },
+  "userAccounts": [
+    {
+      "name": "cliTestUser",
+      "password": "SRYES@#%#_DSFH",
+      "elevationLevel": "admin"
+    }
+  ]
+}
