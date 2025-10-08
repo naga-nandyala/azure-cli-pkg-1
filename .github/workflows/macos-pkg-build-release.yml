@@ -310,87 +310,55 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: azure-cli-pkg-v${{ env.VERSION }}
-          name: Azure CLI v${{ env.VERSION }} - macOS PKG Installer (Homebrew Cask Ready)
+          name: Azure CLI v${{ env.VERSION }} - macOS PKG Installer
           body: |
             # Azure CLI v${{ env.VERSION }} - macOS PKG Installer
 
-            **Homebrew Cask ready** installer packages for Azure CLI.
-
-            ## 🍺 Installation via Homebrew Cask (Recommended)
+            ## 🍺 Homebrew Cask Installation
 
             ```bash
-            # Add the Microsoft tap (if not already added)
-            brew tap azure/azure-cli
-
-            # Install via Homebrew Cask
-            brew install --cask azure-cli
+            brew tap naga-nandyala/mycli-app
+            brew install --cask azure-cli-pkg
             ```
 
             ## 📦 Direct Installation
 
-            Download the appropriate PKG file for your Mac:
-            - **Apple Silicon (M1/M2/M3/M4)**: `azure-cli-${{ env.VERSION }}-macos-arm64.pkg`
-            - **Intel**: `azure-cli-${{ env.VERSION }}-macos-x86_64.pkg`
+            **Apple Silicon**: `azure-cli-${{ env.VERSION }}-macos-arm64.pkg`  
+            **Intel**: `azure-cli-${{ env.VERSION }}-macos-x86_64.pkg`
 
-            Install with:
             ```bash
             sudo installer -pkg azure-cli-${{ env.VERSION }}-macos-<arch>.pkg -target /
-            ```
-
-            ### Verify Installation
-            ```bash
             az --version
-            az login
             ```
 
-            ## 🔍 Package Details
+            ## Package Info
 
-            - **Installation Location**: `/usr/local/microsoft/azure-cli/`
+            - **Location**: `/usr/local/microsoft/azure-cli/`
             - **Executable**: `/usr/local/bin/az`
-            - **Python Version**: ${{ env.PYTHON_VERSION }}
-            - **Build Method**: productbuild (native macOS installer)
-            - **Installer Type**: Distribution package with Homebrew Cask support
-            - **Package Identifier**: `com.microsoft.azure-cli`
+            - **Python**: ${{ env.PYTHON_VERSION }}
+            - **Package ID**: `com.microsoft.azure-cli`
 
-            ## ✅ Verification
+            ## Verification
 
-            Verify package integrity using SHA256 checksums:
             ```bash
             shasum -a 256 -c azure-cli-${{ env.VERSION }}-macos-<arch>.pkg.sha256
             ```
 
-            ## 🧹 Uninstallation
+            ## Uninstall
 
-            ### Via Homebrew Cask
             ```bash
-            brew uninstall --cask azure-cli
-            ```
+            # Via Homebrew Cask
+            brew uninstall --cask azure-cli-pkg
 
-            ### Manual Uninstallation
-            ```bash
+            # Manual
             sudo rm -rf /usr/local/microsoft/azure-cli
             sudo rm /usr/local/bin/az
             ```
 
-            ## 📚 What's Included
+            ## Links
 
-            This PKG installer includes:
-            - ✅ Complete Azure CLI installation (all modules)
-            - ✅ All Python dependencies bundled
-            - ✅ No Homebrew Formula dependencies required
-            - ✅ Clean installation to `/usr/local/`
-            - ✅ No symlink complexity
-            - ✅ Architecture-specific builds (ARM64 + x86_64)
-
-            ## 🔗 Documentation
-
-            - [Azure CLI Documentation](https://learn.microsoft.com/cli/azure/)
-            - [Installation Guide](https://learn.microsoft.com/cli/azure/install-azure-cli-macos)
-            - [GitHub Repository](https://github.com/Azure/azure-cli)
-
-            ---
-
-            **Note**: This is a Homebrew Cask compatible PKG installer. It can be installed either via Homebrew Cask or directly via the macOS installer command.
+            - [Repository](https://github.com/naga-nandyala/azure-cli-pkg-1)
+            - [Azure CLI Docs](https://learn.microsoft.com/cli/azure/)
           files: |
             release/azure-cli-${{ env.VERSION }}-macos-arm64.pkg
             release/azure-cli-${{ env.VERSION }}-macos-arm64.pkg.sha256
@@ -440,6 +408,6 @@ jobs:
           echo "- **Installer ID**: \`com.microsoft.azure-cli\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Next Steps" >> $GITHUB_STEP_SUMMARY
-          echo "1. Create/update Homebrew Cask in \`azure/homebrew-azure-cli\` tap" >> $GITHUB_STEP_SUMMARY
-          echo "2. Test installation via: \`brew install --cask azure-cli\`" >> $GITHUB_STEP_SUMMARY
-          echo "3. Verify uninstallation via: \`brew uninstall --cask azure-cli\`" >> $GITHUB_STEP_SUMMARY
+          echo "1. Create/update Homebrew Cask in \`naga-nandyala/homebrew-mycli-app\` tap" >> $GITHUB_STEP_SUMMARY
+          echo "2. Test installation via: \`brew install --cask azure-cli-pkg\`" >> $GITHUB_STEP_SUMMARY
+          echo "3. Verify uninstallation via: \`brew uninstall --cask azure-cli-pkg\`" >> $GITHUB_STEP_SUMMARY
