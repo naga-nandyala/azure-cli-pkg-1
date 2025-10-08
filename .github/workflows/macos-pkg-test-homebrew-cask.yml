@@ -16,7 +16,7 @@ on:
         description: "Cask name to test"
         required: false
         type: string
-        default: "azure-cli"
+        default: "azure-cli-pkg"
 
 jobs:
   test-pkg-cask:
@@ -49,8 +49,8 @@ jobs:
           echo "=== Cleaning Previous Installations ==="
 
           # Remove any existing Homebrew installations
-          brew uninstall --cask ${{ inputs.cask_name || 'azure-cli' }} 2>/dev/null || true
-          brew untap ${{ inputs.tap_repo || 'azure/azure-cli' }} 2>/dev/null || true
+          brew uninstall --cask ${{ inputs.cask_name || 'azure-cli-pkg' }} 2>/dev/null || true
+          brew untap ${{ inputs.tap_repo || 'naga-nandyala/mycli-app' }} 2>/dev/null || true
 
           # Remove any manual installations
           sudo rm -f /usr/local/bin/az 2>/dev/null || true
@@ -68,8 +68,8 @@ jobs:
         run: |
           echo "=== Installing via Homebrew Cask ==="
 
-          TAP_REPO="${{ inputs.tap_repo || 'azure/azure-cli' }}"
-          CASK_NAME="${{ inputs.cask_name || 'azure-cli' }}"
+          TAP_REPO="${{ inputs.tap_repo || 'naga-nandyala/mycli-app' }}"
+          CASK_NAME="${{ inputs.cask_name || 'azure-cli-pkg' }}"
 
           # Add the tap
           echo "Adding tap: $TAP_REPO"
