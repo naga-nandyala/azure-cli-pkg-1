@@ -1,0 +1,182 @@
+name: (macospkg) Test Sudo Install
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to test (defaults to latest from code)"
+        required: false
+        type: string
+
+jobs:
+  test-sudo-install:
+    strategy:
+      matrix:
+        include:
+          - runner: macos-14
+            arch: arm64
+            platform_tag: macos-arm64
+          - runner: macos-13
+            arch: x86_64
+            platform_tag: macos-x86_64
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Environment info
+        run: |
+          echo "=== Environment Information ==="
+          echo "Runner: ${{ matrix.runner }}"
+          echo "Expected arch: ${{ matrix.arch }}"
+          echo "Actual arch: $(uname -m)"
+          echo "macOS version: $(sw_vers -productVersion)"
+          echo "Python version: $(python --version)"
+          echo "Available space: $(df -h / | tail -1 | awk '{print $4}')"
+
+      - name: Clean previous installations
+        run: |
+          echo "=== Cleaning Previous Installations ==="
+
+          # Remove any existing installations
+          sudo rm -f /usr/local/bin/az 2>/dev/null || true
+          sudo rm -rf /usr/local/microsoft/azure-cli 2>/dev/null || true
+
+          # Verify cleanup
+          if command -v az >/dev/null 2>&1; then
+            echo "Warning: az still found in PATH after cleanup"
+            which az
+          else
+            echo "✅ No existing Azure CLI installations found"
+          fi
+
+      - name: Build PKG installer
+        run: |
+          echo "=== Building PKG Installer ==="
+
+          # Install build dependencies
+          python -m pip install --upgrade pip setuptools wheel
+
+          # Build the PKG
+          python scripts/release/macos/build_pkg_installer.py \
+            --platform-tag ${{ matrix.platform_tag }}
+
+      - name: Verify PKG creation
+        run: |
+          echo "=== Verifying PKG Creation ==="
+
+          PKG_FILES=$(find dist/macos_pkg -name "*.pkg")
+
+          if [ -z "$PKG_FILES" ]; then
+            echo "❌ No PKG files found"
+            exit 1
+          fi
+
+          for pkg in $PKG_FILES; do
+            echo "Found PKG: $pkg"
+            ls -lh "$pkg"
+            
+            echo "Package contents (first 20 files):"
+            pkgutil --payload-files "$pkg" | head -20
+          done
+
+      - name: Install PKG using sudo installer
+        run: |
+          echo "=== Installing PKG with sudo installer ==="
+
+          PKG_FILE=$(find dist/macos_pkg -name "*.pkg" | head -1)
+
+          if [ -z "$PKG_FILE" ]; then
+            echo "❌ PKG file not found"
+            exit 1
+          fi
+
+          echo "Installing: $PKG_FILE"
+          sudo installer -pkg "$PKG_FILE" -target / -verbose
+
+      - name: Verify installation structure
+        run: |
+          echo "=== Installation Structure Verification ==="
+
+          # Check executable
+          echo "1. Executable location:"
+          if [ -f /usr/local/bin/az ]; then
+            ls -la /usr/local/bin/az
+            echo "✅ Executable found at /usr/local/bin/az"
+          else
+            echo "❌ Executable NOT found at /usr/local/bin/az"
+            exit 1
+          fi
+
+          # Check runtime environment
+          echo ""
+          echo "2. Runtime environment:"
+          if [ -d /usr/local/microsoft/azure-cli ]; then
+            echo "✅ Runtime found at /usr/local/microsoft/azure-cli"
+            echo "   Size: $(du -sh /usr/local/microsoft/azure-cli | cut -f1)"
+            echo "   Python executable:"
+            ls -la /usr/local/microsoft/azure-cli/bin/python* 2>/dev/null | head -3
+          else
+            echo "❌ Runtime NOT found at /usr/local/microsoft/azure-cli"
+            exit 1
+          fi
+
+          # Check Python packages
+          echo ""
+          echo "3. Python packages check:"
+          if [ -d /usr/local/microsoft/azure-cli/lib ]; then
+            echo "   Checking for Azure packages..."
+            find /usr/local/microsoft/azure-cli/lib -name "azure" -type d | head -3
+            
+            echo "   Checking for knack package..."
+            find /usr/local/microsoft/azure-cli/lib -name "knack" -type d | head -1
+          else
+            echo "❌ lib directory not found"
+            exit 1
+          fi
+
+      - name: Test Azure CLI functionality
+        run: |
+          echo "=== Testing Azure CLI Functionality ==="
+
+          # Test basic commands
+          echo "1. Version check:"
+          /usr/local/bin/az --version
+
+          echo ""
+          echo "2. Help command:"
+          /usr/local/bin/az --help | head -20
+
+          echo ""
+          echo "3. List commands:"
+          /usr/local/bin/az | head -30
+
+          echo ""
+          echo "4. Check environment variable:"
+          /usr/local/bin/az version --output json | grep -i installer || echo "Installer info not in output"
+
+      - name: Test via PATH
+        run: |
+          echo "=== Testing via PATH ==="
+
+          # Verify az is in PATH
+          which az
+
+          # Test via PATH
+          echo "Running 'az --version' from PATH:"
+          az --version
+
+      - name: Cleanup installation
+        if: always()
+        run: |
+          echo "=== Cleaning up installation ==="
+          sudo rm -f /usr/local/bin/az
+          sudo rm -rf /usr/local/microsoft/azure-cli
+          echo "✅ Cleanup complete"

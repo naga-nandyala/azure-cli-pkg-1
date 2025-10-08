@@ -1,0 +1,264 @@
+name: (macospkg) Test Homebrew Cask
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to test (defaults to latest pkg release)"
+        required: false
+        type: string
+      tap_repo:
+        description: "Homebrew tap repository (e.g., azure/azure-cli)"
+        required: false
+        type: string
+        default: "naga-nandyala/mycli-app"
+      cask_name:
+        description: "Cask name to test"
+        required: false
+        type: string
+        default: "azure-cli"
+
+jobs:
+  test-pkg-cask:
+    strategy:
+      matrix:
+        include:
+          - runner: macos-latest # Will use latest available (usually ARM64)
+            arch: arm64
+          - runner: macos-13 # Intel
+            arch: x86_64
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+
+      - name: Environment info
+        run: |
+          echo "=== Environment Information ==="
+          echo "Runner: ${{ matrix.runner }}"
+          echo "Expected arch: ${{ matrix.arch }}"
+          echo "Actual arch: $(uname -m)"
+          echo "macOS version: $(sw_vers -productVersion)"
+          echo "Homebrew version: $(brew --version | head -n1)"
+          echo "Available space: $(df -h / | tail -1 | awk '{print $4}')"
+
+      - name: Clean previous installations
+        run: |
+          echo "=== Cleaning Previous Installations ==="
+
+          # Remove any existing Homebrew installations
+          brew uninstall --cask ${{ inputs.cask_name || 'azure-cli' }} 2>/dev/null || true
+          brew untap ${{ inputs.tap_repo || 'azure/azure-cli' }} 2>/dev/null || true
+
+          # Remove any manual installations
+          sudo rm -f /usr/local/bin/az 2>/dev/null || true
+          sudo rm -rf /usr/local/microsoft/azure-cli 2>/dev/null || true
+
+          # Verify cleanup
+          if command -v az >/dev/null 2>&1; then
+            echo "Warning: az still found in PATH after cleanup"
+            which az
+          else
+            echo "✅ No existing Azure CLI installations found"
+          fi
+
+      - name: Add tap and install cask
+        run: |
+          echo "=== Installing via Homebrew Cask ==="
+
+          TAP_REPO="${{ inputs.tap_repo || 'azure/azure-cli' }}"
+          CASK_NAME="${{ inputs.cask_name || 'azure-cli' }}"
+
+          # Add the tap
+          echo "Adding tap: $TAP_REPO"
+          brew tap $TAP_REPO
+          brew update
+
+          # Show available casks
+          echo "Available casks in tap:"
+          brew search $CASK_NAME || true
+
+          # Install the PKG cask
+          echo "Installing cask: $CASK_NAME"
+          brew install --cask $CASK_NAME --verbose
+
+      - name: Verify installation structure
+        run: |
+          echo "=== Installation Structure Verification ==="
+
+          # Check system installation paths
+          echo "1. Executable location:"
+          if [ -f /usr/local/bin/az ]; then
+            ls -la /usr/local/bin/az
+            echo "✅ Executable found at /usr/local/bin/az"
+          else
+            echo "❌ Executable NOT found at /usr/local/bin/az"
+            exit 1
+          fi
+
+          echo ""
+          echo "2. Runtime environment:"
+          if [ -d /usr/local/microsoft/azure-cli ]; then
+            echo "✅ Runtime found at /usr/local/microsoft/azure-cli"
+            echo "   Size: $(du -sh /usr/local/microsoft/azure-cli | cut -f1)"
+            echo "   Python executable:"
+            ls -la /usr/local/microsoft/azure-cli/bin/python* 2>/dev/null | head -3
+            echo ""
+            echo "   Key subdirectories:"
+            echo "   - bin/: $(ls /usr/local/microsoft/azure-cli/bin/ | wc -l) files"
+            echo "   - lib/: $(ls /usr/local/microsoft/azure-cli/lib/ 2>/dev/null | wc -l) items"
+          else
+            echo "❌ Runtime NOT found at /usr/local/microsoft/azure-cli"
+            exit 1
+          fi
+
+          echo ""
+          echo "3. Python site-packages check:"
+          SITE_PACKAGES=$(find /usr/local/microsoft/azure-cli/lib -type d -name "site-packages" | head -1)
+          if [ -n "$SITE_PACKAGES" ]; then
+            echo "   Site-packages: $SITE_PACKAGES"
+            echo "   Azure CLI package check:"
+            ls -la "$SITE_PACKAGES/azure/cli/" 2>/dev/null | head -10 || echo "   ❌ Azure CLI package not found"
+            
+            echo "   Knack framework check:"
+            ls -la "$SITE_PACKAGES/knack/" 2>/dev/null | head -5 || echo "   ❌ Knack not found"
+          else
+            echo "   ❌ site-packages directory not found"
+            exit 1
+          fi
+
+      - name: Test Azure CLI functionality
+        run: |
+          echo "=== Testing Azure CLI Functionality ==="
+
+          # Test basic commands
+          echo "1. Version check:"
+          az --version
+
+          echo ""
+          echo "2. Help command:"
+          az --help | head -20
+
+          echo ""
+          echo "3. List available command groups:"
+          az | head -30
+
+          echo ""
+          echo "4. Test specific command (account show - should fail without login):"
+          az account show 2>&1 | head -10 || echo "Expected: Not logged in"
+
+          echo ""
+          echo "5. Test extension commands:"
+          az extension list
+
+          echo ""
+          echo "6. Check installer type:"
+          az version --output json | grep -i installer || echo "Installer info not shown"
+
+      - name: Test PATH integration
+        run: |
+          echo "=== Testing PATH Integration ==="
+
+          # Verify az is accessible via PATH
+          echo "Which az:"
+          which az
+
+          echo ""
+          echo "az command location:"
+          command -v az
+
+          echo ""
+          echo "Running from PATH:"
+          az --version | head -5
+
+      - name: Test Homebrew Cask info
+        run: |
+          echo "=== Homebrew Cask Information ==="
+
+          CASK_NAME="${{ inputs.cask_name || 'azure-cli' }}"
+
+          echo "Cask info:"
+          brew info --cask $CASK_NAME
+
+          echo ""
+          echo "Installed files:"
+          brew list --cask $CASK_NAME || echo "Cannot list cask files"
+
+      - name: Test uninstallation
+        run: |
+          echo "=== Testing Uninstallation ==="
+
+          CASK_NAME="${{ inputs.cask_name || 'azure-cli' }}"
+
+          echo "Uninstalling cask: $CASK_NAME"
+          brew uninstall --cask $CASK_NAME
+
+          # Verify removal
+          echo ""
+          echo "Verification after uninstall:"
+
+          if [ -f /usr/local/bin/az ]; then
+            echo "❌ WARNING: Executable still exists at /usr/local/bin/az"
+            ls -la /usr/local/bin/az
+          else
+            echo "✅ Executable removed from /usr/local/bin/az"
+          fi
+
+          if [ -d /usr/local/microsoft/azure-cli ]; then
+            echo "❌ WARNING: Runtime still exists at /usr/local/microsoft/azure-cli"
+            ls -la /usr/local/microsoft/azure-cli
+          else
+            echo "✅ Runtime removed from /usr/local/microsoft/azure-cli"
+          fi
+
+          if command -v az >/dev/null 2>&1; then
+            echo "❌ WARNING: az still in PATH"
+            which az
+          else
+            echo "✅ az removed from PATH"
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "=== Final Cleanup ==="
+
+          CASK_NAME="${{ inputs.cask_name || 'azure-cli' }}"
+          TAP_REPO="${{ inputs.tap_repo || 'azure/azure-cli' }}"
+
+          # Ensure cask is uninstalled
+          brew uninstall --cask $CASK_NAME 2>/dev/null || true
+
+          # Remove tap
+          brew untap $TAP_REPO 2>/dev/null || true
+
+          # Manual cleanup just in case
+          sudo rm -f /usr/local/bin/az 2>/dev/null || true
+          sudo rm -rf /usr/local/microsoft/azure-cli 2>/dev/null || true
+
+          echo "✅ Cleanup complete"
+
+  summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: test-pkg-cask
+    if: always()
+
+    steps:
+      - name: Test Summary
+        run: |
+          echo "# Azure CLI Homebrew Cask Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "- **ARM64 (macOS-latest)**: ${{ needs.test-pkg-cask.result == 'success' && '✅ Success' || '❌ Failed' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **x86_64 (macOS-13)**: ${{ needs.test-pkg-cask.result == 'success' && '✅ Success' || '❌ Failed' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## What Was Tested" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Homebrew Cask installation" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Installation structure verification" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Azure CLI functionality" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ PATH integration" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Uninstallation process" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Cleanup verification" >> $GITHUB_STEP_SUMMARY

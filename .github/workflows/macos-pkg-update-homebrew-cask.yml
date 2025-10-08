@@ -1,0 +1,312 @@
+name: (macospkg) Update Homebrew Cask
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to sync to the tap (e.g., 2.76.0). Leave empty to use latest PKG release."
+        required: false
+        type: string
+      force_update:
+        description: "Force update even if content appears unchanged"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+permissions:
+  contents: write
+
+jobs:
+  update-cask:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine target version
+        id: get_version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            # Extract version from release tag
+            RELEASE_TAG="${{ github.event.release.tag_name }}"
+            # Remove 'azure-cli-pkg-v' prefix if present
+            VERSION=${RELEASE_TAG#azure-cli-pkg-v}
+            VERSION=${VERSION#v}
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # Find latest PKG release
+            VERSION=$(gh release list --limit 20 --json tagName,publishedAt --jq 'sort_by(.publishedAt) | reverse | .[].tagName | select(contains("azure-cli-pkg")) | .[0]')
+            VERSION=${VERSION#azure-cli-pkg-v}
+            VERSION=${VERSION#v}
+          fi
+
+          if [ -z "$VERSION" ]; then
+            echo "❌ Unable to resolve version" >&2
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "✅ Synchronizing Homebrew tap for Azure CLI PKG version $VERSION"
+
+      - name: Download release packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          rm -f *.pkg
+
+          # Try different tag formats
+          RELEASE_TAG="azure-cli-pkg-v${VERSION}"
+
+          echo "📦 Downloading from release: ${RELEASE_TAG}"
+          gh release download "${RELEASE_TAG}" --pattern "*.pkg" || {
+            echo "Failed with tag ${RELEASE_TAG}, trying v${VERSION}"
+            gh release download "v${VERSION}" --pattern "*.pkg"
+          }
+
+          echo "Downloaded packages:"
+          ls -lh *.pkg
+
+      - name: Calculate SHA256 checksums
+        id: shas
+        run: |
+          set -euo pipefail
+
+          ARM64_PKG=$(find . -maxdepth 1 -name '*.pkg' | grep -E '(arm64|aarch64)\.pkg$' | head -1)
+          X86_PKG=$(find . -maxdepth 1 -name '*.pkg' | grep -E 'x86_64\.pkg$' | head -1)
+
+          if [ -z "$ARM64_PKG" ] || [ -z "$X86_PKG" ]; then
+            echo "❌ Expected both arm64 and x86_64 packages" >&2
+            echo "Available packages:"
+            ls -al *.pkg
+            exit 1
+          fi
+
+          ARM64_SHA=$(shasum -a 256 "$ARM64_PKG" | cut -d' ' -f1)
+          X86_SHA=$(shasum -a 256 "$X86_PKG" | cut -d' ' -f1)
+
+          echo "arm64_filename=$(basename "$ARM64_PKG")" >> "$GITHUB_OUTPUT"
+          echo "x86_filename=$(basename "$X86_PKG")" >> "$GITHUB_OUTPUT"
+          echo "arm64_sha=$ARM64_SHA" >> "$GITHUB_OUTPUT"
+          echo "x86_sha=$X86_SHA" >> "$GITHUB_OUTPUT"
+
+          echo "✅ Checksums calculated:"
+          echo "  ARM64:  $ARM64_PKG"
+          echo "          $ARM64_SHA"
+          echo "  x86_64: $X86_PKG"
+          echo "          $X86_SHA"
+
+      - name: Check out Homebrew tap repository
+        uses: actions/checkout@v4
+        with:
+          repository: naga-nandyala/homebrew-mycli-app
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          persist-credentials: false
+          path: homebrew-tap
+
+      - name: Configure tap push credentials
+        run: |
+          TAP_PAT="${{ secrets.HOMEBREW_TAP_TOKEN }}"
+          if [ -z "$TAP_PAT" ]; then
+            echo "❌ HOMEBREW_TAP_TOKEN is required to push to naga-nandyala/homebrew-mycli-app" >&2
+            echo "Create a fine-grained personal access token with repo:write permissions" >&2
+            echo "and add it as HOMEBREW_TAP_TOKEN secret." >&2
+            exit 1
+          fi
+          cd homebrew-tap
+          git remote set-url origin "https://x-access-token:${TAP_PAT}@github.com/naga-nandyala/homebrew-mycli-app.git"
+
+      - name: Update cask file
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.get_version.outputs.version }}"
+          ARM64_SHA="${{ steps.shas.outputs.arm64_sha }}"
+          X86_SHA="${{ steps.shas.outputs.x86_sha }}"
+
+          cd homebrew-tap
+          mkdir -p Casks
+
+          echo "📝 Generating Cask formula for Azure CLI ${VERSION}..."
+
+          cat > Casks/azure-cli.rb <<'CASK_EOF'
+          # NOTE: Auto-generated by Azure/azure-cli workflow. Do not edit manually.
+          cask "azure-cli" do
+            arch arm: "arm64", intel: "x86_64"
+
+            version "__VERSION__"
+            sha256 arm:   "__ARM64_SHA__",
+                   intel: "__X86_SHA__"
+
+            url "https://github.com/Azure/azure-cli/releases/download/azure-cli-pkg-v#{version}/azure-cli-#{version}-macos-#{arch}.pkg"
+            name "Azure CLI"
+            desc "Microsoft Azure command-line interface"
+            homepage "https://learn.microsoft.com/cli/azure/"
+
+            livecheck do
+              url :url
+              regex(/^azure-cli-pkg-v?(\d+(?:\.\d+)+)$/i)
+            end
+
+            depends_on macos: ">= :catalina"
+
+            # Conflict with Homebrew formula version
+            conflicts_with formula: "azure-cli"
+
+            pkg "azure-cli-#{version}-macos-#{arch}.pkg"
+
+            uninstall pkgutil: "com.microsoft.azure-cli",
+                      delete:  [
+                        "/usr/local/bin/az",
+                        "/usr/local/microsoft/azure-cli",
+                      ]
+
+            zap trash: [
+              "~/.azure",
+            ]
+
+            caveats <<~EOS
+              Azure CLI has been installed successfully!
+              
+              Installation Details:
+                • Executable: /usr/local/bin/az
+                • Runtime: /usr/local/microsoft/azure-cli/
+              
+              This is a PKG-based installation with all dependencies bundled.
+              No additional Homebrew formula dependencies required!
+              
+              To verify installation:
+                az --version
+              
+              To get started:
+                az login
+                az account list
+              
+              Documentation:
+                https://learn.microsoft.com/cli/azure/
+            EOS
+          end
+          CASK_EOF
+
+          # Perform substitutions
+          sed -i.bak "s/__VERSION__/$VERSION/g" Casks/azure-cli.rb
+          sed -i.bak "s/__ARM64_SHA__/$ARM64_SHA/g" Casks/azure-cli.rb
+          sed -i.bak "s/__X86_SHA__/$X86_SHA/g" Casks/azure-cli.rb
+          rm -f Casks/azure-cli.rb.bak
+
+          # Force update if requested
+          if [ "${{ github.event.inputs.force_update }}" = "true" ]; then
+            echo "# Force updated: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> Casks/azure-cli.rb
+          fi
+
+          # Verify no placeholders remain
+          if grep -q '__' Casks/azure-cli.rb; then
+            echo "❌ ERROR: Placeholder substitution failed" >&2
+            echo "Cask file content (first 50 lines):"
+            sed -n '1,50p' Casks/azure-cli.rb
+            exit 1
+          fi
+
+          # Validate Ruby syntax
+          if command -v ruby >/dev/null 2>&1; then
+            echo "🔍 Validating Ruby syntax..."
+            ruby -c Casks/azure-cli.rb
+          else
+            echo "⚠️  Ruby not available for syntax check, skipping validation"
+          fi
+
+          echo "✅ Generated cask file (first 60 lines):"
+          head -60 Casks/azure-cli.rb
+
+      - name: Show pending changes
+        run: |
+          cd homebrew-tap
+          git add -N Casks/azure-cli.rb || true
+          echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+          echo '📋 CASK CHANGES'
+          echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+          git diff --color=always Casks/azure-cli.rb || true
+          echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+
+      - name: Commit and push
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: |
+          cd homebrew-tap
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
+          git add Casks/azure-cli.rb
+
+          if git diff --cached --quiet; then
+            if [ "${{ github.event.inputs.force_update }}" = "true" ]; then
+              echo "⚠️  No changes detected but force_update requested"
+              echo "# Forced update: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> Casks/azure-cli.rb
+              git add Casks/azure-cli.rb
+            else
+              echo "✅ Cask already up to date for version $VERSION"
+              exit 0
+            fi
+          fi
+
+          git commit -m "Update azure-cli cask to $VERSION (auto-generated)"
+          git push origin main
+
+          echo "✅ Homebrew Cask updated successfully!"
+
+      - name: Summary
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          cat << EOF >> $GITHUB_STEP_SUMMARY
+          # 🎉 Homebrew Cask Update Complete!
+
+          ## Updated Cask
+          - **Cask name**: \`azure-cli\`
+          - **Version**: \`$VERSION\`
+          - **Repository**: [Azure/homebrew-azure-cli](https://github.com/Azure/homebrew-azure-cli)
+
+          ## Installation Instructions
+
+          Users can now install Azure CLI via Homebrew Cask:
+
+          \`\`\`bash
+          # Add the tap
+          brew tap azure/azure-cli
+
+          # Install Azure CLI PKG
+          brew install --cask azure-cli
+
+          # Verify installation
+          az --version
+          \`\`\`
+
+          ## Checksums
+          - **ARM64**: \`${{ steps.shas.outputs.arm64_sha }}\`
+          - **x86_64**: \`${{ steps.shas.outputs.x86_sha }}\`
+
+          ## What's Installed
+          - **Executable**: \`/usr/local/bin/az\`
+          - **Runtime**: \`/usr/local/microsoft/azure-cli/\`
+          - **Package ID**: \`com.microsoft.azure-cli\`
+          EOF
+
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🎉 Homebrew Cask Update Complete!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "📦 Updated cask: azure-cli"
+          echo "🔖 Version: $VERSION"
+          echo "📍 Repository: Azure/homebrew-azure-cli"
+          echo ""
+          echo "Users can now install with:"
+          echo "  brew tap azure/azure-cli"
+          echo "  brew install --cask azure-cli"
+          echo ""
