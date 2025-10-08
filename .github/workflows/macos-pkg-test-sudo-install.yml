@@ -4,41 +4,30 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to test (defaults to latest from code)"
-        required: false
+        description: "Version to test (e.g. 2.77.0 - without 'v' prefix)"
+        required: true
         type: string
 
 jobs:
   test-sudo-install:
+    name: Test PKG Install (${{ matrix.runner }}, ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
         include:
           - runner: macos-14
             arch: arm64
-            platform_tag: macos-arm64
           - runner: macos-13
             arch: x86_64
-            platform_tag: macos-x86_64
-
-    runs-on: ${{ matrix.runner }}
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
       - name: Environment info
         run: |
           echo "=== Environment Information ==="
           echo "Runner: ${{ matrix.runner }}"
-          echo "Expected arch: ${{ matrix.arch }}"
-          echo "Actual arch: $(uname -m)"
+          echo "Architecture: ${{ matrix.arch }}"
           echo "macOS version: $(sw_vers -productVersion)"
-          echo "Python version: $(python --version)"
+          echo "Actual arch: $(uname -m)"
           echo "Available space: $(df -h / | tail -1 | awk '{print $4}')"
 
       - name: Clean previous installations
@@ -57,49 +46,49 @@ jobs:
             echo "✅ No existing Azure CLI installations found"
           fi
 
-      - name: Build PKG installer
+      - name: Download and install PKG
         run: |
-          echo "=== Building PKG Installer ==="
+          echo "=== Download and Install PKG ==="
 
-          # Install build dependencies
-          python -m pip install --upgrade pip setuptools wheel
+          VERSION="${{ github.event.inputs.version }}"
+          RELEASE_TAG="azure-cli-pkg-v${VERSION}"
+          ARCH="${{ matrix.arch }}"
+          PKG_FILENAME="azure-cli-${VERSION}-macos-${ARCH}.pkg"
 
-          # Build the PKG
-          python scripts/release/macos/build_pkg_installer.py \
-            --platform-tag ${{ matrix.platform_tag }}
+          echo "Downloading PKG: $PKG_FILENAME"
+          echo "From release: $RELEASE_TAG (version: $VERSION)"
+          echo "Architecture: $ARCH"
+          echo "Full URL: https://github.com/${{ github.repository }}/releases/download/${RELEASE_TAG}/${PKG_FILENAME}"
 
-      - name: Verify PKG creation
-        run: |
-          echo "=== Verifying PKG Creation ==="
+          # Download PKG file from GitHub releases
+          curl -L -o "$PKG_FILENAME" \
+            "https://github.com/${{ github.repository }}/releases/download/${RELEASE_TAG}/${PKG_FILENAME}"
 
-          PKG_FILES=$(find dist/macos_pkg -name "*.pkg")
-
-          if [ -z "$PKG_FILES" ]; then
-            echo "❌ No PKG files found"
-            exit 1
-          fi
-
-          for pkg in $PKG_FILES; do
-            echo "Found PKG: $pkg"
-            ls -lh "$pkg"
+          if [ -f "$PKG_FILENAME" ]; then
+            echo "✅ PKG file downloaded successfully"
+            echo "File size: $(ls -lh "$PKG_FILENAME" | awk '{print $5}')"
             
-            echo "Package contents (first 20 files):"
-            pkgutil --payload-files "$pkg" | head -20
-          done
-
-      - name: Install PKG using sudo installer
-        run: |
-          echo "=== Installing PKG with sudo installer ==="
-
-          PKG_FILE=$(find dist/macos_pkg -name "*.pkg" | head -1)
-
-          if [ -z "$PKG_FILE" ]; then
-            echo "❌ PKG file not found"
+            # Check if file is too small (likely an error page)
+            FILE_SIZE=$(stat -f%z "$PKG_FILENAME")
+            if [ "$FILE_SIZE" -lt 1000 ]; then
+              echo "❌ Downloaded file is too small ($FILE_SIZE bytes), likely an error"
+              echo "File contents:"
+              cat "$PKG_FILENAME"
+              echo ""
+              echo "Available releases and assets:"
+              curl -s "https://api.github.com/repos/${{ github.repository }}/releases" | grep -E '"tag_name"|"name".*\.pkg' | head -20
+              exit 1
+            fi
+          else
+            echo "❌ Failed to download PKG file"
             exit 1
           fi
 
-          echo "Installing: $PKG_FILE"
-          sudo installer -pkg "$PKG_FILE" -target / -verbose
+          # Install using sudo installer
+          echo "Installing PKG using sudo installer..."
+          sudo installer -pkg "$PKG_FILENAME" -target /
+
+          echo "✅ PKG installation completed"
 
       - name: Verify installation structure
         run: |
