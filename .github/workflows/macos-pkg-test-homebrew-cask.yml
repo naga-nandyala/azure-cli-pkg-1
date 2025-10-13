@@ -48,18 +48,38 @@ jobs:
         run: |
           echo "=== Cleaning Previous Installations ==="
 
-          # Remove any existing Homebrew installations
+          # Remove any existing Homebrew Cask installations
           brew uninstall --cask ${{ inputs.cask_name || 'azure-cli-pkg' }} 2>/dev/null || true
-          brew untap ${{ inputs.tap_repo || 'naga-nandyala/mycli-app' }} 2>/dev/null || true
+          brew uninstall --cask azure-cli 2>/dev/null || true
 
-          # Remove any manual installations
+          # Remove any existing Homebrew Formula installations
+          brew uninstall --force azure-cli 2>/dev/null || true
+
+          # Remove taps
+          brew untap ${{ inputs.tap_repo || 'naga-nandyala/mycli-app' }} 2>/dev/null || true
+          brew untap azure/azure-cli 2>/dev/null || true
+
+          # Remove any manual PKG installations
           sudo rm -f /usr/local/bin/az 2>/dev/null || true
           sudo rm -rf /usr/local/microsoft/azure-cli 2>/dev/null || true
 
+          # Remove Homebrew formula installations
+          sudo rm -f /opt/homebrew/bin/az 2>/dev/null || true
+          sudo rm -rf /opt/homebrew/Cellar/azure-cli 2>/dev/null || true
+
           # Verify cleanup
           if command -v az >/dev/null 2>&1; then
-            echo "Warning: az still found in PATH after cleanup"
+            echo "⚠️  Warning: az still found in PATH after cleanup"
+            echo "Location: $(which az)"
+            echo "Removing: $(which az)"
+            sudo rm -f "$(which az)" 2>/dev/null || true
+          fi
+
+          # Final check
+          if command -v az >/dev/null 2>&1; then
+            echo "❌ Failed to clean up existing installations"
             which az
+            exit 1
           else
             echo "✅ No existing Azure CLI installations found"
           fi
@@ -88,7 +108,30 @@ jobs:
         run: |
           echo "=== Installation Structure Verification ==="
 
-          # Check system installation paths
+          # Check which az is in PATH
+          echo "0. Executable in PATH:"
+          if command -v az >/dev/null 2>&1; then
+            AZ_PATH=$(which az)
+            echo "   Found: $AZ_PATH"
+            
+            # Verify it's the PKG version
+            if [ "$AZ_PATH" != "/usr/local/bin/az" ]; then
+              echo "❌ ERROR: az found at wrong location!"
+              echo "   Expected: /usr/local/bin/az"
+              echo "   Found: $AZ_PATH"
+              echo ""
+              echo "   This suggests the Homebrew Formula was installed instead of the PKG Cask."
+              echo "   Checking all az installations:"
+              find /usr/local/bin /opt/homebrew/bin -name "az" 2>/dev/null || true
+              exit 1
+            fi
+            echo "   ✅ Correct location (PKG installation)"
+          else
+            echo "❌ az command not found in PATH"
+            exit 1
+          fi
+
+          echo ""
           echo "1. Executable location:"
           if [ -f /usr/local/bin/az ]; then
             ls -la /usr/local/bin/az
@@ -138,23 +181,40 @@ jobs:
           az --version
 
           echo ""
-          echo "2. Help command:"
+          echo "2. Verify Python location:"
+          PYTHON_LOCATION=$(az --version | grep "Python location" | awk '{print $3}' | tr -d "'")
+          echo "   Python location: $PYTHON_LOCATION"
+
+          EXPECTED_PYTHON="/usr/local/microsoft/azure-cli/bin/python3"
+          if [[ "$PYTHON_LOCATION" == "$EXPECTED_PYTHON" ]]; then
+            echo "   ✅ Correct Python location (PKG installation)"
+          else
+            echo "   ❌ ERROR: Wrong Python location!"
+            echo "      Expected: $EXPECTED_PYTHON"
+            echo "      Found: $PYTHON_LOCATION"
+            echo ""
+            echo "   This indicates the Homebrew Formula version is being used instead of the PKG."
+            exit 1
+          fi
+
+          echo ""
+          echo "3. Help command:"
           az --help | head -20
 
           echo ""
-          echo "3. List available command groups:"
+          echo "4. List available command groups:"
           az | head -30
 
           echo ""
-          echo "4. Test specific command (account show - should fail without login):"
+          echo "5. Test specific command (account show - should fail without login):"
           az account show 2>&1 | head -10 || echo "Expected: Not logged in"
 
           echo ""
-          echo "5. Test extension commands:"
+          echo "6. Test extension commands:"
           az extension list
 
           echo ""
-          echo "6. Check installer type:"
+          echo "7. Check installer type:"
           az version --output json | grep -i installer || echo "Installer info not shown"
 
       - name: Test PATH integration
