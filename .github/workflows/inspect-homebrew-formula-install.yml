@@ -1,0 +1,884 @@
+name: Inspect Homebrew Formula Installation
+
+on:
+    workflow_dispatch:
+    schedule:
+        # Run weekly on Mondays at 9 AM UTC
+        - cron: "0 9 * * 1"
+
+jobs:
+    inspect-formula-arm64:
+        name: Inspect Formula Install (ARM64)
+        runs-on: macos-14 # ARM64 (Apple Silicon)
+
+        steps:
+            - name: Checkout Repository
+              uses: actions/checkout@v4
+
+            - name: System Information
+              run: |
+                  echo "================================================"
+                  echo "SYSTEM INFORMATION"
+                  echo "================================================"
+                  sw_vers
+                  uname -a
+                  arch
+                  echo ""
+                  echo "Homebrew Prefix: $(brew --prefix)"
+                  echo "Homebrew Cellar: $(brew --cellar)"
+                  echo "Homebrew Repository: $(brew --repository)"
+                  echo ""
+
+            - name: Pre-Install State
+              run: |
+                  echo "================================================"
+                  echo "PRE-INSTALL STATE"
+                  echo "================================================"
+                  echo ""
+                  echo "--- Checking for existing 'az' command ---"
+                  which az || echo "✓ 'az' not found (expected)"
+                  echo ""
+                  echo "--- Homebrew installed packages ---"
+                  brew list --formula || echo "No formulae installed"
+                  echo ""
+
+            - name: Install Azure CLI via Homebrew Formula
+              run: |
+                  echo "================================================"
+                  echo "INSTALLING: brew install azure-cli"
+                  echo "================================================"
+                  brew install azure-cli
+                  echo ""
+                  echo "✓ Installation completed"
+
+            - name: Post-Install - Command Location
+              run: |
+                  echo "================================================"
+                  echo "COMMAND LOCATION"
+                  echo "================================================"
+                  echo ""
+                  echo "--- which az ---"
+                  which az
+                  echo ""
+                  echo "--- az command details ---"
+                  ls -lh $(which az)
+                  echo ""
+                  echo "--- Resolve symlinks ---"
+                  readlink $(which az) || echo "Not a symlink"
+                  echo ""
+                  echo "--- Full resolution ---"
+                  if [ -L "$(which az)" ]; then
+                    RESOLVED=$(readlink $(which az))
+                    echo "First level: $RESOLVED"
+                    if [ -L "$RESOLVED" ]; then
+                      echo "Second level: $(readlink $RESOLVED)"
+                    fi
+                  fi
+                  echo ""
+
+            - name: Post-Install - Azure CLI Version
+              run: |
+                  echo "================================================"
+                  echo "AZURE CLI VERSION"
+                  echo "================================================"
+                  az --version
+                  echo ""
+
+            - name: Post-Install - Python Location
+              run: |
+                  echo "================================================"
+                  echo "PYTHON LOCATION ANALYSIS"
+                  echo "================================================"
+                  echo ""
+                  echo "--- Extract Python path from 'az --version' ---"
+                  PYTHON_PATH=$(az --version | grep "Python location" | awk -F"'" '{print $2}')
+                  echo "Python location: $PYTHON_PATH"
+                  echo ""
+                  echo "--- Python executable details ---"
+                  ls -lh "$PYTHON_PATH"
+                  echo ""
+                  echo "--- Python version ---"
+                  "$PYTHON_PATH" --version
+                  echo ""
+                  echo "--- Resolve Python symlinks ---"
+                  if [ -L "$PYTHON_PATH" ]; then
+                    REAL_PYTHON=$(readlink "$PYTHON_PATH")
+                    echo "Symlink points to: $REAL_PYTHON"
+                    ls -lh "$REAL_PYTHON" || echo "Cannot stat target"
+                  else
+                    echo "Not a symlink - actual binary"
+                  fi
+                  echo ""
+
+            - name: Post-Install - Homebrew Formula Info
+              run: |
+                  echo "================================================"
+                  echo "HOMEBREW FORMULA INFORMATION"
+                  echo "================================================"
+                  echo ""
+                  echo "--- brew info azure-cli ---"
+                  brew info azure-cli
+                  echo ""
+                  echo "--- Formula details ---"
+                  echo "Install path: $(brew --prefix azure-cli)"
+                  echo "Cellar path: $(brew --cellar azure-cli)/$(brew list --versions azure-cli | awk '{print $2}')"
+                  echo ""
+
+            - name: Post-Install - Installed Files List
+              run: |
+                  echo "================================================"
+                  echo "ALL INSTALLED FILES"
+                  echo "================================================"
+                  echo ""
+                  echo "--- brew list azure-cli ---"
+                  brew list azure-cli
+                  echo ""
+                  echo "--- File count ---"
+                  FILE_COUNT=$(brew list azure-cli | wc -l | xargs)
+                  echo "Total files installed: $FILE_COUNT"
+                  echo ""
+
+            - name: Post-Install - Directory Structure
+              run: |
+                  echo "================================================"
+                  echo "DIRECTORY STRUCTURE"
+                  echo "================================================"
+                  echo ""
+                  INSTALL_PREFIX=$(brew --prefix azure-cli)
+                  echo "Installation prefix: $INSTALL_PREFIX"
+                  echo ""
+                  echo "--- Top-level structure ---"
+                  ls -lh "$INSTALL_PREFIX/"
+                  echo ""
+                  echo "--- bin/ directory ---"
+                  if [ -d "$INSTALL_PREFIX/bin" ]; then
+                    echo "Contents of $INSTALL_PREFIX/bin/:"
+                    ls -lh "$INSTALL_PREFIX/bin/"
+                  else
+                    echo "No bin/ directory"
+                  fi
+                  echo ""
+                  echo "--- libexec/ directory (if exists) ---"
+                  if [ -d "$INSTALL_PREFIX/libexec" ]; then
+                    echo "Contents of $INSTALL_PREFIX/libexec/:"
+                    ls -lh "$INSTALL_PREFIX/libexec/"
+                    
+                    # Check for Python subdirectory
+                    if [ -d "$INSTALL_PREFIX/libexec/bin" ]; then
+                      echo ""
+                      echo "Contents of $INSTALL_PREFIX/libexec/bin/:"
+                      ls -lh "$INSTALL_PREFIX/libexec/bin/"
+                    fi
+                  else
+                    echo "No libexec/ directory"
+                  fi
+                  echo ""
+                  echo "--- lib/ directory (if exists) ---"
+                  if [ -d "$INSTALL_PREFIX/lib" ]; then
+                    echo "Contents of $INSTALL_PREFIX/lib/:"
+                    ls -lh "$INSTALL_PREFIX/lib/" | head -20
+                    echo "... (showing first 20 entries)"
+                  else
+                    echo "No lib/ directory"
+                  fi
+                  echo ""
+
+            - name: Post-Install - Python Environment Details
+              run: |
+                  echo "================================================"
+                  echo "PYTHON ENVIRONMENT DETAILS"
+                  echo "================================================"
+                  echo ""
+                  INSTALL_PREFIX=$(brew --prefix azure-cli)
+
+                  echo "--- Find all Python executables ---"
+                  find "$INSTALL_PREFIX" -name "python*" -type f -o -name "python*" -type l | while read pyfile; do
+                    echo ""
+                    echo "Found: $pyfile"
+                    ls -lh "$pyfile"
+                  done
+                  echo ""
+
+                  echo "--- Find Python lib directories ---"
+                  find "$INSTALL_PREFIX" -type d -name "python*" | head -10 | while read pydir; do
+                    echo ""
+                    echo "Directory: $pydir"
+                    ls -lh "$pydir/" | head -5
+                    echo "... (showing first 5 entries)"
+                  done
+                  echo ""
+
+            - name: Post-Install - Site-Packages Analysis
+              run: |
+                  echo "================================================"
+                  echo "PYTHON SITE-PACKAGES ANALYSIS"
+                  echo "================================================"
+                  echo ""
+                  INSTALL_PREFIX=$(brew --prefix azure-cli)
+
+                  echo "--- Locate site-packages ---"
+                  SITE_PACKAGES=$(find "$INSTALL_PREFIX" -type d -name "site-packages" | head -1)
+
+                  if [ -n "$SITE_PACKAGES" ]; then
+                    echo "Site-packages location: $SITE_PACKAGES"
+                    echo ""
+                    
+                    echo "--- Top-level site-packages contents ---"
+                    ls -lh "$SITE_PACKAGES/" | head -30
+                    echo "... (showing first 30 entries)"
+                    echo ""
+                    
+                    echo "--- Count of packages ---"
+                    PACKAGE_COUNT=$(ls -1 "$SITE_PACKAGES/" | grep -v "^_" | grep -v ".dist-info$" | wc -l | xargs)
+                    echo "Approximate package count: $PACKAGE_COUNT"
+                    echo ""
+                    
+                    echo "--- Azure-specific packages ---"
+                    ls -1 "$SITE_PACKAGES/" | grep -i azure | head -20
+                    echo ""
+                    
+                    echo "--- Check for msal packages ---"
+                    ls -1 "$SITE_PACKAGES/" | grep -i msal
+                    echo ""
+                    
+                    echo "--- Check for pymsalruntime (private binary) ---"
+                    if ls -1 "$SITE_PACKAGES/" | grep -q pymsalruntime; then
+                      echo "✓ pymsalruntime found"
+                      ls -lh "$SITE_PACKAGES/" | grep pymsalruntime
+                    else
+                      echo "✗ pymsalruntime NOT found (expected for official Formula)"
+                    fi
+                    echo ""
+                  else
+                    echo "✗ site-packages directory not found"
+                  fi
+
+            - name: Post-Install - Symlinks Analysis
+              run: |
+                  echo "================================================"
+                  echo "SYMLINKS ANALYSIS"
+                  echo "================================================"
+                  echo ""
+
+                  echo "--- All symlinks in Homebrew prefix bin ---"
+                  BREW_BIN=$(brew --prefix)/bin
+                  echo "Checking: $BREW_BIN"
+                  echo ""
+
+                  ls -lh "$BREW_BIN" | grep "^l" | grep -i azure || echo "No Azure-related symlinks"
+                  echo ""
+
+                  echo "--- All symlinks in installation ---"
+                  INSTALL_PREFIX=$(brew --prefix azure-cli)
+                  echo "Finding symlinks in: $INSTALL_PREFIX"
+                  echo ""
+
+                  find "$INSTALL_PREFIX" -type l | while read symlink; do
+                    TARGET=$(readlink "$symlink")
+                    echo "$symlink -> $TARGET"
+                  done | head -20
+                  echo "... (showing first 20 symlinks)"
+                  echo ""
+
+            - name: Post-Install - Disk Space Usage
+              run: |
+                  echo "================================================"
+                  echo "DISK SPACE USAGE"
+                  echo "================================================"
+                  echo ""
+                  INSTALL_PREFIX=$(brew --prefix azure-cli)
+
+                  echo "--- Total installation size ---"
+                  du -sh "$INSTALL_PREFIX"
+                  echo ""
+
+                  echo "--- Breakdown by subdirectory ---"
+                  du -sh "$INSTALL_PREFIX"/*/ 2>/dev/null || echo "No subdirectories"
+                  echo ""
+
+                  echo "--- Largest files (top 20) ---"
+                  find "$INSTALL_PREFIX" -type f -exec du -h {} + | sort -rh | head -20
+                  echo ""
+
+            - name: Post-Install - Cellar Directory Inspection
+              run: |
+                  echo "================================================"
+                  echo "CELLAR DIRECTORY INSPECTION"
+                  echo "================================================"
+                  echo ""
+                  CELLAR_PATH=$(brew --cellar azure-cli)
+                  VERSION=$(brew list --versions azure-cli | awk '{print $2}')
+                  FULL_PATH="$CELLAR_PATH/$VERSION"
+
+                  echo "Cellar path: $FULL_PATH"
+                  echo ""
+
+                  echo "--- Complete directory tree (first 100 lines) ---"
+                  tree -L 3 "$FULL_PATH" 2>/dev/null || find "$FULL_PATH" -maxdepth 3 | head -100
+                  echo ""
+
+            - name: Post-Install - Dependencies
+              run: |
+                  echo "================================================"
+                  echo "FORMULA DEPENDENCIES"
+                  echo "================================================"
+                  echo ""
+
+                  echo "--- Direct dependencies ---"
+                  brew deps azure-cli
+                  echo ""
+
+                  echo "--- Full dependency tree ---"
+                  brew deps --tree azure-cli
+                  echo ""
+
+                  echo "--- Installed dependencies details ---"
+                  brew deps azure-cli | while read dep; do
+                    echo ""
+                    echo "Dependency: $dep"
+                    brew info "$dep" | head -5
+                  done
+                  echo ""
+
+            - name: Post-Install - Compare Paths
+              run: |
+                  echo "================================================"
+                  echo "PATH COMPARISON: Formula vs PKG"
+                  echo "================================================"
+                  echo ""
+
+                  echo "FORMULA INSTALLATION (current):"
+                  echo "  Command: $(which az)"
+                  echo "  Python:  $(az --version | grep 'Python location' | awk -F"'" '{print $2}')"
+                  echo "  Prefix:  $(brew --prefix azure-cli)"
+                  echo ""
+
+                  echo "PKG INSTALLATION (for comparison):"
+                  echo "  Command: /usr/local/bin/az"
+                  echo "  Python:  /usr/local/microsoft/azure-cli/bin/python3"
+                  echo "  Prefix:  /usr/local/microsoft/azure-cli/"
+                  echo ""
+
+                  echo "KEY DIFFERENCE:"
+                  echo "  Formula installs to: $(brew --prefix)/Cellar/azure-cli/"
+                  echo "  PKG installs to:     /usr/local/microsoft/azure-cli/"
+                  echo ""
+
+            - name: Generate Summary Report
+              run: |
+                  echo "================================================"
+                  echo "SUMMARY REPORT"
+                  echo "================================================"
+                  echo ""
+
+                  INSTALL_PREFIX=$(brew --prefix azure-cli)
+                  FILE_COUNT=$(brew list azure-cli | wc -l | xargs)
+                  DISK_USAGE=$(du -sh "$INSTALL_PREFIX" | awk '{print $1}')
+                  VERSION=$(brew list --versions azure-cli | awk '{print $2}')
+                  PYTHON_PATH=$(az --version | grep "Python location" | awk -F"'" '{print $2}')
+                  PYTHON_VERSION=$("$PYTHON_PATH" --version)
+
+                  echo "Azure CLI Version:    $VERSION"
+                  echo "Python Version:       $PYTHON_VERSION"
+                  echo "Python Location:      $PYTHON_PATH"
+                  echo "Installation Prefix:  $INSTALL_PREFIX"
+                  echo "Total Files:          $FILE_COUNT"
+                  echo "Disk Usage:           $DISK_USAGE"
+                  echo "Architecture:         $(arch)"
+                  echo "macOS Version:        $(sw_vers -productVersion)"
+                  echo ""
+
+                  echo "Installation Method:  Homebrew Formula (brew install azure-cli)"
+                  echo "Package Manager:      $(brew --version | head -1)"
+                  echo ""
+
+                  echo "✓ Inspection complete!"
+                  echo ""
+
+            - name: Upload Inspection Results
+              if: always()
+              run: |
+                  echo "================================================"
+                  echo "CREATING ARTIFACT"
+                  echo "================================================"
+                  echo ""
+
+                  REPORT_FILE="formula-inspection-arm64-$(date +%Y%m%d-%H%M%S).txt"
+
+                  {
+                    echo "========================================"
+                    echo "Azure CLI Homebrew Formula Inspection"
+                    echo "========================================"
+                    echo ""
+                    echo "Date: $(date)"
+                    echo "Architecture: $(arch)"
+                    echo "macOS: $(sw_vers -productVersion)"
+                    echo ""
+                    echo "========================================"
+                    echo ""
+                    
+                    echo "INSTALLATION SUMMARY"
+                    echo "--------------------"
+                    brew info azure-cli
+                    echo ""
+                    
+                    echo "FILE LIST"
+                    echo "---------"
+                    brew list azure-cli
+                    echo ""
+                    
+                    echo "DEPENDENCIES"
+                    echo "------------"
+                    brew deps --tree azure-cli
+                    echo ""
+                    
+                  } > "$REPORT_FILE"
+
+                  echo "Report saved to: $REPORT_FILE"
+                  echo "report_file=$REPORT_FILE" >> $GITHUB_ENV
+
+            - name: Upload Report as Artifact
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: formula-inspection-report-arm64
+                  path: formula-inspection-*.txt
+                  retention-days: 30
+
+    inspect-formula-x86-64:
+        name: Inspect Formula Install (x86_64)
+        runs-on: macos-13 # x86_64 (Intel)
+
+        steps:
+            - name: Checkout Repository
+              uses: actions/checkout@v4
+
+            - name: System Information
+              run: |
+                  echo "================================================"
+                  echo "SYSTEM INFORMATION"
+                  echo "================================================"
+                  sw_vers
+                  uname -a
+                  arch
+                  echo ""
+                  echo "Homebrew Prefix: $(brew --prefix)"
+                  echo "Homebrew Cellar: $(brew --cellar)"
+                  echo "Homebrew Repository: $(brew --repository)"
+                  echo ""
+
+            - name: Pre-Install State
+              run: |
+                  echo "================================================"
+                  echo "PRE-INSTALL STATE"
+                  echo "================================================"
+                  echo ""
+                  echo "--- Checking for existing 'az' command ---"
+                  which az || echo "✓ 'az' not found (expected)"
+                  echo ""
+                  echo "--- Homebrew installed packages ---"
+                  brew list --formula || echo "No formulae installed"
+                  echo ""
+
+            - name: Install Azure CLI via Homebrew Formula
+              run: |
+                  echo "================================================"
+                  echo "INSTALLING: brew install azure-cli"
+                  echo "================================================"
+                  brew install azure-cli
+                  echo ""
+                  echo "✓ Installation completed"
+
+            - name: Post-Install - Command Location
+              run: |
+                  echo "================================================"
+                  echo "COMMAND LOCATION"
+                  echo "================================================"
+                  echo ""
+                  echo "--- which az ---"
+                  which az
+                  echo ""
+                  echo "--- az command details ---"
+                  ls -lh $(which az)
+                  echo ""
+                  echo "--- Resolve symlinks ---"
+                  readlink $(which az) || echo "Not a symlink"
+                  echo ""
+                  echo "--- Full resolution ---"
+                  if [ -L "$(which az)" ]; then
+                    RESOLVED=$(readlink $(which az))
+                    echo "First level: $RESOLVED"
+                    if [ -L "$RESOLVED" ]; then
+                      echo "Second level: $(readlink $RESOLVED)"
+                    fi
+                  fi
+                  echo ""
+
+            - name: Post-Install - Azure CLI Version
+              run: |
+                  echo "================================================"
+                  echo "AZURE CLI VERSION"
+                  echo "================================================"
+                  az --version
+                  echo ""
+
+            - name: Post-Install - Python Location
+              run: |
+                  echo "================================================"
+                  echo "PYTHON LOCATION ANALYSIS"
+                  echo "================================================"
+                  echo ""
+                  echo "--- Extract Python path from 'az --version' ---"
+                  PYTHON_PATH=$(az --version | grep "Python location" | awk -F"'" '{print $2}')
+                  echo "Python location: $PYTHON_PATH"
+                  echo ""
+                  echo "--- Python executable details ---"
+                  ls -lh "$PYTHON_PATH"
+                  echo ""
+                  echo "--- Python version ---"
+                  "$PYTHON_PATH" --version
+                  echo ""
+                  echo "--- Resolve Python symlinks ---"
+                  if [ -L "$PYTHON_PATH" ]; then
+                    REAL_PYTHON=$(readlink "$PYTHON_PATH")
+                    echo "Symlink points to: $REAL_PYTHON"
+                    ls -lh "$REAL_PYTHON" || echo "Cannot stat target"
+                  else
+                    echo "Not a symlink - actual binary"
+                  fi
+                  echo ""
+
+            - name: Post-Install - Homebrew Formula Info
+              run: |
+                  echo "================================================"
+                  echo "HOMEBREW FORMULA INFORMATION"
+                  echo "================================================"
+                  echo ""
+                  echo "--- brew info azure-cli ---"
+                  brew info azure-cli
+                  echo ""
+                  echo "--- Formula details ---"
+                  echo "Install path: $(brew --prefix azure-cli)"
+                  echo "Cellar path: $(brew --cellar azure-cli)/$(brew list --versions azure-cli | awk '{print $2}')"
+                  echo ""
+
+            - name: Post-Install - Installed Files List
+              run: |
+                  echo "================================================"
+                  echo "ALL INSTALLED FILES"
+                  echo "================================================"
+                  echo ""
+                  echo "--- brew list azure-cli ---"
+                  brew list azure-cli
+                  echo ""
+                  echo "--- File count ---"
+                  FILE_COUNT=$(brew list azure-cli | wc -l | xargs)
+                  echo "Total files installed: $FILE_COUNT"
+                  echo ""
+
+            - name: Post-Install - Directory Structure
+              run: |
+                  echo "================================================"
+                  echo "DIRECTORY STRUCTURE"
+                  echo "================================================"
+                  echo ""
+                  INSTALL_PREFIX=$(brew --prefix azure-cli)
+                  echo "Installation prefix: $INSTALL_PREFIX"
+                  echo ""
+                  echo "--- Top-level structure ---"
+                  ls -lh "$INSTALL_PREFIX/"
+                  echo ""
+                  echo "--- bin/ directory ---"
+                  if [ -d "$INSTALL_PREFIX/bin" ]; then
+                    echo "Contents of $INSTALL_PREFIX/bin/:"
+                    ls -lh "$INSTALL_PREFIX/bin/"
+                  else
+                    echo "No bin/ directory"
+                  fi
+                  echo ""
+                  echo "--- libexec/ directory (if exists) ---"
+                  if [ -d "$INSTALL_PREFIX/libexec" ]; then
+                    echo "Contents of $INSTALL_PREFIX/libexec/:"
+                    ls -lh "$INSTALL_PREFIX/libexec/"
+                    
+                    # Check for Python subdirectory
+                    if [ -d "$INSTALL_PREFIX/libexec/bin" ]; then
+                      echo ""
+                      echo "Contents of $INSTALL_PREFIX/libexec/bin/:"
+                      ls -lh "$INSTALL_PREFIX/libexec/bin/"
+                    fi
+                  else
+                    echo "No libexec/ directory"
+                  fi
+                  echo ""
+                  echo "--- lib/ directory (if exists) ---"
+                  if [ -d "$INSTALL_PREFIX/lib" ]; then
+                    echo "Contents of $INSTALL_PREFIX/lib/:"
+                    ls -lh "$INSTALL_PREFIX/lib/" | head -20
+                    echo "... (showing first 20 entries)"
+                  else
+                    echo "No lib/ directory"
+                  fi
+                  echo ""
+
+            - name: Post-Install - Python Environment Details
+              run: |
+                  echo "================================================"
+                  echo "PYTHON ENVIRONMENT DETAILS"
+                  echo "================================================"
+                  echo ""
+                  INSTALL_PREFIX=$(brew --prefix azure-cli)
+
+                  echo "--- Find all Python executables ---"
+                  find "$INSTALL_PREFIX" -name "python*" -type f -o -name "python*" -type l | while read pyfile; do
+                    echo ""
+                    echo "Found: $pyfile"
+                    ls -lh "$pyfile"
+                  done
+                  echo ""
+
+                  echo "--- Find Python lib directories ---"
+                  find "$INSTALL_PREFIX" -type d -name "python*" | head -10 | while read pydir; do
+                    echo ""
+                    echo "Directory: $pydir"
+                    ls -lh "$pydir/" | head -5
+                    echo "... (showing first 5 entries)"
+                  done
+                  echo ""
+
+            - name: Post-Install - Site-Packages Analysis
+              run: |
+                  echo "================================================"
+                  echo "PYTHON SITE-PACKAGES ANALYSIS"
+                  echo "================================================"
+                  echo ""
+                  INSTALL_PREFIX=$(brew --prefix azure-cli)
+
+                  echo "--- Locate site-packages ---"
+                  SITE_PACKAGES=$(find "$INSTALL_PREFIX" -type d -name "site-packages" | head -1)
+
+                  if [ -n "$SITE_PACKAGES" ]; then
+                    echo "Site-packages location: $SITE_PACKAGES"
+                    echo ""
+                    
+                    echo "--- Top-level site-packages contents ---"
+                    ls -lh "$SITE_PACKAGES/" | head -30
+                    echo "... (showing first 30 entries)"
+                    echo ""
+                    
+                    echo "--- Count of packages ---"
+                    PACKAGE_COUNT=$(ls -1 "$SITE_PACKAGES/" | grep -v "^_" | grep -v ".dist-info$" | wc -l | xargs)
+                    echo "Approximate package count: $PACKAGE_COUNT"
+                    echo ""
+                    
+                    echo "--- Azure-specific packages ---"
+                    ls -1 "$SITE_PACKAGES/" | grep -i azure | head -20
+                    echo ""
+                    
+                    echo "--- Check for msal packages ---"
+                    ls -1 "$SITE_PACKAGES/" | grep -i msal
+                    echo ""
+                    
+                    echo "--- Check for pymsalruntime (private binary) ---"
+                    if ls -1 "$SITE_PACKAGES/" | grep -q pymsalruntime; then
+                      echo "✓ pymsalruntime found"
+                      ls -lh "$SITE_PACKAGES/" | grep pymsalruntime
+                    else
+                      echo "✗ pymsalruntime NOT found (expected for official Formula)"
+                    fi
+                    echo ""
+                  else
+                    echo "✗ site-packages directory not found"
+                  fi
+
+            - name: Post-Install - Symlinks Analysis
+              run: |
+                  echo "================================================"
+                  echo "SYMLINKS ANALYSIS"
+                  echo "================================================"
+                  echo ""
+
+                  echo "--- All symlinks in Homebrew prefix bin ---"
+                  BREW_BIN=$(brew --prefix)/bin
+                  echo "Checking: $BREW_BIN"
+                  echo ""
+
+                  ls -lh "$BREW_BIN" | grep "^l" | grep -i azure || echo "No Azure-related symlinks"
+                  echo ""
+
+                  echo "--- All symlinks in installation ---"
+                  INSTALL_PREFIX=$(brew --prefix azure-cli)
+                  echo "Finding symlinks in: $INSTALL_PREFIX"
+                  echo ""
+
+                  find "$INSTALL_PREFIX" -type l | while read symlink; do
+                    TARGET=$(readlink "$symlink")
+                    echo "$symlink -> $TARGET"
+                  done | head -20
+                  echo "... (showing first 20 symlinks)"
+                  echo ""
+
+            - name: Post-Install - Disk Space Usage
+              run: |
+                  echo "================================================"
+                  echo "DISK SPACE USAGE"
+                  echo "================================================"
+                  echo ""
+                  INSTALL_PREFIX=$(brew --prefix azure-cli)
+
+                  echo "--- Total installation size ---"
+                  du -sh "$INSTALL_PREFIX"
+                  echo ""
+
+                  echo "--- Breakdown by subdirectory ---"
+                  du -sh "$INSTALL_PREFIX"/*/ 2>/dev/null || echo "No subdirectories"
+                  echo ""
+
+                  echo "--- Largest files (top 20) ---"
+                  find "$INSTALL_PREFIX" -type f -exec du -h {} + | sort -rh | head -20
+                  echo ""
+
+            - name: Post-Install - Cellar Directory Inspection
+              run: |
+                  echo "================================================"
+                  echo "CELLAR DIRECTORY INSPECTION"
+                  echo "================================================"
+                  echo ""
+                  CELLAR_PATH=$(brew --cellar azure-cli)
+                  VERSION=$(brew list --versions azure-cli | awk '{print $2}')
+                  FULL_PATH="$CELLAR_PATH/$VERSION"
+
+                  echo "Cellar path: $FULL_PATH"
+                  echo ""
+
+                  echo "--- Complete directory tree (first 100 lines) ---"
+                  tree -L 3 "$FULL_PATH" 2>/dev/null || find "$FULL_PATH" -maxdepth 3 | head -100
+                  echo ""
+
+            - name: Post-Install - Dependencies
+              run: |
+                  echo "================================================"
+                  echo "FORMULA DEPENDENCIES"
+                  echo "================================================"
+                  echo ""
+
+                  echo "--- Direct dependencies ---"
+                  brew deps azure-cli
+                  echo ""
+
+                  echo "--- Full dependency tree ---"
+                  brew deps --tree azure-cli
+                  echo ""
+
+                  echo "--- Installed dependencies details ---"
+                  brew deps azure-cli | while read dep; do
+                    echo ""
+                    echo "Dependency: $dep"
+                    brew info "$dep" | head -5
+                  done
+                  echo ""
+
+            - name: Post-Install - Compare Paths
+              run: |
+                  echo "================================================"
+                  echo "PATH COMPARISON: Formula vs PKG"
+                  echo "================================================"
+                  echo ""
+
+                  echo "FORMULA INSTALLATION (current):"
+                  echo "  Command: $(which az)"
+                  echo "  Python:  $(az --version | grep 'Python location' | awk -F"'" '{print $2}')"
+                  echo "  Prefix:  $(brew --prefix azure-cli)"
+                  echo ""
+
+                  echo "PKG INSTALLATION (for comparison):"
+                  echo "  Command: /usr/local/bin/az"
+                  echo "  Python:  /usr/local/microsoft/azure-cli/bin/python3"
+                  echo "  Prefix:  /usr/local/microsoft/azure-cli/"
+                  echo ""
+
+                  echo "KEY DIFFERENCE:"
+                  echo "  Formula installs to: $(brew --prefix)/Cellar/azure-cli/"
+                  echo "  PKG installs to:     /usr/local/microsoft/azure-cli/"
+                  echo ""
+
+            - name: Generate Summary Report
+              run: |
+                  echo "================================================"
+                  echo "SUMMARY REPORT"
+                  echo "================================================"
+                  echo ""
+
+                  INSTALL_PREFIX=$(brew --prefix azure-cli)
+                  FILE_COUNT=$(brew list azure-cli | wc -l | xargs)
+                  DISK_USAGE=$(du -sh "$INSTALL_PREFIX" | awk '{print $1}')
+                  VERSION=$(brew list --versions azure-cli | awk '{print $2}')
+                  PYTHON_PATH=$(az --version | grep "Python location" | awk -F"'" '{print $2}')
+                  PYTHON_VERSION=$("$PYTHON_PATH" --version)
+
+                  echo "Azure CLI Version:    $VERSION"
+                  echo "Python Version:       $PYTHON_VERSION"
+                  echo "Python Location:      $PYTHON_PATH"
+                  echo "Installation Prefix:  $INSTALL_PREFIX"
+                  echo "Total Files:          $FILE_COUNT"
+                  echo "Disk Usage:           $DISK_USAGE"
+                  echo "Architecture:         $(arch)"
+                  echo "macOS Version:        $(sw_vers -productVersion)"
+                  echo ""
+
+                  echo "Installation Method:  Homebrew Formula (brew install azure-cli)"
+                  echo "Package Manager:      $(brew --version | head -1)"
+                  echo ""
+
+                  echo "✓ Inspection complete!"
+                  echo ""
+
+            - name: Upload Inspection Results
+              if: always()
+              run: |
+                  echo "================================================"
+                  echo "CREATING ARTIFACT"
+                  echo "================================================"
+                  echo ""
+
+                  REPORT_FILE="formula-inspection-x86-64-$(date +%Y%m%d-%H%M%S).txt"
+
+                  {
+                    echo "========================================"
+                    echo "Azure CLI Homebrew Formula Inspection"
+                    echo "========================================"
+                    echo ""
+                    echo "Date: $(date)"
+                    echo "Architecture: $(arch)"
+                    echo "macOS: $(sw_vers -productVersion)"
+                    echo ""
+                    echo "========================================"
+                    echo ""
+                    
+                    echo "INSTALLATION SUMMARY"
+                    echo "--------------------"
+                    brew info azure-cli
+                    echo ""
+                    
+                    echo "FILE LIST"
+                    echo "---------"
+                    brew list azure-cli
+                    echo ""
+                    
+                    echo "DEPENDENCIES"
+                    echo "------------"
+                    brew deps --tree azure-cli
+                    echo ""
+                    
+                  } > "$REPORT_FILE"
+
+                  echo "Report saved to: $REPORT_FILE"
+                  echo "report_file=$REPORT_FILE" >> $GITHUB_ENV
+
+            - name: Upload Report as Artifact
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: formula-inspection-report-x86-64
+                  path: formula-inspection-*.txt
+                  retention-days: 30
