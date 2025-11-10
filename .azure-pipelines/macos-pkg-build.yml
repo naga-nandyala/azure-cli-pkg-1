@@ -32,8 +32,9 @@ variables:
     value: ${{ parameters.Version }}
   - name: GitHubRepo
     value: ${{ parameters.GitHubRepo }}
-  # Variable groups (create these in Azure DevOps Library)
-  - group: github-integration  # Contains GITHUB_PAT for GitHub releases
+  # Variable groups (optional - only needed for GitHub releases)
+  # Uncomment the line below after creating the variable group in Azure DevOps Library
+  # - group: github-integration  # Contains GITHUB_PAT for GitHub releases
 
 name: build-macos-pkg-$(Date:yyyyMMdd)-$(Rev:r)
 
