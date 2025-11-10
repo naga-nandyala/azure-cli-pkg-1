@@ -1,0 +1,337 @@
+# Azure CLI - macOS PKG Signing Pipeline
+# This pipeline downloads unsigned PKG files from GitHub releases and signs them using OneBranch/ESRP
+
+trigger: none # Manual trigger only
+
+parameters:
+  - name: GitHubReleaseTag
+    displayName: 'GitHub Release Tag (e.g., azure-cli-pkg-v2.76.0)'
+    type: string
+  - name: GitHubRepo
+    displayName: 'GitHub Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+  - name: AzureCliVersion
+    displayName: 'Azure CLI Version (e.g., 2.76.0)'
+    type: string
+  - name: OfficialBuild
+    displayName: 'Official Build (enables OneBranch signing)'
+    type: boolean
+    default: true
+  - name: UploadToGitHub
+    displayName: 'Upload signed PKGs back to GitHub release'
+    type: boolean
+    default: true
+
+variables:
+  - name: DOTNET_CLI_TELEMETRY_OPTOUT
+    value: 1
+  - name: DOTNET_NOLOGO
+    value: 1
+  - name: NugetSecurityAnalysisWarningLevel
+    value: none
+  - name: skipNugetSecurityAnalysis
+    value: true
+  - name: GitHubReleaseTag
+    value: ${{ parameters.GitHubReleaseTag }}
+  - name: AzureCliVersion
+    value: ${{ parameters.AzureCliVersion }}
+  - name: GitHubRepo
+    value: ${{ parameters.GitHubRepo }}
+  - name: templateFile
+    value: ${{ iif(parameters.OfficialBuild, 'v2/OneBranch.Official.CrossPlat.yml@onebranchTemplates', 'v2/OneBranch.NonOfficial.CrossPlat.yml@onebranchTemplates') }}
+  # Variable groups (you'll need to create these in Azure DevOps)
+  - group: github-integration  # Contains GITHUB_TOKEN for downloading releases
+  - group: mscodehub-macos-package-signing  # Contains KeyCode for macOS signing
+
+name: sign-macos-pkg-$(AzureCliVersion)-$(Build.BuildId)
+
+resources:
+  repositories:
+  - repository: onebranchTemplates
+    type: git
+    name: OneBranch.Pipelines/GovernedTemplates
+    ref: refs/heads/main
+
+extends:
+  template: ${{ variables.templateFile }}
+  parameters:
+    customTags: 'AzureCLI-macOS-Signing'
+    featureFlags:
+      WindowsHostVersion:
+        Network: KS3
+    globalSdl:
+      disableLegacyManifest: true
+      armory:
+        enabled: false
+      sbom:
+        enabled: true
+        packageName: 'Microsoft.AzureCLI.macOS'
+      credscan:
+        enabled: true
+      cg:
+        enabled: false  # No component governance for signing-only pipeline
+      binskim:
+        enabled: false  # PKG files don't need BinSkim
+      apiscan:
+        enabled: false
+
+    stages:
+    - stage: download_unsigned_pkg
+      displayName: 'Download Unsigned PKG from GitHub'
+      jobs:
+      - job: download_from_github
+        displayName: 'Download unsigned PKG files'
+        pool:
+          type: windows
+        
+        variables:
+          - name: ob_outputDirectory
+            value: '$(Build.ArtifactStagingDirectory)/ONEBRANCH_ARTIFACT'
+          - name: ob_sdl_sbom_enabled
+            value: false
+          - name: ob_signing_setup_enabled
+            value: false
+          - name: ob_sdl_codeSignValidation_enabled
+            value: false
+
+        steps:
+        - checkout: self
+          clean: true
+          env:
+            ob_restore_phase: true
+
+        - pwsh: |
+            Write-Host "=== Download Configuration ==="
+            Write-Host "GitHub Repo: $(GitHubRepo)"
+            Write-Host "Release Tag: $(GitHubReleaseTag)"
+            Write-Host "Azure CLI Version: $(AzureCliVersion)"
+            Write-Host ""
+            
+            $apiUrl = "https://api.github.com/repos/$(GitHubRepo)/releases/tags/$(GitHubReleaseTag)"
+            Write-Host "API URL: $apiUrl"
+            
+            # Get release information
+            $headers = @{
+              'Accept' = 'application/vnd.github+json'
+              'User-Agent' = 'AzureDevOps-Pipeline'
+            }
+            
+            # Add authorization if GITHUB_TOKEN is available
+            if ($env:GITHUB_TOKEN) {
+              $headers['Authorization'] = "Bearer $env:GITHUB_TOKEN"
+              Write-Host "✅ Using authenticated GitHub API access"
+            } else {
+              Write-Warning "⚠️  No GITHUB_TOKEN found - using unauthenticated access (rate limited)"
+            }
+            
+            Write-Host "Fetching release information..."
+            $release = Invoke-RestMethod -Uri $apiUrl -Headers $headers -Method Get
+            
+            Write-Host "Release found: $($release.name)"
+            Write-Host "Published: $($release.published_at)"
+            Write-Host "Assets count: $($release.assets.Count)"
+            Write-Host ""
+            
+            # Create download directory
+            $downloadDir = "$(Pipeline.Workspace)/unsigned-pkg"
+            $null = New-Item -ItemType Directory -Path $downloadDir -Force
+            
+            # Define the PKG files we need to download
+            $pkgFiles = @(
+              "azure-cli-$(AzureCliVersion)-macos-arm64.pkg",
+              "azure-cli-$(AzureCliVersion)-macos-x86_64.pkg"
+            )
+            
+            Write-Host "=== Downloading PKG Files ==="
+            foreach ($pkgFile in $pkgFiles) {
+              Write-Host "Looking for: $pkgFile"
+              
+              $asset = $release.assets | Where-Object { $_.name -eq $pkgFile }
+              
+              if (-not $asset) {
+                Write-Error "❌ Asset not found: $pkgFile"
+                Write-Host "Available assets:"
+                $release.assets | ForEach-Object { Write-Host "  - $($_.name)" }
+                exit 1
+              }
+              
+              $downloadUrl = $asset.browser_download_url
+              $outputPath = Join-Path $downloadDir $pkgFile
+              
+              Write-Host "Downloading: $pkgFile"
+              Write-Host "  From: $downloadUrl"
+              Write-Host "  To: $outputPath"
+              Write-Host "  Size: $([math]::Round($asset.size / 1MB, 2)) MB"
+              
+              Invoke-WebRequest -Uri $downloadUrl -OutFile $outputPath -Headers $headers
+              
+              if (Test-Path $outputPath) {
+                $fileSize = (Get-Item $outputPath).Length
+                Write-Host "✅ Downloaded successfully: $([math]::Round($fileSize / 1MB, 2)) MB"
+              } else {
+                Write-Error "❌ Download failed: $pkgFile"
+                exit 1
+              }
+              Write-Host ""
+            }
+            
+            Write-Host "=== Download Summary ==="
+            Get-ChildItem $downloadDir | ForEach-Object {
+              Write-Host "✅ $($_.Name) - $([math]::Round($_.Length / 1MB, 2)) MB"
+            }
+          displayName: 'Download unsigned PKG files from GitHub'
+          env:
+            GITHUB_TOKEN: $(GITHUB_PAT)  # From variable group
+
+        - pwsh: |
+            Write-Host "=== Verifying Downloaded PKGs ==="
+            $downloadDir = "$(Pipeline.Workspace)/unsigned-pkg"
+            
+            Get-ChildItem $downloadDir -Filter "*.pkg" | ForEach-Object {
+              Write-Host ""
+              Write-Host "Analyzing: $($_.Name)"
+              Write-Host "Size: $([math]::Round($_.Length / 1MB, 2)) MB"
+              
+              # On Windows, we can't use pkgutil, but we can check file signature
+              Write-Host "File type:"
+              # Basic file check
+              if ($_.Length -lt 1KB) {
+                Write-Error "❌ File too small - possible download failure"
+                exit 1
+              }
+              
+              Write-Host "✅ File appears valid"
+            }
+          displayName: 'Verify downloaded PKG files'
+
+        - publish: $(Pipeline.Workspace)/unsigned-pkg
+          artifact: unsigned-pkg-files
+          displayName: 'Publish unsigned PKG artifacts'
+
+    - stage: sign_macos_pkg
+      displayName: 'Sign macOS PKG Files'
+      dependsOn: download_unsigned_pkg
+      jobs:
+      - template: /.azure-pipelines/templates/sign-macos-pkg.yml@self
+        parameters:
+          architecture: 'arm64'
+          version: $(AzureCliVersion)
+
+      - template: /.azure-pipelines/templates/sign-macos-pkg.yml@self
+        parameters:
+          architecture: 'x86_64'
+          version: $(AzureCliVersion)
+
+    - stage: publish_signed_pkg
+      displayName: 'Publish Signed PKG Files'
+      dependsOn: sign_macos_pkg
+      condition: succeeded()
+      jobs:
+      - job: collect_and_publish
+        displayName: 'Collect signed PKGs and publish'
+        pool:
+          type: windows
+        
+        variables:
+          - name: ob_outputDirectory
+            value: '$(Build.ArtifactStagingDirectory)/ONEBRANCH_ARTIFACT'
+          - name: ob_sdl_sbom_enabled
+            value: false
+          - name: ob_signing_setup_enabled
+            value: false
+
+        steps:
+        - checkout: none
+
+        - download: current
+          artifact: drop_sign_macos_pkg_arm64
+          displayName: 'Download signed ARM64 PKG'
+
+        - download: current
+          artifact: drop_sign_macos_pkg_x86_64
+          displayName: 'Download signed x86_64 PKG'
+
+        - pwsh: |
+            Write-Host "=== Collecting Signed PKG Files ==="
+            
+            $signedDir = "$(ob_outputDirectory)/signed-pkgs"
+            $null = New-Item -ItemType Directory -Path $signedDir -Force
+            
+            # Find all signed PKG files
+            $signedPkgs = Get-ChildItem "$(Pipeline.Workspace)" -Recurse -Filter "azure-cli-*.pkg" | 
+              Where-Object { $_.Directory.Name -match "drop_sign" }
+            
+            Write-Host "Found $($signedPkgs.Count) signed PKG files:"
+            
+            foreach ($pkg in $signedPkgs) {
+              $destPath = Join-Path $signedDir $pkg.Name
+              Copy-Item $pkg.FullName -Destination $destPath -Verbose
+              
+              # Generate SHA256
+              $hash = Get-FileHash -Path $destPath -Algorithm SHA256
+              $hashFile = "$destPath.sha256"
+              "$($hash.Hash)  $($pkg.Name)" | Out-File -FilePath $hashFile -Encoding ASCII
+              
+              Write-Host "✅ $($pkg.Name)"
+              Write-Host "   Size: $([math]::Round($pkg.Length / 1MB, 2)) MB"
+              Write-Host "   SHA256: $($hash.Hash)"
+            }
+            
+            Write-Host ""
+            Write-Host "=== Final Artifacts ==="
+            Get-ChildItem $signedDir | ForEach-Object {
+              Write-Host "$($_.Name) - $([math]::Round($_.Length / 1MB, 2)) MB"
+            }
+          displayName: 'Collect signed PKGs and generate checksums'
+
+        - ${{ if eq(parameters.UploadToGitHub, true) }}:
+          - pwsh: |
+              Write-Host "=== Uploading Signed PKGs to GitHub Release ==="
+              Write-Host "Release Tag: $(GitHubReleaseTag)"
+              Write-Host "Repository: $(GitHubRepo)"
+              
+              $apiUrl = "https://api.github.com/repos/$(GitHubRepo)/releases/tags/$(GitHubReleaseTag)"
+              
+              $headers = @{
+                'Accept' = 'application/vnd.github+json'
+                'Authorization' = "Bearer $env:GITHUB_TOKEN"
+                'User-Agent' = 'AzureDevOps-Pipeline'
+              }
+              
+              # Get release to get upload URL
+              $release = Invoke-RestMethod -Uri $apiUrl -Headers $headers -Method Get
+              $uploadUrlTemplate = $release.upload_url -replace '\{.*\}', ''
+              
+              Write-Host "Upload URL: $uploadUrlTemplate"
+              
+              $signedDir = "$(ob_outputDirectory)/signed-pkgs"
+              $files = Get-ChildItem $signedDir -Filter "azure-cli-*-signed.*"
+              
+              foreach ($file in $files) {
+                $uploadUrl = "$uploadUrlTemplate?name=$($file.Name)"
+                Write-Host ""
+                Write-Host "Uploading: $($file.Name)"
+                
+                $uploadHeaders = $headers.Clone()
+                $uploadHeaders['Content-Type'] = 'application/octet-stream'
+                
+                try {
+                  Invoke-RestMethod -Uri $uploadUrl -Headers $uploadHeaders -Method Post -InFile $file.FullName
+                  Write-Host "✅ Uploaded successfully"
+                } catch {
+                  Write-Warning "⚠️  Upload failed: $_"
+                  # Continue with other files
+                }
+              }
+              
+              Write-Host ""
+              Write-Host "=== Upload Complete ==="
+            displayName: 'Upload signed PKGs to GitHub release'
+            env:
+              GITHUB_TOKEN: $(GITHUB_PAT)
+            condition: and(succeeded(), eq('${{ parameters.UploadToGitHub }}', 'true'))
+
+        - publish: $(ob_outputDirectory)/signed-pkgs
+          artifact: signed-macos-pkg
+          displayName: 'Publish final signed artifacts'

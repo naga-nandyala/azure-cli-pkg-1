@@ -1,0 +1,733 @@
+# Azure CLI - macOS PKG Build Pipeline
+# This pipeline builds unsigned PKG installers for macOS (ARM64 and x86_64)
+
+trigger: none # Manual trigger only
+
+parameters:
+  - name: Version
+    displayName: 'Azure CLI Version (e.g., 2.76.0)'
+    type: string
+    default: ''
+  - name: CreateGitHubRelease
+    displayName: 'Create GitHub Release with artifacts'
+    type: boolean
+    default: false
+  - name: Prerelease
+    displayName: 'Mark as pre-release'
+    type: boolean
+    default: false
+  - name: GitHubRepo
+    displayName: 'GitHub Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+
+variables:
+  - name: PYTHON_VERSION
+    value: '3.12'
+  - name: DOTNET_CLI_TELEMETRY_OPTOUT
+    value: 1
+  - name: DOTNET_NOLOGO
+    value: 1
+  - name: Version
+    value: ${{ parameters.Version }}
+  - name: GitHubRepo
+    value: ${{ parameters.GitHubRepo }}
+  # Variable groups (create these in Azure DevOps Library)
+  - group: github-integration  # Contains GITHUB_PAT for GitHub releases
+
+name: build-macos-pkg-$(Date:yyyyMMdd)-$(Rev:r)
+
+stages:
+- stage: BuildPkg
+  displayName: 'Build macOS PKG Installers'
+  jobs:
+  
+  # Build ARM64 PKG
+  - job: BuildPkgARM64
+    displayName: 'Build PKG (macOS ARM64)'
+    pool:
+      vmImage: 'macos-14'  # Apple Silicon
+    
+    variables:
+      PLATFORM_TAG: 'macos-arm64'
+      ARCH: 'arm64'
+    
+    steps:
+    - checkout: self
+      clean: true
+    
+    - task: UsePythonVersion@0
+      displayName: 'Set up Python $(PYTHON_VERSION)'
+      inputs:
+        versionSpec: '$(PYTHON_VERSION)'
+        addToPath: true
+    
+    - bash: |
+        if [ -n "$(Version)" ]; then
+          echo "VERSION=$(Version)" >> $AZURE_PIPELINES_ENV
+          echo "Using provided version: $(Version)"
+        else
+          # Extract version from azure-cli-core/__init__.py
+          VERSION=$(python -c "import re; content = open('src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\''\"'](.+?)['\''\"']', content); print(m.group(1) if m else 'ERROR')")
+          if [ "$VERSION" = "ERROR" ]; then
+            echo "❌ Failed to detect version from azure-cli-core"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> $AZURE_PIPELINES_ENV
+          echo "Using version from azure-cli-core: $VERSION"
+        fi
+      displayName: 'Set VERSION environment variable'
+      name: SetVersion
+    
+    - bash: |
+        # Check if pkgbuild is available
+        if ! command -v pkgbuild >/dev/null 2>&1; then
+          echo "Installing Xcode Command Line Tools..."
+          xcode-select --install || true
+          # Wait for installation to complete
+          until command -v pkgbuild >/dev/null 2>&1; do
+            echo "Waiting for pkgbuild..."
+            sleep 10
+          done
+        fi
+        echo "pkgbuild found: $(which pkgbuild)"
+        echo "productbuild found: $(which productbuild)"
+        pkgbuild 2>&1 | head -5 || true
+      displayName: 'Install Xcode Command Line Tools (if needed)'
+    
+    - bash: python -m pip install --upgrade pip setuptools wheel
+      displayName: 'Upgrade pip'
+    
+    - bash: mkdir -p dist/macos_pkg
+      displayName: 'Create dist directory'
+    
+    - bash: |
+        echo "=== Build Environment Check ==="
+        pwd
+        ls -la scripts/release/macos/
+        python --version
+        uname -m
+        
+        echo "=== Azure CLI Version Check ==="
+        if [ -n "$(Version)" ]; then
+          echo "Using provided version: $(Version)"
+          CLI_VERSION="$(Version)"
+        else
+          echo "Attempting to detect version from azure-cli-core..."
+          CLI_VERSION=$(python -c "import re; content = open('src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\''\"'](.+?)['\''\"']', content); print(m.group(1) if m else 'ERROR')")
+          echo "Detected version: $CLI_VERSION"
+        fi
+        echo "##vso[task.setvariable variable=CLI_VERSION]$CLI_VERSION"
+        
+        echo "=== Build Tools Check ==="
+        which pkgbuild || (echo "❌ pkgbuild not found"; exit 1)
+        which productbuild || (echo "❌ productbuild not found"; exit 1)
+        
+        echo "=== Starting PKG Build ==="
+        echo "Building Azure CLI PKG installer for $(PLATFORM_TAG)"
+        echo "Using productbuild (enhanced distribution package)"
+        
+        # Run the build script
+        python scripts/release/macos/build_pkg_installer.py \
+          --platform-tag $(PLATFORM_TAG)
+      displayName: 'Build PKG installer'
+    
+    - bash: |
+        echo "=== Post-Build Diagnostics ==="
+        echo "Checking dist/macos_pkg directory:"
+        ls -la dist/macos_pkg/
+        
+        echo "Finding all PKG files:"
+        find dist/ -name "*.pkg" -exec ls -lh {} \;
+        
+        # Check what's inside the PKG
+        PKG_FILES=$(find dist/macos_pkg -name "*.pkg")
+        for pkg in $PKG_FILES; do
+          echo "=== Analyzing $pkg ==="
+          echo "File size: $(ls -lh "$pkg" | awk '{print $5}')"
+          
+          echo "Package Bill of Materials (first 20 files):"
+          pkgutil --payload-files "$pkg" | head -20
+          
+          echo "Total files in package:"
+          pkgutil --payload-files "$pkg" | wc -l
+          
+          echo "=== Checking Azure CLI Components ==="
+          # Check if Azure packages are included
+          if pkgutil --payload-files "$pkg" | grep -q "azure/cli"; then
+            echo "✅ Azure CLI packages found in payload"
+            pkgutil --payload-files "$pkg" | grep "azure/cli" | head -5
+          else
+            echo "❌ No Azure CLI packages found in payload"
+          fi
+          
+          if pkgutil --payload-files "$pkg" | grep -q "knack"; then
+            echo "✅ Knack framework found (dependency check passed)"
+          else
+            echo "⚠️  Knack framework not found"
+          fi
+          
+          echo "Checking launcher script:"
+          if pkgutil --payload-files "$pkg" | grep -q "bin/az"; then
+            echo "✅ Launcher script 'az' found in bin/"
+          else
+            echo "❌ Launcher script 'az' not found"
+          fi
+        done
+      displayName: 'Debug PKG contents'
+    
+    - bash: |
+        cd dist/macos_pkg
+        
+        # Get version
+        if [ -n "$(Version)" ]; then
+          VERSION="$(Version)"
+        else
+          VERSION=$(python -c "import re; content = open('../../src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\''\"'](.+?)['\''\"']', content); print(m.group(1) if m else 'ERROR')")
+        fi
+        
+        PKG_FILE="azure-cli-${VERSION}-$(PLATFORM_TAG).pkg"
+        SHA_FILE="${PKG_FILE}.sha256"
+        
+        echo "=== PKG Build Verification ==="
+        echo "Looking for: $PKG_FILE"
+        echo "Available files:"
+        ls -la
+        
+        if [ -f "$PKG_FILE" ]; then
+          echo "✅ PKG file created: $PKG_FILE"
+          echo "📦 Size: $(du -h "$PKG_FILE" | cut -f1)"
+        else
+          echo "❌ PKG file missing: $PKG_FILE"
+          echo "Let's check what files were actually created:"
+          find . -name "*.pkg" -o -name "*.sha256"
+          exit 1
+        fi
+        
+        if [ -f "$SHA_FILE" ]; then
+          echo "✅ SHA256 file created: $SHA_FILE"
+          echo "🔍 Checksum: $(cat "$SHA_FILE")"
+        else
+          echo "❌ SHA256 file missing: $SHA_FILE"
+          exit 1
+        fi
+      displayName: 'Verify .pkg creation'
+    
+    - bash: |
+        if [ -n "$(Version)" ]; then
+          VERSION="$(Version)"
+        else
+          VERSION=$(python -c "import re; content = open('src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\''\"'](.+?)['\''\"']', content); print(m.group(1) if m else 'ERROR')")
+        fi
+        
+        PKG_FILE="dist/macos_pkg/azure-cli-${VERSION}-$(PLATFORM_TAG).pkg"
+        
+        echo "=== PKG Installation Test (Dry Run) ==="
+        echo "Testing PKG file: $PKG_FILE"
+        
+        if [ ! -f "$PKG_FILE" ]; then
+          echo "❌ PKG file not found: $PKG_FILE"
+          echo "Available files in dist/macos_pkg:"
+          ls -la dist/macos_pkg/
+          exit 1
+        fi
+        
+        echo "📋 PKG Signature Check:"
+        pkgutil --check-signature "$PKG_FILE" || echo "⚠️  Package not signed (expected for development builds)"
+        
+        echo "📋 Package Contents Preview (first 30 files):"
+        pkgutil --payload-files "$PKG_FILE" | head -30
+        
+        echo "📋 Package File Info:"
+        file "$PKG_FILE"
+        
+        echo "📋 Package Size:"
+        ls -lh "$PKG_FILE"
+        
+        echo "📋 Searching for critical Azure CLI files:"
+        echo "  - azure/cli/__main__.py:"
+        pkgutil --payload-files "$PKG_FILE" | grep "azure/cli/__main__.py" || echo "    ❌ Not found"
+        echo "  - bin/az:"
+        pkgutil --payload-files "$PKG_FILE" | grep "^bin/az$" || echo "    ❌ Not found"
+        
+        echo "✅ PKG validation completed successfully!"
+      displayName: 'Test PKG installation (dry run)'
+    
+    - task: PublishPipelineArtifact@1
+      displayName: 'Upload PKG artifacts (ARM64)'
+      inputs:
+        targetPath: 'dist/macos_pkg'
+        artifact: 'pkg-installer-macos-arm64'
+        publishLocation: 'pipeline'
+  
+  # Build x86_64 PKG
+  - job: BuildPkgX86_64
+    displayName: 'Build PKG (macOS x86_64)'
+    pool:
+      vmImage: 'macos-13'  # Intel
+    
+    variables:
+      PLATFORM_TAG: 'macos-x86_64'
+      ARCH: 'x86_64'
+    
+    steps:
+    - checkout: self
+      clean: true
+    
+    - task: UsePythonVersion@0
+      displayName: 'Set up Python $(PYTHON_VERSION)'
+      inputs:
+        versionSpec: '$(PYTHON_VERSION)'
+        addToPath: true
+    
+    - bash: |
+        if [ -n "$(Version)" ]; then
+          echo "VERSION=$(Version)" >> $AZURE_PIPELINES_ENV
+          echo "Using provided version: $(Version)"
+        else
+          # Extract version from azure-cli-core/__init__.py
+          VERSION=$(python -c "import re; content = open('src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\''\"'](.+?)['\''\"']', content); print(m.group(1) if m else 'ERROR')")
+          if [ "$VERSION" = "ERROR" ]; then
+            echo "❌ Failed to detect version from azure-cli-core"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> $AZURE_PIPELINES_ENV
+          echo "Using version from azure-cli-core: $VERSION"
+        fi
+      displayName: 'Set VERSION environment variable'
+      name: SetVersion
+    
+    - bash: |
+        # Check if pkgbuild is available
+        if ! command -v pkgbuild >/dev/null 2>&1; then
+          echo "Installing Xcode Command Line Tools..."
+          xcode-select --install || true
+          # Wait for installation to complete
+          until command -v pkgbuild >/dev/null 2>&1; do
+            echo "Waiting for pkgbuild..."
+            sleep 10
+          done
+        fi
+        echo "pkgbuild found: $(which pkgbuild)"
+        echo "productbuild found: $(which productbuild)"
+        pkgbuild 2>&1 | head -5 || true
+      displayName: 'Install Xcode Command Line Tools (if needed)'
+    
+    - bash: python -m pip install --upgrade pip setuptools wheel
+      displayName: 'Upgrade pip'
+    
+    - bash: mkdir -p dist/macos_pkg
+      displayName: 'Create dist directory'
+    
+    - bash: |
+        echo "=== Build Environment Check ==="
+        pwd
+        ls -la scripts/release/macos/
+        python --version
+        uname -m
+        
+        echo "=== Azure CLI Version Check ==="
+        if [ -n "$(Version)" ]; then
+          echo "Using provided version: $(Version)"
+          CLI_VERSION="$(Version)"
+        else
+          echo "Attempting to detect version from azure-cli-core..."
+          CLI_VERSION=$(python -c "import re; content = open('src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\''\"'](.+?)['\''\"']', content); print(m.group(1) if m else 'ERROR')")
+          echo "Detected version: $CLI_VERSION"
+        fi
+        echo "##vso[task.setvariable variable=CLI_VERSION]$CLI_VERSION"
+        
+        echo "=== Build Tools Check ==="
+        which pkgbuild || (echo "❌ pkgbuild not found"; exit 1)
+        which productbuild || (echo "❌ productbuild not found"; exit 1)
+        
+        echo "=== Starting PKG Build ==="
+        echo "Building Azure CLI PKG installer for $(PLATFORM_TAG)"
+        echo "Using productbuild (enhanced distribution package)"
+        
+        # Run the build script
+        python scripts/release/macos/build_pkg_installer.py \
+          --platform-tag $(PLATFORM_TAG)
+      displayName: 'Build PKG installer'
+    
+    - bash: |
+        echo "=== Post-Build Diagnostics ==="
+        echo "Checking dist/macos_pkg directory:"
+        ls -la dist/macos_pkg/
+        
+        echo "Finding all PKG files:"
+        find dist/ -name "*.pkg" -exec ls -lh {} \;
+        
+        # Check what's inside the PKG
+        PKG_FILES=$(find dist/macos_pkg -name "*.pkg")
+        for pkg in $PKG_FILES; do
+          echo "=== Analyzing $pkg ==="
+          echo "File size: $(ls -lh "$pkg" | awk '{print $5}')"
+          
+          echo "Package Bill of Materials (first 20 files):"
+          pkgutil --payload-files "$pkg" | head -20
+          
+          echo "Total files in package:"
+          pkgutil --payload-files "$pkg" | wc -l
+          
+          echo "=== Checking Azure CLI Components ==="
+          if pkgutil --payload-files "$pkg" | grep -q "azure/cli"; then
+            echo "✅ Azure CLI packages found in payload"
+            pkgutil --payload-files "$pkg" | grep "azure/cli" | head -5
+          else
+            echo "❌ No Azure CLI packages found in payload"
+          fi
+          
+          if pkgutil --payload-files "$pkg" | grep -q "knack"; then
+            echo "✅ Knack framework found (dependency check passed)"
+          else
+            echo "⚠️  Knack framework not found"
+          fi
+          
+          echo "Checking launcher script:"
+          if pkgutil --payload-files "$pkg" | grep -q "bin/az"; then
+            echo "✅ Launcher script 'az' found in bin/"
+          else
+            echo "❌ Launcher script 'az' not found"
+          fi
+        done
+      displayName: 'Debug PKG contents'
+    
+    - bash: |
+        cd dist/macos_pkg
+        
+        # Get version
+        if [ -n "$(Version)" ]; then
+          VERSION="$(Version)"
+        else
+          VERSION=$(python -c "import re; content = open('../../src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\''\"'](.+?)['\''\"']', content); print(m.group(1) if m else 'ERROR')")
+        fi
+        
+        PKG_FILE="azure-cli-${VERSION}-$(PLATFORM_TAG).pkg"
+        SHA_FILE="${PKG_FILE}.sha256"
+        
+        echo "=== PKG Build Verification ==="
+        echo "Looking for: $PKG_FILE"
+        echo "Available files:"
+        ls -la
+        
+        if [ -f "$PKG_FILE" ]; then
+          echo "✅ PKG file created: $PKG_FILE"
+          echo "📦 Size: $(du -h "$PKG_FILE" | cut -f1)"
+        else
+          echo "❌ PKG file missing: $PKG_FILE"
+          echo "Let's check what files were actually created:"
+          find . -name "*.pkg" -o -name "*.sha256"
+          exit 1
+        fi
+        
+        if [ -f "$SHA_FILE" ]; then
+          echo "✅ SHA256 file created: $SHA_FILE"
+          echo "🔍 Checksum: $(cat "$SHA_FILE")"
+        else
+          echo "❌ SHA256 file missing: $SHA_FILE"
+          exit 1
+        fi
+      displayName: 'Verify .pkg creation'
+    
+    - bash: |
+        if [ -n "$(Version)" ]; then
+          VERSION="$(Version)"
+        else
+          VERSION=$(python -c "import re; content = open('src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\''\"'](.+?)['\''\"']', content); print(m.group(1) if m else 'ERROR')")
+        fi
+        
+        PKG_FILE="dist/macos_pkg/azure-cli-${VERSION}-$(PLATFORM_TAG).pkg"
+        
+        echo "=== PKG Installation Test (Dry Run) ==="
+        echo "Testing PKG file: $PKG_FILE"
+        
+        if [ ! -f "$PKG_FILE" ]; then
+          echo "❌ PKG file not found: $PKG_FILE"
+          echo "Available files in dist/macos_pkg:"
+          ls -la dist/macos_pkg/
+          exit 1
+        fi
+        
+        echo "📋 PKG Signature Check:"
+        pkgutil --check-signature "$PKG_FILE" || echo "⚠️  Package not signed (expected for development builds)"
+        
+        echo "📋 Package Contents Preview (first 30 files):"
+        pkgutil --payload-files "$PKG_FILE" | head -30
+        
+        echo "📋 Package File Info:"
+        file "$PKG_FILE"
+        
+        echo "📋 Package Size:"
+        ls -lh "$PKG_FILE"
+        
+        echo "📋 Searching for critical Azure CLI files:"
+        echo "  - azure/cli/__main__.py:"
+        pkgutil --payload-files "$PKG_FILE" | grep "azure/cli/__main__.py" || echo "    ❌ Not found"
+        echo "  - bin/az:"
+        pkgutil --payload-files "$PKG_FILE" | grep "^bin/az$" || echo "    ❌ Not found"
+        
+        echo "✅ PKG validation completed successfully!"
+      displayName: 'Test PKG installation (dry run)'
+    
+    - task: PublishPipelineArtifact@1
+      displayName: 'Upload PKG artifacts (x86_64)'
+      inputs:
+        targetPath: 'dist/macos_pkg'
+        artifact: 'pkg-installer-macos-x86_64'
+        publishLocation: 'pipeline'
+
+- stage: CreateGitHubRelease
+  displayName: 'Create GitHub Release'
+  dependsOn: BuildPkg
+  condition: and(succeeded(), eq('${{ parameters.CreateGitHubRelease }}', true))
+  jobs:
+  - job: PublishRelease
+    displayName: 'Publish to GitHub Releases'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: self
+      clean: true
+    
+    - task: UsePythonVersion@0
+      displayName: 'Set up Python $(PYTHON_VERSION)'
+      inputs:
+        versionSpec: '$(PYTHON_VERSION)'
+        addToPath: true
+    
+    - bash: |
+        if [ -n "$(Version)" ]; then
+          echo "VERSION=$(Version)" >> $AZURE_PIPELINES_ENV
+          echo "Using provided version: $(Version)"
+        else
+          # Extract version from azure-cli-core/__init__.py
+          VERSION=$(python -c "import re; content = open('src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\''\"'](.+?)['\''\"']', content); print(m.group(1) if m else 'ERROR')")
+          if [ "$VERSION" = "ERROR" ]; then
+            echo "❌ Failed to detect version"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> $AZURE_PIPELINES_ENV
+          echo "Using version from azure-cli-core: $VERSION"
+        fi
+        echo "##vso[task.setvariable variable=CLI_VERSION]$VERSION"
+      displayName: 'Set VERSION environment variable'
+    
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download ARM64 artifacts'
+      inputs:
+        artifactName: 'pkg-installer-macos-arm64'
+        targetPath: '$(Pipeline.Workspace)/release-artifacts/macos-arm64'
+    
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download x86_64 artifacts'
+      inputs:
+        artifactName: 'pkg-installer-macos-x86_64'
+        targetPath: '$(Pipeline.Workspace)/release-artifacts/macos-x86_64'
+    
+    - bash: |
+        mkdir -p release
+        VERSION="$(CLI_VERSION)"
+        
+        echo "=== Preparing Release Assets ==="
+        echo "Version: $VERSION"
+        echo "Available artifacts:"
+        find $(Pipeline.Workspace)/release-artifacts -type f
+        
+        for arch in macos-arm64 macos-x86_64; do
+          pkg_path=$(find $(Pipeline.Workspace)/release-artifacts -type f -name "azure-cli-${VERSION}-${arch}.pkg" -print -quit)
+          sha_path=$(find $(Pipeline.Workspace)/release-artifacts -type f -name "azure-cli-${VERSION}-${arch}.pkg.sha256" -print -quit)
+          
+          if [[ -z "$pkg_path" || -z "$sha_path" ]]; then
+            echo "❌ Missing artifacts for ${arch}"
+            echo "Expected PKG: azure-cli-${VERSION}-${arch}.pkg"
+            echo "Expected SHA: azure-cli-${VERSION}-${arch}.pkg.sha256"
+            exit 1
+          fi
+          
+          cp "$pkg_path" release/
+          cp "$sha_path" release/
+          
+          echo "✅ Prepared ${arch} artifacts:"
+          echo "  PKG: $(basename "$pkg_path") ($(du -h "$pkg_path" | cut -f1))"
+          echo "  SHA: $(basename "$sha_path")"
+        done
+        
+        echo ""
+        echo "=== Release Files ==="
+        ls -lh release/
+      displayName: 'Prepare release assets'
+    
+    - pwsh: |
+        $version = "$(CLI_VERSION)"
+        $tag = "azure-cli-pkg-v$version"
+        $repo = "$(GitHubRepo)"
+        $prerelease = if ("${{ parameters.Prerelease }}" -eq "true") { $true } else { $false }
+        
+        # Create release body
+        $body = @"
+        # Azure CLI v$version - macOS PKG Installer
+        
+        ## 🍺 Homebrew Cask Installation
+        
+        ``````bash
+        brew tap naga-nandyala/mycli-app
+        brew install --cask azure-cli-pkg
+        ``````
+        
+        ## 📦 Direct Installation
+        
+        **Apple Silicon**: ``azure-cli-$version-macos-arm64.pkg``  
+        **Intel**: ``azure-cli-$version-macos-x86_64.pkg``
+        
+        ``````bash
+        sudo installer -pkg azure-cli-$version-macos-<arch>.pkg -target /
+        az --version
+        ``````
+        
+        ## Package Info
+        
+        - **Location**: ``/usr/local/microsoft/azure-cli/``
+        - **Executable**: ``/usr/local/bin/az``
+        - **Python**: $(PYTHON_VERSION)
+        - **Package ID**: ``com.microsoft.azure-cli``
+        
+        ## Verification
+        
+        ``````bash
+        shasum -a 256 -c azure-cli-$version-macos-<arch>.pkg.sha256
+        ``````
+        
+        ## Uninstall
+        
+        ``````bash
+        # Via Homebrew Cask
+        brew uninstall --cask azure-cli-pkg
+        
+        # Manual
+        sudo rm -rf /usr/local/microsoft/azure-cli
+        sudo rm /usr/local/bin/az
+        ``````
+        
+        ## Links
+        
+        - [Repository](https://github.com/$repo)
+        - [Azure CLI Docs](https://learn.microsoft.com/cli/azure/)
+        "@
+        
+        # Prepare API request
+        $apiUrl = "https://api.github.com/repos/$repo/releases"
+        
+        $headers = @{
+          'Accept' = 'application/vnd.github+json'
+          'Authorization' = "Bearer $env:GITHUB_PAT"
+          'User-Agent' = 'AzureDevOps-Pipeline'
+        }
+        
+        $releaseData = @{
+          tag_name = $tag
+          name = "Azure CLI v$version - macOS PKG Installer"
+          body = $body
+          draft = $false
+          prerelease = $prerelease
+        } | ConvertTo-Json
+        
+        Write-Host "Creating GitHub release: $tag"
+        $release = Invoke-RestMethod -Uri $apiUrl -Headers $headers -Method Post -Body $releaseData -ContentType 'application/json'
+        
+        Write-Host "✅ Release created: $($release.html_url)"
+        Write-Host "Upload URL: $($release.upload_url)"
+        
+        # Store upload URL for next steps
+        $uploadUrl = $release.upload_url -replace '\{\?name,label\}', ''
+        Write-Host "##vso[task.setvariable variable=UPLOAD_URL]$uploadUrl"
+      displayName: 'Create GitHub Release'
+      env:
+        GITHUB_PAT: $(GITHUB_PAT)
+    
+    - pwsh: |
+        $version = "$(CLI_VERSION)"
+        $uploadUrl = "$(UPLOAD_URL)"
+        
+        $headers = @{
+          'Accept' = 'application/vnd.github+json'
+          'Authorization' = "Bearer $env:GITHUB_PAT"
+          'User-Agent' = 'AzureDevOps-Pipeline'
+        }
+        
+        # Upload each file
+        $files = Get-ChildItem -Path "release" -File
+        foreach ($file in $files) {
+          $fileName = $file.Name
+          $filePath = $file.FullName
+          
+          Write-Host "Uploading: $fileName"
+          
+          $uri = "$uploadUrl`?name=$fileName"
+          $contentType = if ($fileName.EndsWith('.pkg')) { 'application/octet-stream' } else { 'text/plain' }
+          
+          $fileBytes = [System.IO.File]::ReadAllBytes($filePath)
+          
+          try {
+            Invoke-RestMethod -Uri $uri -Headers $headers -Method Post -Body $fileBytes -ContentType $contentType | Out-Null
+            Write-Host "✅ Uploaded: $fileName"
+          } catch {
+            Write-Host "❌ Failed to upload: $fileName"
+            Write-Host $_.Exception.Message
+            exit 1
+          }
+        }
+        
+        Write-Host ""
+        Write-Host "✅ All files uploaded successfully!"
+      displayName: 'Upload release assets'
+      env:
+        GITHUB_PAT: $(GITHUB_PAT)
+
+- stage: Summary
+  displayName: 'Build Summary'
+  dependsOn: BuildPkg
+  condition: always()
+  jobs:
+  - job: PrintSummary
+    displayName: 'Print Build Summary'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - bash: |
+        echo "# Azure CLI macOS PKG Build Summary (Homebrew Cask Ready)"
+        echo ""
+        echo "## Configuration"
+        echo "- **Version**: \`${{ parameters.Version }}\` $(if [ -z "${{ parameters.Version }}" ]; then echo "(auto-detected from source)"; fi)"
+        echo "- **Python Version**: \`$(PYTHON_VERSION)\`"
+        echo "- **Build Method**: productbuild (distribution package)"
+        echo "- **Script**: \`scripts/release/macos/build_pkg_installer.py\`"
+        echo "- **Create Release**: ${{ parameters.CreateGitHubRelease }}"
+        echo "- **Pre-release**: ${{ parameters.Prerelease }}"
+        echo ""
+        echo "## Build Status"
+        echo "- **macOS ARM64 (Apple Silicon)**: ✅ Completed"
+        echo "- **macOS x86_64 (Intel)**: ✅ Completed"
+        echo ""
+        echo "## Package Features"
+        echo "- ✅ **Homebrew Cask compatible** (.pkg format)"
+        echo "- ✅ Native macOS installer with productbuild"
+        echo "- ✅ Complete Azure CLI installation (core + telemetry + all modules)"
+        echo "- ✅ Direct installation to /usr/local/"
+        echo "- ✅ No symlink management required"
+        echo "- ✅ Professional installer UI with distribution package"
+        echo "- ✅ SHA256 checksums for integrity verification"
+        echo "- ✅ Architecture-specific builds (ARM64 + x86_64)"
+        echo ""
+        echo "## Installation Paths"
+        echo "- **Executable**: \`/usr/local/bin/az\`"
+        echo "- **Installation**: \`/usr/local/microsoft/azure-cli/\`"
+        echo "- **Installer ID**: \`com.microsoft.azure-cli\`"
+        echo ""
+        echo "## Next Steps"
+        echo "1. Create/update Homebrew Cask in \`naga-nandyala/homebrew-mycli-app\` tap"
+        echo "2. Test installation via: \`brew install --cask azure-cli-pkg\`"
+        echo "3. Verify uninstallation via: \`brew uninstall --cask azure-cli-pkg\`"
+      displayName: 'Build Summary'

@@ -1,0 +1,232 @@
+# Template for signing macOS PKG files
+# Based on PowerShell's mac-package-build.yml signing pattern
+
+parameters:
+  - name: architecture
+    type: string
+    values:
+      - arm64
+      - x86_64
+  - name: version
+    type: string
+
+jobs:
+- job: sign_macos_pkg_${{ parameters.architecture }}
+  displayName: 'Sign macOS PKG (${{ parameters.architecture }})'
+  pool:
+    type: windows  # OneBranch signing must happen on Windows
+  
+  variables:
+    - name: ob_outputDirectory
+      value: '$(Build.ArtifactStagingDirectory)/ONEBRANCH_ARTIFACT'
+    - name: ob_sdl_binskim_enabled
+      value: false  # PKG files don't need BinSkim analysis
+    - name: ob_sdl_codeSignValidation_enabled
+      value: true  # Enable signature validation after signing
+    - name: ob_sdl_sbom_enabled
+      value: true
+    - name: ob_sdl_sbom_packageName
+      value: 'Microsoft.AzureCLI.macOS.${{ parameters.architecture }}'
+    - name: Architecture
+      value: ${{ parameters.architecture }}
+    - name: Version
+      value: ${{ parameters.version }}
+
+  steps:
+  - checkout: none  # No source code needed for signing
+
+  - download: current
+    artifact: unsigned-pkg-files
+    displayName: 'Download unsigned PKG from previous stage'
+
+  - pwsh: |
+      Get-ChildItem -Path env: | Out-String -Width 9999 -Stream | Write-Verbose -Verbose
+    displayName: 'Capture environment variables'
+
+  - pwsh: |
+      Write-Host "=== Preparing PKG for Signing ==="
+      Write-Host "Architecture: ${{ parameters.architecture }}"
+      Write-Host "Version: ${{ parameters.version }}"
+      
+      $pkgName = "azure-cli-${{ parameters.version }}-macos-${{ parameters.architecture }}.pkg"
+      $unsignedPath = "$(Pipeline.Workspace)/unsigned-pkg-files/$pkgName"
+      
+      if (-not (Test-Path $unsignedPath)) {
+        Write-Error "❌ Unsigned PKG not found: $unsignedPath"
+        Write-Host "Available files:"
+        Get-ChildItem "$(Pipeline.Workspace)/unsigned-pkg-files" | ForEach-Object {
+          Write-Host "  - $($_.Name)"
+        }
+        exit 1
+      }
+      
+      Write-Host "✅ Found unsigned PKG: $pkgName"
+      Write-Host "   Size: $([math]::Round((Get-Item $unsignedPath).Length / 1MB, 2)) MB"
+      
+      # Create directory for signing
+      $signingDir = "$(Pipeline.Workspace)/to-be-signed"
+      $null = New-Item -ItemType Directory -Path $signingDir -Force
+      
+      # OneBranch signing requires files to be in a ZIP archive for macOS packages
+      # This follows the pattern from PowerShell's mac-package-build.yml
+      $zipName = "azure-cli-${{ parameters.version }}-macos-${{ parameters.architecture }}.zip"
+      $zipPath = Join-Path $signingDir $zipName
+      
+      Write-Host ""
+      Write-Host "Creating ZIP archive for signing..."
+      Write-Host "  Source: $unsignedPath"
+      Write-Host "  Archive: $zipPath"
+      
+      Compress-Archive -Path $unsignedPath -DestinationPath $zipPath -CompressionLevel Optimal -Force
+      
+      if (Test-Path $zipPath) {
+        Write-Host "✅ ZIP archive created: $([math]::Round((Get-Item $zipPath).Length / 1MB, 2)) MB"
+      } else {
+        Write-Error "❌ Failed to create ZIP archive"
+        exit 1
+      }
+      
+      Write-Host ""
+      Write-Host "=== Files Ready for Signing ==="
+      Get-ChildItem $signingDir | ForEach-Object {
+        Write-Host "$($_.Name) - $([math]::Round($_.Length / 1MB, 2)) MB"
+      }
+    displayName: 'Prepare PKG file for signing (compress to ZIP)'
+
+  - task: onebranch.pipeline.signing@1
+    displayName: 'Sign macOS PKG using OneBranch'
+    inputs:
+      command: 'sign'
+      files_to_sign: '**/*-macos-${{ parameters.architecture }}.zip'
+      search_root: '$(Pipeline.Workspace)/to-be-signed'
+      inline_operation: |
+        [
+          {
+            "KeyCode": "$(KeyCode)",
+            "OperationCode": "MacAppDeveloperSign",
+            "ToolName": "sign",
+            "ToolVersion": "1.0",
+            "Parameters": {
+              "Hardening": "Enable",
+              "OpusInfo": "http://www.microsoft.com"
+            }
+          }
+        ]
+
+  - pwsh: |
+      Write-Host "=== Extracting Signed PKG ==="
+      
+      $signedZipPattern = "azure-cli-${{ parameters.version }}-macos-${{ parameters.architecture }}.zip"
+      $signedZip = Get-ChildItem -Path "$(Pipeline.Workspace)/to-be-signed" -Filter $signedZipPattern -File | Select-Object -First 1
+      
+      if (-not $signedZip) {
+        Write-Error "❌ Signed ZIP not found: $signedZipPattern"
+        Write-Host "Available files:"
+        Get-ChildItem "$(Pipeline.Workspace)/to-be-signed" | ForEach-Object {
+          Write-Host "  - $($_.Name)"
+        }
+        exit 1
+      }
+      
+      Write-Host "Found signed ZIP: $($signedZip.Name)"
+      Write-Host "Size: $([math]::Round($signedZip.Length / 1MB, 2)) MB"
+      
+      # Create output directory
+      if (-not (Test-Path $(ob_outputDirectory))) {
+        $null = New-Item -ItemType Directory -Path $(ob_outputDirectory) -Force
+      }
+      
+      # Extract the signed PKG
+      Write-Host ""
+      Write-Host "Extracting signed PKG..."
+      Expand-Archive -Path $signedZip.FullName -DestinationPath $(ob_outputDirectory) -Force
+      
+      # Verify extraction
+      $signedPkg = Get-ChildItem -Path $(ob_outputDirectory) -Filter "azure-cli-*.pkg" -File
+      
+      if ($signedPkg) {
+        Write-Host "✅ Signed PKG extracted successfully"
+        Write-Host "   Name: $($signedPkg.Name)"
+        Write-Host "   Size: $([math]::Round($signedPkg.Length / 1MB, 2)) MB"
+        
+        # Rename to indicate it's signed
+        $signedName = $signedPkg.Name -replace '\.pkg$', '-signed.pkg'
+        $newPath = Join-Path $(ob_outputDirectory) $signedName
+        Move-Item $signedPkg.FullName -Destination $newPath -Force
+        
+        Write-Host "   Renamed to: $signedName"
+      } else {
+        Write-Error "❌ No PKG file found after extraction"
+        exit 1
+      }
+      
+      Write-Host ""
+      Write-Host "=== Signed PKG Ready ==="
+      Get-ChildItem $(ob_outputDirectory) -Filter "*.pkg" | ForEach-Object {
+        Write-Host "✅ $($_.Name) - $([math]::Round($_.Length / 1MB, 2)) MB"
+      }
+    displayName: 'Extract signed PKG from ZIP'
+
+  - pwsh: |
+      Write-Host "=== Generating Checksums ==="
+      
+      $signedPkg = Get-ChildItem -Path $(ob_outputDirectory) -Filter "*-signed.pkg" -File | Select-Object -First 1
+      
+      if ($signedPkg) {
+        # Generate SHA256
+        $hash = Get-FileHash -Path $signedPkg.FullName -Algorithm SHA256
+        $hashFile = "$($signedPkg.FullName).sha256"
+        
+        # Format: <hash>  <filename> (compatible with shasum -c)
+        $hashContent = "$($hash.Hash.ToLower())  $($signedPkg.Name)"
+        $hashContent | Out-File -FilePath $hashFile -Encoding ASCII -NoNewline
+        
+        Write-Host "✅ SHA256 checksum generated"
+        Write-Host "   File: $($signedPkg.Name).sha256"
+        Write-Host "   Hash: $($hash.Hash)"
+        
+        # Also create a verification report
+        $reportPath = Join-Path $(ob_outputDirectory) "signing-report-${{ parameters.architecture }}.txt"
+        $reportContent = @"
+Azure CLI macOS PKG Signing Report
+====================================
+
+Package: $($signedPkg.Name)
+Architecture: ${{ parameters.architecture }}
+Version: ${{ parameters.version }}
+Size: $([math]::Round($signedPkg.Length / 1MB, 2)) MB
+SHA256: $($hash.Hash)
+Signed: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')
+Build ID: $(Build.BuildId)
+Pipeline: $(Build.DefinitionName)
+
+Signing Method: OneBranch MacAppDeveloperSign
+Hardening: Enabled
+Operation Code: MacAppDeveloperSign
+
+Verification Commands (run on macOS):
+------------------------------------
+shasum -a 256 -c $($signedPkg.Name).sha256
+pkgutil --check-signature $($signedPkg.Name)
+spctl --assess --type install $($signedPkg.Name)
+stapler validate $($signedPkg.Name)
+"@
+        $reportContent | Out-File -FilePath $reportPath -Encoding UTF8
+        
+        Write-Host ""
+        Write-Host "✅ Signing report created: signing-report-${{ parameters.architecture }}.txt"
+      } else {
+        Write-Error "❌ Signed PKG not found for checksum generation"
+        exit 1
+      }
+    displayName: 'Generate SHA256 checksum and signing report'
+
+  - pwsh: |
+      Write-Host "=== Final Artifacts for ${{ parameters.architecture }} ==="
+      Get-ChildItem $(ob_outputDirectory) | ForEach-Object {
+        Write-Host "$($_.Name)"
+        if ($_.Extension -eq '.pkg') {
+          Write-Host "  Size: $([math]::Round($_.Length / 1MB, 2)) MB"
+        }
+      }
+    displayName: 'List final artifacts'
