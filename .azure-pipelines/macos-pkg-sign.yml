@@ -287,7 +287,11 @@ stages:
         echo "- **Version**: $(AzureCliVersion)"
         echo ""
         echo "## Process"
-        echo "- **Signing Method**: ${{ eq(parameters.OfficialBuild, true) && 'OneBranch/ESRP (Official)' || 'Mock Signing (Development)' }}"
+        if [ "${{ parameters.OfficialBuild }}" == "True" ]; then
+          echo "- **Signing Method**: OneBranch/ESRP (Official)"
+        else
+          echo "- **Signing Method**: Mock Signing (Development)"
+        fi
         echo "- **GitHub Upload**: ${{ parameters.UploadToGitHub }}"
         echo ""
         echo "## Next Steps"
