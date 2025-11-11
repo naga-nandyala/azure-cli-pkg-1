@@ -44,12 +44,9 @@ variables:
     value: ${{ parameters.SourceBuildId }}
   - name: SourcePipelineName
     value: ${{ parameters.SourcePipelineName }}
-  # Variable groups (required for ESRP signing when OfficialBuild=true)
-  - ${{ if eq(parameters.OfficialBuild, true) }}:
-    - group: mscodehub-macos-package-signing  # Contains KeyCode for macOS signing
-  # Variable groups (optional - only needed for GitHub upload)
-  - ${{ if eq(parameters.UploadToGitHub, true) }}:
-    - group: github-integration  # Contains GITHUB_PAT
+  # Note: Variable groups are referenced at job level where needed
+  # - mscodehub-macos-package-signing (for ESRP signing when OfficialBuild=true)
+  # - github-integration (for GitHub upload when UploadToGitHub=true)
 
 name: sign-macos-pkg-$(AzureCliVersion)-$(Build.BuildId)
 
@@ -251,13 +248,14 @@ stages:
         inline_operation: |
           [
             {
-              "KeyCode": "$(KeyCode)",
+              "KeyCode": "CP-401337-Apple",
               "OperationCode": "MacAppDeveloperSign",
               "ToolName": "sign",
               "ToolVersion": "1.0",
               "Parameters": {
                 "Hardening": "Enable",
-                "OpusInfo": "http://www.microsoft.com"
+                "OpusInfo": "http://www.microsoft.com",
+                "BundleId": "com.microsoft.azure.cli"
               }
             }
           ]
@@ -500,6 +498,9 @@ stages:
     displayName: 'Create GitHub Release'
     pool:
       vmImage: 'ubuntu-latest'
+    
+    variables:
+      - group: github-integration  # Contains GITHUB_PAT
     
     steps:
     - checkout: none
