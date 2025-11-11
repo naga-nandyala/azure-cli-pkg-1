@@ -17,9 +17,9 @@ parameters:
     type: string
     default: '2.0.0'
   - name: OfficialBuild
-    displayName: 'Official Build (enables OneBranch signing)'
+    displayName: 'Official Build (enables ESRP signing)'
     type: boolean
-    default: false  # Set to true when you have OneBranch setup
+    default: true  # Set to false to use mock signing
   - name: UploadToGitHub
     displayName: 'Upload signed PKGs to GitHub release'
     type: boolean
