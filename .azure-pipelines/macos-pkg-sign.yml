@@ -199,7 +199,6 @@ stages:
         value: true
       - name: ob_sdl_sbom_packageName
         value: 'Microsoft.AzureCLI.macOS.arm64'
-      - group: mscodehub-macos-package-signing
     
     steps:
     - checkout: none
