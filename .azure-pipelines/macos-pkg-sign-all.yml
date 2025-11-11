@@ -243,7 +243,7 @@ stages:
         $fileListPath = "$(Pipeline.Workspace)/files-to-sign.txt"
         $toBeSignedDir = "$(Pipeline.Workspace)/toBeSigned"
         
-        # Create directory for files to be signed
+        # Create directory for files to be signed (FLAT structure for ESRP)
         if (Test-Path $toBeSignedDir) {
           Remove-Item -Path $toBeSignedDir -Recurse -Force
         }
@@ -261,27 +261,32 @@ stages:
         Write-Host "Files to sign: $($filesToSign.Count)"
         
         Write-Host ""
-        Write-Host "Copying files to signing directory..."
+        Write-Host "Copying files to FLAT signing directory..."
+        Write-Host "(ESRP Pattern doesn't support subdirectories, so we flatten)"
         
         $copiedCount = 0
+        $fileMapping = @{}
+        
         foreach ($relPath in $filesToSign) {
           # Remove leading ./
           $relPath = $relPath.TrimStart('.', '/')
           
           $sourcePath = Join-Path $unsignedDir $relPath
-          $targetPath = Join-Path $toBeSignedDir $relPath
           
           if (Test-Path $sourcePath) {
-            $targetDir = Split-Path $targetPath -Parent
-            if (-not (Test-Path $targetDir)) {
-              New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
-            }
+            # Create unique flat filename (replace / with __)
+            $flatName = $relPath -replace '[/\\]', '__'
+            $targetPath = Join-Path $toBeSignedDir $flatName
             
             Copy-Item -Path $sourcePath -Destination $targetPath -Force
+            
+            # Store mapping for later reconstruction
+            $fileMapping[$flatName] = $relPath
+            
             $copiedCount++
             
             if ($copiedCount -le 10) {
-              Write-Host "  ✓ $relPath"
+              Write-Host "  ✓ $relPath -> $flatName"
             }
           } else {
             Write-Warning "File not found: $sourcePath"
@@ -289,11 +294,16 @@ stages:
         }
         
         Write-Host ""
-        Write-Host "✅ Copied $copiedCount files to signing directory"
+        Write-Host "✅ Copied $copiedCount files to flat signing directory"
         Write-Host ""
         Write-Host "Signing directory size: $([math]::Round((Get-ChildItem $toBeSignedDir -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB, 2)) MB"
         
-      displayName: 'Prepare binaries for signing'
+        # Save mapping for reconstruction
+        $mappingPath = "$(Pipeline.Workspace)/file-mapping.json"
+        $fileMapping | ConvertTo-Json | Set-Content $mappingPath
+        Write-Host "File mapping saved: $mappingPath"
+        
+      displayName: 'Prepare binaries for signing (flatten structure)'
     
     - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
       displayName: 'ESRP - Sign macOS binaries'
@@ -305,7 +315,7 @@ stages:
         AuthCertName: '$(ESRPAuthCertName)'
         AuthSignCertName: '$(ESRPSignCertName)'
         FolderPath: '$(Pipeline.Workspace)/toBeSigned'
-        Pattern: '**/*.dylib,**/*.so,**/python,**/python3,**/python3.*,**/az'
+        Pattern: '*.dylib,*.so,python,python3,python3.*,az'
         signConfigType: 'inlineSignParams'
         inlineOperation: |
           [
