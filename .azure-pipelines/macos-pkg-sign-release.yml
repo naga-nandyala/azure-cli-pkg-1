@@ -44,9 +44,6 @@ variables:
     value: ${{ parameters.SourceBuildId }}
   - name: SourcePipelineName
     value: ${{ parameters.SourcePipelineName }}
-  # Note: Variable groups are referenced at job level where needed
-  # - mscodehub-macos-package-signing (for ESRP signing when OfficialBuild=true)
-  # - github-integration (for GitHub upload when UploadToGitHub=true)
 
 name: sign-macos-pkg-$(AzureCliVersion)-$(Build.BuildId)
 
@@ -73,33 +70,14 @@ stages:
         artifactName: 'pkg-installer-macos-arm64'
         targetPath: '$(Pipeline.Workspace)/unsigned-pkg/arm64'
     
-    # COMMENTED OUT - Testing ARM64 only for now
-    # - task: DownloadPipelineArtifact@2
-    #   displayName: 'Download x86_64 PKG'
-    #   inputs:
-    #     buildType: 'specific'
-    #     project: 'public'
-    #     definition: $(SourcePipelineName)
-    #     buildVersionToDownload: 'specific'
-    #     buildId: $(SourceBuildId)
-    #     artifactName: 'pkg-installer-macos-x86_64'
-    #     targetPath: '$(Pipeline.Workspace)/unsigned-pkg/x86_64'
-    
     - bash: |
         echo "=== Downloaded PKG Files ==="
         echo "ARM64 artifacts:"
         ls -lh $(Pipeline.Workspace)/unsigned-pkg/arm64/
         echo ""
-        # COMMENTED OUT - Testing ARM64 only
-        # echo "x86_64 artifacts:"
-        # ls -lh $(Pipeline.Workspace)/unsigned-pkg/x86_64/
-        # echo ""
         
-        # Copy to a single directory for easier handling
         mkdir -p $(Pipeline.Workspace)/unsigned-pkg/all
         cp $(Pipeline.Workspace)/unsigned-pkg/arm64/*.pkg $(Pipeline.Workspace)/unsigned-pkg/all/
-        # COMMENTED OUT - Testing ARM64 only
-        # cp $(Pipeline.Workspace)/unsigned-pkg/x86_64/*.pkg $(Pipeline.Workspace)/unsigned-pkg/all/
         
         echo "=== All PKG Files ==="
         ls -lh $(Pipeline.Workspace)/unsigned-pkg/all/
@@ -170,35 +148,14 @@ stages:
       displayName: 'Publish signed PKG artifacts'
 
 - stage: SignPkgESRP
-  displayName: 'Sign macOS PKG Files (ESRP/OneBranch)'
+  displayName: 'Sign macOS PKG Files (ESRP Service Connection)'
   dependsOn: DownloadUnsignedPkg
   condition: and(succeeded(), eq('${{ parameters.OfficialBuild }}', true))
   jobs:
   - job: SignARM64
     displayName: 'Sign ARM64 PKG with ESRP'
     pool:
-      type: windows
-      isCustom: true
-      name: Azure Pipelines
       vmImage: windows-2022
-    
-    variables:
-      - name: runCodesignValidationInjection
-        value: false
-      - name: NugetSecurityAnalysisWarningLevel
-        value: none
-      - name: skipNugetSecurityAnalysis
-        value: true
-      - name: ob_outputDirectory
-        value: '$(Build.ArtifactStagingDirectory)/ONEBRANCH_ARTIFACT'
-      - name: ob_sdl_binskim_enabled
-        value: true
-      - name: ob_sdl_credscan_enabled
-        value: false
-      - name: ob_sdl_sbom_enabled
-        value: true
-      - name: ob_sdl_sbom_packageName
-        value: 'Microsoft.AzureCLI.macOS.arm64'
     
     steps:
     - checkout: none
@@ -248,13 +205,14 @@ stages:
         Write-Host "ZIP file: $zipName"
       displayName: 'Compress ARM64 PKG for signing'
     
-    - task: onebranch.pipeline.signing@1
+    - task: EsrpCodeSigning@2
       displayName: 'Sign ARM64 PKG using ESRP'
       inputs:
-        command: 'sign'
-        files_to_sign: '**/azure-cli-*-macos-arm64.zip'
-        search_root: '$(Pipeline.Workspace)'
-        inline_operation: |
+        ConnectedServiceName: 'anne_esrp_connection'
+        FolderPath: '$(Pipeline.Workspace)'
+        Pattern: '**/azure-cli-*-macos-arm64.zip'
+        signConfigType: 'inlineSignParams'
+        inlineOperation: |
           [
             {
               "KeyCode": "CP-401337-Apple",
@@ -268,6 +226,9 @@ stages:
               }
             }
           ]
+        SessionTimeout: '60'
+        MaxConcurrency: '50'
+        MaxRetryAttempts: '5'
     
     - pwsh: |
         Write-Host "=== Extracting Signed ARM64 PKG ==="
@@ -287,17 +248,18 @@ stages:
         Write-Host "Size: $([math]::Round($signedZip.Length / 1MB, 2)) MB"
         
         # Create output directory
-        if (-not (Test-Path $(ob_outputDirectory))) {
-          $null = New-Item -ItemType Directory -Path $(ob_outputDirectory) -Force
+        $outputDir = "$(Build.ArtifactStagingDirectory)/signed-pkg"
+        if (-not (Test-Path $outputDir)) {
+          $null = New-Item -ItemType Directory -Path $outputDir -Force
         }
         
         # Extract the signed PKG
         Write-Host ""
         Write-Host "Extracting signed PKG..."
-        Expand-Archive -Path $signedZip.FullName -DestinationPath $(ob_outputDirectory) -Force
+        Expand-Archive -Path $signedZip.FullName -DestinationPath $outputDir -Force
         
         # Verify extraction
-        $signedPkg = Get-ChildItem -Path $(ob_outputDirectory) -Filter "*.pkg" -File | Select-Object -First 1
+        $signedPkg = Get-ChildItem -Path $outputDir -Filter "*.pkg" -File | Select-Object -First 1
         
         if ($signedPkg) {
           Write-Host "✅ Signed PKG extracted successfully"
@@ -306,7 +268,7 @@ stages:
           
           # Rename to indicate it's signed
           $signedName = $signedPkg.Name -replace '\.pkg$', '-signed.pkg'
-          $newPath = Join-Path $(ob_outputDirectory) $signedName
+          $newPath = Join-Path $outputDir $signedName
           Move-Item $signedPkg.FullName -Destination $newPath -Force
           
           Write-Host "   Renamed to: $signedName"
@@ -324,137 +286,19 @@ stages:
         
         Write-Host ""
         Write-Host "=== Signed ARM64 PKG Ready ==="
-        Get-ChildItem $(ob_outputDirectory) | ForEach-Object {
+        Get-ChildItem $outputDir | ForEach-Object {
           Write-Host "✅ $($_.Name) - $([math]::Round($_.Length / 1MB, 2)) MB"
         }
       displayName: 'Extract signed ARM64 PKG'
-  
-  # COMMENTED OUT - Testing ARM64 only for now
-  # - job: SignX64
-  #   displayName: 'Sign x86_64 PKG with ESRP'
-  #   pool:
-  #     type: windows
-  #   
-  #   variables:
-  #     - name: ob_outputDirectory
-  #       value: '$(Build.ArtifactStagingDirectory)/ONEBRANCH_ARTIFACT'
-  #     - name: ob_sdl_binskim_enabled
-  #       value: false
-  #     - name: ob_sdl_credscan_enabled
-  #       value: false
-  #     - name: ob_sdl_sbom_enabled
-  #       value: true
-  #     - name: ob_sdl_sbom_packageName
-  #       value: 'Microsoft.AzureCLI.macOS.x86_64'
-  #   
-  #   steps:
-  #   - checkout: none
-  #   
-  #   - download: current
-  #     artifact: unsigned-pkg-files
-  #     displayName: 'Download unsigned PKGs'
-  #   
-  #   - pwsh: |
-  #       Write-Host "=== Preparing x86_64 PKG for ESRP Signing ==="
-  #       
-  #       $pkgName = "azure-cli-$(AzureCliVersion)-macos-x86_64.pkg"
-  #       $pkgPath = "$(Pipeline.Workspace)/unsigned-pkg-files/$pkgName"
-  #       
-  #       if (-not (Test-Path $pkgPath)) {
-  #         Write-Error "❌ PKG not found: $pkgPath"
-  #         exit 1
-  #       }
-  #       
-  #       Write-Host "✅ Found PKG: $pkgName"
-  #       Write-Host "   Size: $([math]::Round((Get-Item $pkgPath).Length / 1MB, 2)) MB"
-  #       
-  #       $zipName = "azure-cli-$(AzureCliVersion)-macos-x86_64.zip"
-  #       $zipPath = "$(Pipeline.Workspace)/$zipName"
-  #       
-  #       Write-Host ""
-  #       Write-Host "Creating ZIP archive for ESRP signing..."
-  #       Compress-Archive -Path $pkgPath -DestinationPath $zipPath -CompressionLevel Optimal -Force
-  #       
-  #       if (Test-Path $zipPath) {
-  #         Write-Host "✅ ZIP created: $([math]::Round((Get-Item $zipPath).Length / 1MB, 2)) MB"
-  #       } else {
-  #         Write-Error "❌ Failed to create ZIP"
-  #         exit 1
-  #       }
-  #     displayName: 'Compress x86_64 PKG for signing'
-  #   
-  #   - task: onebranch.pipeline.signing@1
-  #     displayName: 'Sign x86_64 PKG using ESRP'
-  #     inputs:
-  #       command: 'sign'
-  #       files_to_sign: '**/azure-cli-*-macos-x86_64.zip'
-  #       search_root: '$(Pipeline.Workspace)'
-  #       inline_operation: |
-  #         [
-  #           {
-  #             "KeyCode": "$(KeyCode)",
-  #             "OperationCode": "MacAppDeveloperSign",
-  #             "ToolName": "sign",
-  #             "ToolVersion": "1.0",
-  #             "Parameters": {
-  #               "Hardening": "Enable",
-  #               "OpusInfo": "http://www.microsoft.com"
-  #             }
-  #           }
-  #         ]
-  #   
-  #   - pwsh: |
-  #       Write-Host "=== Extracting Signed x86_64 PKG ==="
-  #       
-  #       $signedZip = Get-ChildItem -Path "$(Pipeline.Workspace)" -Filter "*x86_64.zip" -File | Select-Object -First 1
-  #       
-  #       if (-not $signedZip) {
-  #         Write-Error "❌ Signed ZIP not found"
-  #         exit 1
-  #       }
-  #       
-  #       Write-Host "Found signed ZIP: $($signedZip.Name)"
-  #       
-  #       if (-not (Test-Path $(ob_outputDirectory))) {
-  #         $null = New-Item -ItemType Directory -Path $(ob_outputDirectory) -Force
-  #       }
-  #       
-  #       Expand-Archive -Path $signedZip.FullName -DestinationPath $(ob_outputDirectory) -Force
-  #       
-  #       $signedPkg = Get-ChildItem -Path $(ob_outputDirectory) -Filter "*.pkg" -File | Select-Object -First 1
-  #       
-  #       if ($signedPkg) {
-  #         Write-Host "✅ Signed PKG extracted successfully"
-  #         
-  #         $signedName = $signedPkg.Name -replace '\.pkg$', '-signed.pkg'
-  #         $newPath = Join-Path $(ob_outputDirectory) $signedName
-  #         Move-Item $signedPkg.FullName -Destination $newPath -Force
-  #         
-  #         # Generate SHA256
-  #         $hash = Get-FileHash -Path $newPath -Algorithm SHA256
-  #         $hashFile = "$newPath.sha256"
-  #         "$($hash.Hash.ToLower())  $signedName" | Out-File -FilePath $hashFile -Encoding ASCII -NoNewline
-  #         
-  #         Write-Host "   Renamed to: $signedName"
-  #         Write-Host "   SHA256: $($hash.Hash)"
-  #       } else {
-  #         Write-Error "❌ No PKG file found after extraction"
-  #         exit 1
-  #       }
-  #       
-  #       Write-Host ""
-  #       Write-Host "=== Signed x86_64 PKG Ready ==="
-  #       Get-ChildItem $(ob_outputDirectory) | ForEach-Object {
-  #         Write-Host "✅ $($_.Name)"
-  #       }
-  #     displayName: 'Extract signed x86_64 PKG'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/signed-pkg
+      artifact: signed-macos-pkg-arm64
+      displayName: 'Publish signed ARM64 PKG'
   
   - job: CollectSignedPkgs
     displayName: 'Collect Signed PKGs'
     dependsOn:
     - SignARM64
-    # COMMENTED OUT - Testing ARM64 only
-    # - SignX64
     pool:
       vmImage: 'ubuntu-latest'
     
@@ -462,13 +306,8 @@ stages:
     - checkout: none
     
     - download: current
-      artifact: drop_SignPkgESRP_SignARM64
+      artifact: signed-macos-pkg-arm64
       displayName: 'Download signed ARM64 PKG'
-    
-    # COMMENTED OUT - Testing ARM64 only
-    # - download: current
-    #   artifact: drop_SignPkgESRP_SignX64
-    #   displayName: 'Download signed x86_64 PKG'
     
     - bash: |
         echo "=== Collecting Signed PKG Files ==="
@@ -476,15 +315,8 @@ stages:
         SIGNED_DIR="$(Build.ArtifactStagingDirectory)/signed-pkg"
         mkdir -p "$SIGNED_DIR"
         
-        echo "Searching for signed PKGs in:"
-        echo "$(Pipeline.Workspace)"
-        
-        # Find all signed PKG files
-        find "$(Pipeline.Workspace)" -name "*-signed.pkg" -o -name "*-signed.pkg.sha256" | while read file; do
-          filename=$(basename "$file")
-          echo "Copying: $filename"
-          cp "$file" "$SIGNED_DIR/"
-        done
+        echo "Copying ARM64 signed PKG..."
+        cp "$(Pipeline.Workspace)/signed-macos-pkg-arm64"/* "$SIGNED_DIR/"
         
         echo ""
         echo "=== Final Signed Artifacts ==="
@@ -494,112 +326,6 @@ stages:
     - publish: $(Build.ArtifactStagingDirectory)/signed-pkg
       artifact: signed-macos-pkg
       displayName: 'Publish final signed PKG artifacts'
-
-# COMMENTED OUT - GitHub upload not needed for now
-# - stage: UploadToGitHub
-#   displayName: 'Upload Signed PKGs to GitHub'
-#   dependsOn: SignPkgSimple
-#   condition: and(succeeded(), eq('${{ parameters.UploadToGitHub }}', true))
-#   jobs:
-#   - job: CreateRelease
-#     displayName: 'Create GitHub Release'
-#     pool:
-#       vmImage: 'ubuntu-latest'
-#     
-#     variables:
-#       - group: github-integration  # Contains GITHUB_PAT
-#     
-#     steps:
-#     - checkout: none
-#     
-#     - download: current
-#       artifact: signed-macos-pkg
-#       displayName: 'Download signed PKGs'
-#     
-#     - pwsh: |
-#         $version = "$(AzureCliVersion)"
-#         $tag = "azure-cli-pkg-v$version"
-#         $repo = "${{ parameters.GitHubRepo }}"
-#         
-#         Write-Host "=== Creating GitHub Release ==="
-#         Write-Host "Version: $version"
-#         Write-Host "Tag: $tag"
-#         Write-Host "Repo: $repo"
-#         
-#         # Create release body
-#         $body = @"
-#         # Azure CLI v$version - macOS PKG Installer (Signed)
-#         
-#         ## 📦 Installation
-#         
-#         **Apple Silicon**: ``azure-cli-$version-macos-arm64-signed.pkg``  
-#         **Intel**: ``azure-cli-$version-macos-x86_64-signed.pkg``
-#         
-#         ``````bash
-#         sudo installer -pkg azure-cli-$version-macos-<arch>-signed.pkg -target /
-#         az --version
-#         ``````
-#         
-#         ## Verification
-#         
-#         ``````bash
-#         shasum -a 256 -c azure-cli-$version-macos-<arch>-signed.pkg.sha256
-#         ``````
-#         "@
-#         
-#         $apiUrl = "https://api.github.com/repos/$repo/releases"
-#         
-#         $headers = @{
-#           'Accept' = 'application/vnd.github+json'
-#           'Authorization' = "Bearer $env:GITHUB_PAT"
-#           'User-Agent' = 'AzureDevOps-Pipeline'
-#         }
-#         
-#         $releaseData = @{
-#           tag_name = $tag
-#           name = "Azure CLI v$version - macOS PKG (Signed)"
-#           body = $body
-#           draft = $false
-#           prerelease = $false
-#         } | ConvertTo-Json
-#         
-#         Write-Host "Creating release..."
-#         $release = Invoke-RestMethod -Uri $apiUrl -Headers $headers -Method Post -Body $releaseData -ContentType 'application/json'
-#         
-#         Write-Host "✅ Release created: $($release.html_url)"
-#         
-#         $uploadUrl = $release.upload_url -replace '\{\?name,label\}', ''
-#         Write-Host "##vso[task.setvariable variable=UPLOAD_URL]$uploadUrl"
-#       displayName: 'Create GitHub Release'
-#       env:
-#         GITHUB_PAT: $(GITHUB_PAT)
-#     
-#     - pwsh: |
-#         $uploadUrl = "$(UPLOAD_URL)"
-#         $pkgDir = "$(Pipeline.Workspace)/signed-macos-pkg"
-#         
-#         $headers = @{
-#           'Accept' = 'application/vnd.github+json'
-#           'Authorization' = "Bearer $env:GITHUB_PAT"
-#           'User-Agent' = 'AzureDevOps-Pipeline'
-#         }
-#         
-#         $files = Get-ChildItem -Path $pkgDir -File
-#         foreach ($file in $files) {
-#           $fileName = $file.Name
-#           $uri = "$uploadUrl`?name=$fileName"
-#           $contentType = if ($fileName.EndsWith('.pkg')) { 'application/octet-stream' } else { 'text/plain' }
-#           
-#           Write-Host "Uploading: $fileName"
-#           
-#           $fileBytes = [System.IO.File]::ReadAllBytes($file.FullName)
-#           Invoke-RestMethod -Uri $uri -Headers $headers -Method Post -Body $fileBytes -ContentType $contentType | Out-Null
-#           
-#           Write-Host "✅ Uploaded: $fileName"
-#         }
-#       displayName: 'Upload release assets'
-#       env:
-#         GITHUB_PAT: $(GITHUB_PAT)
 
 - stage: Summary
   displayName: 'Signing Summary'
@@ -620,17 +346,20 @@ stages:
         echo "## Source"
         echo "- **Build ID**: $(SourceBuildId)"
         echo "- **Version**: $(AzureCliVersion)"
+        echo "- **Architecture**: ARM64 only"
         echo ""
         echo "## Process"
         if [ "${{ parameters.OfficialBuild }}" == "True" ]; then
-          echo "- **Signing Method**: OneBranch/ESRP (Official)"
+          echo "- **Signing Method**: ESRP (Service Connection)"
+          echo "- **Service Connection**: anne_esrp_connection"
+          echo "- **KeyCode**: CP-401337-Apple"
         else
           echo "- **Signing Method**: Mock Signing (Development)"
         fi
-        echo "- **GitHub Upload**: ${{ parameters.UploadToGitHub }}"
         echo ""
         echo "## Next Steps"
         echo "1. Download signed PKG artifacts from this build"
-        echo "2. Test installation on macOS (ARM64 and Intel)"
-        echo "3. For production: Set OfficialBuild=true to use real code signing"
+        echo "2. Test installation on macOS ARM64"
+        echo "3. Verify signature: pkgutil --check-signature <pkg-file>"
+        echo "4. For production: Set OfficialBuild=true to use ESRP signing"
       displayName: 'Summary'
