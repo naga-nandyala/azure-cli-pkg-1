@@ -315,7 +315,7 @@ stages:
         AuthCertName: '$(ESRPAuthCertName)'
         AuthSignCertName: '$(ESRPSignCertName)'
         FolderPath: '$(Pipeline.Workspace)/toBeSigned'
-        Pattern: '*.dylib,*.so,python,python3,python3.*,az'
+        Pattern: '*'
         signConfigType: 'inlineSignParams'
         inlineOperation: |
           [
@@ -336,9 +336,67 @@ stages:
         MaxRetryAttempts: '5'
     
     - pwsh: |
-        Write-Host "=== Verifying signed binaries ==="
+        Write-Host "=== Restoring directory structure after signing ==="
         
         $signedDir = "$(Pipeline.Workspace)/toBeSigned"
+        $outputDir = "$(Pipeline.Workspace)/signed-binaries"
+        $mappingPath = "$(Pipeline.Workspace)/file-mapping.json"
+        
+        if (-not (Test-Path $mappingPath)) {
+          Write-Error "File mapping not found: $mappingPath"
+          exit 1
+        }
+        
+        # Read mapping (JSON: flatName -> originalRelPath)
+        $fileMapping = Get-Content $mappingPath | ConvertFrom-Json
+        
+        # Create output directory
+        if (Test-Path $outputDir) {
+          Remove-Item -Path $outputDir -Recurse -Force
+        }
+        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+        
+        Write-Host ""
+        Write-Host "Restoring files to original paths..."
+        
+        $restoredCount = 0
+        foreach ($property in $fileMapping.PSObject.Properties) {
+          $flatName = $property.Name
+          $originalRelPath = $property.Value
+          
+          $sourcePath = Join-Path $signedDir $flatName
+          $targetPath = Join-Path $outputDir $originalRelPath
+          
+          if (Test-Path $sourcePath) {
+            # Create parent directory
+            $targetDir = Split-Path $targetPath -Parent
+            if (-not (Test-Path $targetDir)) {
+              New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+            }
+            
+            # Restore file to original path
+            Copy-Item -Path $sourcePath -Destination $targetPath -Force
+            $restoredCount++
+            
+            if ($restoredCount -le 10) {
+              Write-Host "  ✓ $flatName -> $originalRelPath"
+            }
+          } else {
+            Write-Warning "Signed file not found: $sourcePath"
+          }
+        }
+        
+        Write-Host ""
+        Write-Host "✅ Restored $restoredCount files to original directory structure"
+        Write-Host ""
+        Write-Host "Signed binaries size: $([math]::Round((Get-ChildItem $outputDir -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB, 2)) MB"
+        
+      displayName: 'Restore directory structure after signing'
+    
+    - pwsh: |
+        Write-Host "=== Verifying signed binaries ==="
+        
+        $signedDir = "$(Pipeline.Workspace)/signed-binaries"
         
         Write-Host "Signed directory contents:"
         Get-ChildItem $signedDir -Recurse -File | Select-Object -First 20 | ForEach-Object {
@@ -353,7 +411,7 @@ stages:
     - task: PublishPipelineArtifact@1
       displayName: 'Publish signed binaries'
       inputs:
-        targetPath: '$(Pipeline.Workspace)/toBeSigned'
+        targetPath: '$(Pipeline.Workspace)/signed-binaries'
         artifactName: 'signed-binaries'
 
 - stage: RepackageAndSignPkg
