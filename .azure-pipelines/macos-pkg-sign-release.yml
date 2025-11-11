@@ -44,6 +44,13 @@ variables:
     value: ${{ parameters.SourceBuildId }}
   - name: SourcePipelineName
     value: ${{ parameters.SourcePipelineName }}
+  # ESRP Signing Variables - These should be defined in the pipeline variables (not here)
+  # or stored in Azure Key Vault and retrieved via variable groups
+  # - ESRPAppClientId: Your ESRP App Registration Client ID
+  # - ESRPAppTenantId: Your ESRP App Registration Tenant ID  
+  # - ESRPKVName: Azure Key Vault name where ESRP certs are stored
+  # - ESRPAuthCertName: Name of the auth certificate in Key Vault
+  # - ESRPSignCertName: Name of the signing certificate in Key Vault
 
 name: sign-macos-pkg-$(AzureCliVersion)-$(Build.BuildId)
 
@@ -148,7 +155,7 @@ stages:
       displayName: 'Publish signed PKG artifacts'
 
 - stage: SignPkgESRP
-  displayName: 'Sign macOS PKG Files (ESRP Service Connection)'
+  displayName: 'Sign macOS PKG Files (ESRP - REQUIRES PRSS SERVICE CONNECTION)'
   dependsOn: DownloadUnsignedPkg
   condition: and(succeeded(), eq('${{ parameters.OfficialBuild }}', true))
   jobs:
@@ -205,12 +212,17 @@ stages:
         Write-Host "ZIP file: $zipName"
       displayName: 'Compress ARM64 PKG for signing'
     
-    - task: EsrpCodeSigning@2
-      displayName: 'Sign ARM64 PKG using ESRP'
+    - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
+      displayName: 'Sign ARM64 PKG using ESRP v5'
       inputs:
         ConnectedServiceName: 'ame_esrp_connection'
+        AppRegistrationClientId: '$(ESRPAppClientId)'
+        AppRegistrationTenantId: '$(ESRPAppTenantId)'
+        AuthAKVName: '$(ESRPKVName)'
+        AuthCertName: '$(ESRPAuthCertName)'
+        AuthSignCertName: '$(ESRPSignCertName)'
         FolderPath: '$(Pipeline.Workspace)'
-        Pattern: '**/azure-cli-*-macos-arm64.zip'
+        Pattern: 'azure-cli-*-macos-arm64.zip'
         signConfigType: 'inlineSignParams'
         inlineOperation: |
           [
@@ -221,7 +233,7 @@ stages:
               "ToolVersion": "1.0",
               "Parameters": {
                 "Hardening": "Enable",
-                "OpusInfo": "http://microsoft.com",
+                "OpusInfo": "http://www.microsoft.com",
                 "BundleId": "com.microsoft.azure.cli"
               }
             }
