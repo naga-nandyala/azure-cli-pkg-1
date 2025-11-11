@@ -7,7 +7,7 @@ parameters:
   - name: SourceBuildId
     displayName: 'Source Build ID (the build that created the PKGs)'
     type: string
-    default: ''
+    default: '282071'  # Hardcoded for testing - change as needed
   - name: SourcePipelineName
     displayName: 'Source Pipeline Name'
     type: string
