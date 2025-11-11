@@ -1,0 +1,289 @@
+trigger: none
+
+parameters:
+  - name: pkgUrl
+    displayName: 'PKG File URL'
+    type: string
+    default: 'https://github.com/PowerShell/PowerShell/releases/download/v7.5.4/powershell-7.5.4-osx-arm64.pkg'
+  - name: pkgName
+    displayName: 'PKG Display Name (for reporting)'
+    type: string
+    default: 'PowerShell 7.5.4'
+
+pool:
+  vmImage: 'macOS-latest'
+
+variables:
+  pkgFileName: ${{ replace(replace(parameters.pkgUrl, 'https://', ''), '/', '-') }}
+
+stages:
+  - stage: VerifyPKGSignature
+    displayName: 'Verify PKG Signature at All Levels'
+    jobs:
+      - job: DownloadAndVerify
+        displayName: 'Download and Verify PKG Signatures'
+        steps:
+          - bash: |
+              echo "##[section]Downloading PKG file..."
+              echo "URL: ${{ parameters.pkgUrl }}"
+              curl -L -o "package.pkg" "${{ parameters.pkgUrl }}"
+              
+              if [ ! -f "package.pkg" ]; then
+                echo "##vso[task.logissue type=error]Failed to download PKG file"
+                exit 1
+              fi
+              
+              FILE_SIZE=$(stat -f%z "package.pkg")
+              echo "Downloaded: $(ls -lh package.pkg)"
+              echo "File size: $FILE_SIZE bytes"
+              
+              if [ $FILE_SIZE -lt 1000 ]; then
+                echo "##vso[task.logissue type=error]Downloaded file is too small, likely not a valid PKG"
+                exit 1
+              fi
+            displayName: '1. Download PKG File'
+            
+          - bash: |
+              echo "##[section]================================================"
+              echo "##[section]  LEVEL 1: PKG Container Signature Verification"
+              echo "##[section]================================================"
+              echo ""
+              
+              echo "Checking PKG container signature with pkgutil..."
+              pkgutil --check-signature package.pkg > pkg_signature.txt 2>&1
+              
+              cat pkg_signature.txt
+              
+              if grep -q "Status: signed" pkg_signature.txt; then
+                echo ""
+                echo "##[section]✅ LEVEL 1: PKG Container IS SIGNED"
+                echo "##vso[task.setvariable variable=pkgContainerSigned]true"
+                
+                # Extract certificate details
+                echo ""
+                echo "Certificate Chain:"
+                grep -A 20 "Developer ID Installer" pkg_signature.txt || grep -A 20 "Certificate" pkg_signature.txt
+                
+              else
+                echo ""
+                echo "##[error]❌ LEVEL 1: PKG Container NOT SIGNED"
+                echo "##vso[task.setvariable variable=pkgContainerSigned]false"
+                echo "##vso[task.logissue type=error]PKG container is not signed"
+              fi
+            displayName: '2. Verify PKG Container Signature (Level 1)'
+            
+          - bash: |
+              echo "##[section]================================================"
+              echo "##[section]  LEVEL 2: Binary Signature Verification"
+              echo "##[section]================================================"
+              echo ""
+              
+              # Extract PKG to temporary directory
+              echo "Extracting PKG contents..."
+              mkdir -p pkg_extracted
+              cd pkg_extracted
+              xar -xf ../package.pkg
+              
+              # Find and extract Payload
+              echo "Finding Payload..."
+              PAYLOAD=$(find . -name "Payload" -o -name "Payload~" | head -1)
+              
+              if [ -z "$PAYLOAD" ]; then
+                echo "##vso[task.logissue type=error]No Payload found in PKG"
+                exit 1
+              fi
+              
+              echo "Found: $PAYLOAD"
+              
+              # Extract Payload (CPIO)
+              mkdir -p payload_files
+              cd payload_files
+              
+              if [[ "$PAYLOAD" == *"~" ]]; then
+                # Already decompressed by xar
+                cat "../$PAYLOAD" | cpio -id 2>/dev/null
+              else
+                # Needs decompression
+                cat "../$PAYLOAD" | gunzip -dc | cpio -id 2>/dev/null
+              fi
+              
+              cd ../..
+              
+              echo ""
+              echo "Finding all Mach-O binaries..."
+              
+              # Find all Mach-O binaries
+              find pkg_extracted/payload_files -type f -exec file {} \; 2>/dev/null | \
+                grep -i "mach-o" | \
+                cut -d: -f1 > binaries.txt
+              
+              BINARY_COUNT=$(wc -l < binaries.txt)
+              echo "Found $BINARY_COUNT Mach-O binaries"
+              
+              if [ $BINARY_COUNT -eq 0 ]; then
+                echo "##vso[task.logissue type=warning]No Mach-O binaries found in PKG"
+                echo "##vso[task.setvariable variable=binaryCount]0"
+                echo "##vso[task.setvariable variable=allBinariesSigned]unknown"
+                exit 0
+              fi
+              
+              echo "##vso[task.setvariable variable=binaryCount]$BINARY_COUNT"
+              
+              echo ""
+              echo "Binaries to check:"
+              cat binaries.txt
+              
+              echo ""
+              echo "##[section]Checking code signatures..."
+              
+              SIGNED_COUNT=0
+              UNSIGNED_COUNT=0
+              
+              while IFS= read -r binary; do
+                echo ""
+                echo "----------------------------------------"
+                echo "Binary: $binary"
+                
+                # Check if signed
+                if codesign -vv "$binary" 2>&1 | grep -q "valid on disk"; then
+                  echo "✅ SIGNED"
+                  SIGNED_COUNT=$((SIGNED_COUNT + 1))
+                  
+                  # Show signature details
+                  codesign -dvv "$binary" 2>&1 | grep -E "Authority|Identifier|TeamIdentifier|Timestamp" | head -5
+                else
+                  echo "❌ NOT SIGNED"
+                  UNSIGNED_COUNT=$((UNSIGNED_COUNT + 1))
+                  
+                  # Show error
+                  codesign -vv "$binary" 2>&1 | head -3
+                fi
+              done < binaries.txt
+              
+              echo ""
+              echo "##[section]Binary Signature Summary:"
+              echo "Total binaries: $BINARY_COUNT"
+              echo "Signed: $SIGNED_COUNT"
+              echo "Unsigned: $UNSIGNED_COUNT"
+              
+              echo "##vso[task.setvariable variable=signedBinaries]$SIGNED_COUNT"
+              echo "##vso[task.setvariable variable=unsignedBinaries]$UNSIGNED_COUNT"
+              
+              if [ $UNSIGNED_COUNT -eq 0 ]; then
+                echo ""
+                echo "##[section]✅ LEVEL 2: ALL BINARIES ARE SIGNED ($SIGNED_COUNT/$BINARY_COUNT)"
+                echo "##vso[task.setvariable variable=allBinariesSigned]true"
+              else
+                echo ""
+                echo "##[error]❌ LEVEL 2: SOME BINARIES ARE NOT SIGNED ($UNSIGNED_COUNT unsigned)"
+                echo "##vso[task.setvariable variable=allBinariesSigned]false"
+                echo "##vso[task.logissue type=error]Found $UNSIGNED_COUNT unsigned binaries"
+              fi
+            displayName: '3. Verify Binary Signatures (Level 2)'
+            continueOnError: true
+            
+          - bash: |
+              echo "##[section]================================================"
+              echo "##[section]  LEVEL 3: Notarization Verification"
+              echo "##[section]================================================"
+              echo ""
+              
+              echo "Checking notarization status with stapler..."
+              
+              # Check if PKG has notarization ticket
+              if stapler validate package.pkg 2>&1 | grep -q "The validate action worked"; then
+                echo "##[section]✅ LEVEL 3: PKG IS NOTARIZED"
+                echo "##vso[task.setvariable variable=pkgNotarized]true"
+                
+                stapler validate package.pkg
+              else
+                echo "##[error]❌ LEVEL 3: PKG IS NOT NOTARIZED"
+                echo "##vso[task.setvariable variable=pkgNotarized]false"
+                
+                stapler validate package.pkg 2>&1
+                
+                echo ""
+                echo "Additional check with spctl..."
+                spctl --assess --type install package.pkg 2>&1 || true
+              fi
+            displayName: '4. Verify Notarization (Level 3)'
+            continueOnError: true
+            
+          - bash: |
+              echo "##[section]================================================"
+              echo "##[section]  FINAL VERIFICATION REPORT"
+              echo "##[section]================================================"
+              echo ""
+              echo "Package: ${{ parameters.pkgName }}"
+              echo "URL: ${{ parameters.pkgUrl }}"
+              echo ""
+              
+              PKG_SIGNED="${pkgContainerSigned:-false}"
+              ALL_BIN_SIGNED="${allBinariesSigned:-false}"
+              PKG_NOTARIZED="${pkgNotarized:-false}"
+              BIN_COUNT="${binaryCount:-0}"
+              SIGNED_COUNT="${signedBinaries:-0}"
+              UNSIGNED_COUNT="${unsignedBinaries:-0}"
+              
+              echo "┌─────────────────────────────────────────────────────────┐"
+              echo "│  Signature Verification Results                         │"
+              echo "├─────────────────────────────────────────────────────────┤"
+              
+              if [ "$PKG_SIGNED" = "true" ]; then
+                echo "│  Level 1 - PKG Container:        ✅ SIGNED             │"
+              else
+                echo "│  Level 1 - PKG Container:        ❌ NOT SIGNED         │"
+              fi
+              
+              if [ "$BIN_COUNT" = "0" ]; then
+                echo "│  Level 2 - Binaries:             ⚠️  NO BINARIES FOUND │"
+              elif [ "$ALL_BIN_SIGNED" = "true" ]; then
+                echo "│  Level 2 - Binaries:             ✅ ALL SIGNED ($SIGNED_COUNT)   │"
+              elif [ "$ALL_BIN_SIGNED" = "false" ]; then
+                echo "│  Level 2 - Binaries:             ❌ $UNSIGNED_COUNT UNSIGNED       │"
+              else
+                echo "│  Level 2 - Binaries:             ❓ UNKNOWN             │"
+              fi
+              
+              if [ "$PKG_NOTARIZED" = "true" ]; then
+                echo "│  Level 3 - Notarization:         ✅ NOTARIZED          │"
+              elif [ "$PKG_NOTARIZED" = "false" ]; then
+                echo "│  Level 3 - Notarization:         ❌ NOT NOTARIZED      │"
+              else
+                echo "│  Level 3 - Notarization:         ❓ UNKNOWN             │"
+              fi
+              
+              echo "└─────────────────────────────────────────────────────────┘"
+              echo ""
+              
+              # Determine overall status
+              if [ "$PKG_SIGNED" = "true" ] && [ "$ALL_BIN_SIGNED" = "true" ] && [ "$PKG_NOTARIZED" = "true" ]; then
+                echo "##[section]🎉 FULLY SIGNED: All levels verified successfully"
+                echo "##vso[task.setvariable variable=fullySigned;isOutput=true]true"
+                exit 0
+              elif [ "$PKG_SIGNED" = "true" ] && [ "$ALL_BIN_SIGNED" = "true" ] && [ "$PKG_NOTARIZED" = "false" ]; then
+                echo "##[warning]⚠️ PARTIALLY SIGNED: PKG and binaries signed but not notarized"
+                echo "##vso[task.setvariable variable=fullySigned;isOutput=true]false"
+                exit 0
+              elif [ "$PKG_SIGNED" = "true" ] && [ "$ALL_BIN_SIGNED" = "false" ]; then
+                echo "##[error]❌ PARTIALLY SIGNED: PKG signed but binaries are not"
+                echo "##vso[task.setvariable variable=fullySigned;isOutput=true]false"
+                echo "##vso[task.logissue type=error]PKG is not fully signed - binaries missing signatures"
+                exit 1
+              else
+                echo "##[error]❌ NOT SIGNED: PKG container is not signed"
+                echo "##vso[task.setvariable variable=fullySigned;isOutput=true]false"
+                echo "##vso[task.logissue type=error]PKG is not signed"
+                exit 1
+              fi
+            displayName: '5. Generate Final Report'
+            name: FinalReport
+            
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish Verification Logs'
+            condition: always()
+            inputs:
+              pathToPublish: '$(System.DefaultWorkingDirectory)'
+              artifactName: 'signature-verification-logs'
+              publishLocation: 'Container'
+            continueOnError: true
