@@ -486,113 +486,111 @@ stages:
       artifact: signed-macos-pkg
       displayName: 'Publish final signed PKG artifacts'
 
-# If you enable OfficialBuild=true, add OneBranch signing stages here
-# Similar to your azure-cli-macos-pkg-signing.yml
-
-- stage: UploadToGitHub
-  displayName: 'Upload Signed PKGs to GitHub'
-  dependsOn: SignPkgSimple
-  condition: and(succeeded(), eq('${{ parameters.UploadToGitHub }}', true))
-  jobs:
-  - job: CreateRelease
-    displayName: 'Create GitHub Release'
-    pool:
-      vmImage: 'ubuntu-latest'
-    
-    variables:
-      - group: github-integration  # Contains GITHUB_PAT
-    
-    steps:
-    - checkout: none
-    
-    - download: current
-      artifact: signed-macos-pkg
-      displayName: 'Download signed PKGs'
-    
-    - pwsh: |
-        $version = "$(AzureCliVersion)"
-        $tag = "azure-cli-pkg-v$version"
-        $repo = "${{ parameters.GitHubRepo }}"
-        
-        Write-Host "=== Creating GitHub Release ==="
-        Write-Host "Version: $version"
-        Write-Host "Tag: $tag"
-        Write-Host "Repo: $repo"
-        
-        # Create release body
-        $body = @"
-        # Azure CLI v$version - macOS PKG Installer (Signed)
-        
-        ## 📦 Installation
-        
-        **Apple Silicon**: ``azure-cli-$version-macos-arm64-signed.pkg``  
-        **Intel**: ``azure-cli-$version-macos-x86_64-signed.pkg``
-        
-        ``````bash
-        sudo installer -pkg azure-cli-$version-macos-<arch>-signed.pkg -target /
-        az --version
-        ``````
-        
-        ## Verification
-        
-        ``````bash
-        shasum -a 256 -c azure-cli-$version-macos-<arch>-signed.pkg.sha256
-        ``````
-        "@
-        
-        $apiUrl = "https://api.github.com/repos/$repo/releases"
-        
-        $headers = @{
-          'Accept' = 'application/vnd.github+json'
-          'Authorization' = "Bearer $env:GITHUB_PAT"
-          'User-Agent' = 'AzureDevOps-Pipeline'
-        }
-        
-        $releaseData = @{
-          tag_name = $tag
-          name = "Azure CLI v$version - macOS PKG (Signed)"
-          body = $body
-          draft = $false
-          prerelease = $false
-        } | ConvertTo-Json
-        
-        Write-Host "Creating release..."
-        $release = Invoke-RestMethod -Uri $apiUrl -Headers $headers -Method Post -Body $releaseData -ContentType 'application/json'
-        
-        Write-Host "✅ Release created: $($release.html_url)"
-        
-        $uploadUrl = $release.upload_url -replace '\{\?name,label\}', ''
-        Write-Host "##vso[task.setvariable variable=UPLOAD_URL]$uploadUrl"
-      displayName: 'Create GitHub Release'
-      env:
-        GITHUB_PAT: $(GITHUB_PAT)
-    
-    - pwsh: |
-        $uploadUrl = "$(UPLOAD_URL)"
-        $pkgDir = "$(Pipeline.Workspace)/signed-macos-pkg"
-        
-        $headers = @{
-          'Accept' = 'application/vnd.github+json'
-          'Authorization' = "Bearer $env:GITHUB_PAT"
-          'User-Agent' = 'AzureDevOps-Pipeline'
-        }
-        
-        $files = Get-ChildItem -Path $pkgDir -File
-        foreach ($file in $files) {
-          $fileName = $file.Name
-          $uri = "$uploadUrl`?name=$fileName"
-          $contentType = if ($fileName.EndsWith('.pkg')) { 'application/octet-stream' } else { 'text/plain' }
-          
-          Write-Host "Uploading: $fileName"
-          
-          $fileBytes = [System.IO.File]::ReadAllBytes($file.FullName)
-          Invoke-RestMethod -Uri $uri -Headers $headers -Method Post -Body $fileBytes -ContentType $contentType | Out-Null
-          
-          Write-Host "✅ Uploaded: $fileName"
-        }
-      displayName: 'Upload release assets'
-      env:
-        GITHUB_PAT: $(GITHUB_PAT)
+# COMMENTED OUT - GitHub upload not needed for now
+# - stage: UploadToGitHub
+#   displayName: 'Upload Signed PKGs to GitHub'
+#   dependsOn: SignPkgSimple
+#   condition: and(succeeded(), eq('${{ parameters.UploadToGitHub }}', true))
+#   jobs:
+#   - job: CreateRelease
+#     displayName: 'Create GitHub Release'
+#     pool:
+#       vmImage: 'ubuntu-latest'
+#     
+#     variables:
+#       - group: github-integration  # Contains GITHUB_PAT
+#     
+#     steps:
+#     - checkout: none
+#     
+#     - download: current
+#       artifact: signed-macos-pkg
+#       displayName: 'Download signed PKGs'
+#     
+#     - pwsh: |
+#         $version = "$(AzureCliVersion)"
+#         $tag = "azure-cli-pkg-v$version"
+#         $repo = "${{ parameters.GitHubRepo }}"
+#         
+#         Write-Host "=== Creating GitHub Release ==="
+#         Write-Host "Version: $version"
+#         Write-Host "Tag: $tag"
+#         Write-Host "Repo: $repo"
+#         
+#         # Create release body
+#         $body = @"
+#         # Azure CLI v$version - macOS PKG Installer (Signed)
+#         
+#         ## 📦 Installation
+#         
+#         **Apple Silicon**: ``azure-cli-$version-macos-arm64-signed.pkg``  
+#         **Intel**: ``azure-cli-$version-macos-x86_64-signed.pkg``
+#         
+#         ``````bash
+#         sudo installer -pkg azure-cli-$version-macos-<arch>-signed.pkg -target /
+#         az --version
+#         ``````
+#         
+#         ## Verification
+#         
+#         ``````bash
+#         shasum -a 256 -c azure-cli-$version-macos-<arch>-signed.pkg.sha256
+#         ``````
+#         "@
+#         
+#         $apiUrl = "https://api.github.com/repos/$repo/releases"
+#         
+#         $headers = @{
+#           'Accept' = 'application/vnd.github+json'
+#           'Authorization' = "Bearer $env:GITHUB_PAT"
+#           'User-Agent' = 'AzureDevOps-Pipeline'
+#         }
+#         
+#         $releaseData = @{
+#           tag_name = $tag
+#           name = "Azure CLI v$version - macOS PKG (Signed)"
+#           body = $body
+#           draft = $false
+#           prerelease = $false
+#         } | ConvertTo-Json
+#         
+#         Write-Host "Creating release..."
+#         $release = Invoke-RestMethod -Uri $apiUrl -Headers $headers -Method Post -Body $releaseData -ContentType 'application/json'
+#         
+#         Write-Host "✅ Release created: $($release.html_url)"
+#         
+#         $uploadUrl = $release.upload_url -replace '\{\?name,label\}', ''
+#         Write-Host "##vso[task.setvariable variable=UPLOAD_URL]$uploadUrl"
+#       displayName: 'Create GitHub Release'
+#       env:
+#         GITHUB_PAT: $(GITHUB_PAT)
+#     
+#     - pwsh: |
+#         $uploadUrl = "$(UPLOAD_URL)"
+#         $pkgDir = "$(Pipeline.Workspace)/signed-macos-pkg"
+#         
+#         $headers = @{
+#           'Accept' = 'application/vnd.github+json'
+#           'Authorization' = "Bearer $env:GITHUB_PAT"
+#           'User-Agent' = 'AzureDevOps-Pipeline'
+#         }
+#         
+#         $files = Get-ChildItem -Path $pkgDir -File
+#         foreach ($file in $files) {
+#           $fileName = $file.Name
+#           $uri = "$uploadUrl`?name=$fileName"
+#           $contentType = if ($fileName.EndsWith('.pkg')) { 'application/octet-stream' } else { 'text/plain' }
+#           
+#           Write-Host "Uploading: $fileName"
+#           
+#           $fileBytes = [System.IO.File]::ReadAllBytes($file.FullName)
+#           Invoke-RestMethod -Uri $uri -Headers $headers -Method Post -Body $fileBytes -ContentType $contentType | Out-Null
+#           
+#           Write-Host "✅ Uploaded: $fileName"
+#         }
+#       displayName: 'Upload release assets'
+#       env:
+#         GITHUB_PAT: $(GITHUB_PAT)
 
 - stage: Summary
   displayName: 'Signing Summary'
