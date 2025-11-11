@@ -44,13 +44,17 @@ variables:
     value: ${{ parameters.SourceBuildId }}
   - name: SourcePipelineName
     value: ${{ parameters.SourcePipelineName }}
-  # ESRP Signing Variables - These should be defined in the pipeline variables (not here)
-  # or stored in Azure Key Vault and retrieved via variable groups
-  # - ESRPAppClientId: Your ESRP App Registration Client ID
-  # - ESRPAppTenantId: Your ESRP App Registration Tenant ID  
-  # - ESRPKVName: Azure Key Vault name where ESRP certs are stored
-  # - ESRPAuthCertName: Name of the auth certificate in Key Vault
-  # - ESRPSignCertName: Name of the signing certificate in Key Vault
+  # ESRP Signing Variables - Replace with your actual values
+  - name: ESRPAppClientId
+    value: 'YOUR_APP_CLIENT_ID_HERE'  # Replace with your App Registration Client ID
+  - name: ESRPAppTenantId
+    value: 'YOUR_TENANT_ID_HERE'  # Replace with your Tenant ID
+  - name: ESRPKVName
+    value: 'YOUR_KEY_VAULT_NAME_HERE'  # Replace with your Azure Key Vault name
+  - name: ESRPAuthCertName
+    value: 'YOUR_AUTH_CERT_NAME_HERE'  # Replace with auth certificate name in Key Vault
+  - name: ESRPSignCertName
+    value: 'YOUR_SIGN_CERT_NAME_HERE'  # Replace with signing certificate name in Key Vault
 
 name: sign-macos-pkg-$(AzureCliVersion)-$(Build.BuildId)
 
