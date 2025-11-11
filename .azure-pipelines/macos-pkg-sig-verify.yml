@@ -112,10 +112,11 @@ stages:
               echo ""
               echo "Finding all Mach-O binaries..."
               
-              # Find all Mach-O binaries
+              # Find all Mach-O binaries (deduplicate universal binaries)
               find pkg_extracted/payload_files -type f -exec file {} \; 2>/dev/null | \
                 grep -i "mach-o" | \
-                cut -d: -f1 > binaries.txt
+                cut -d: -f1 | \
+                sort -u > binaries.txt
               
               BINARY_COUNT=$(wc -l < binaries.txt)
               echo "Found $BINARY_COUNT Mach-O binaries"
