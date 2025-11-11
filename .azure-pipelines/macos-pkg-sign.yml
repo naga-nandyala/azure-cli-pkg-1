@@ -7,6 +7,7 @@ parameters:
   - name: SourceBuildId
     displayName: 'Source Build ID (the build that created the PKGs)'
     type: string
+    default: ''
   - name: SourcePipelineName
     displayName: 'Source Pipeline Name'
     type: string
@@ -286,7 +287,7 @@ stages:
         echo "- **Version**: $(AzureCliVersion)"
         echo ""
         echo "## Process"
-        echo "- **Signing Method**: ${{ parameters.OfficialBuild == true && 'OneBranch/ESRP (Official)' || 'Mock Signing (Development)' }}"
+        echo "- **Signing Method**: ${{ eq(parameters.OfficialBuild, true) && 'OneBranch/ESRP (Official)' || 'Mock Signing (Development)' }}"
         echo "- **GitHub Upload**: ${{ parameters.UploadToGitHub }}"
         echo ""
         echo "## Next Steps"
