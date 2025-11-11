@@ -7,7 +7,7 @@ parameters:
   - name: Version
     displayName: 'Azure CLI Version (e.g., 2.76.0)'
     type: string
-    default: ''
+    default: '2.0.0'
   - name: CreateGitHubRelease
     displayName: 'Create GitHub Release with artifacts'
     type: boolean

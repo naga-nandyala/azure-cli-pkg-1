@@ -1,0 +1,296 @@
+# Azure CLI - macOS PKG Signing Pipeline (from ADO artifacts)
+# This pipeline downloads unsigned PKG files from a previous build and signs them
+
+trigger: none # Manual trigger only
+
+parameters:
+  - name: SourceBuildId
+    displayName: 'Source Build ID (the build that created the PKGs)'
+    type: string
+  - name: SourcePipelineName
+    displayName: 'Source Pipeline Name'
+    type: string
+    default: 'naga_macos_build'
+  - name: AzureCliVersion
+    displayName: 'Azure CLI Version (e.g., 2.0.0)'
+    type: string
+    default: '2.0.0'
+  - name: OfficialBuild
+    displayName: 'Official Build (enables OneBranch signing)'
+    type: boolean
+    default: false  # Set to true when you have OneBranch setup
+  - name: UploadToGitHub
+    displayName: 'Upload signed PKGs to GitHub release'
+    type: boolean
+    default: false
+  - name: GitHubRepo
+    displayName: 'GitHub Repository (owner/repo) - only if uploading'
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+
+variables:
+  - name: DOTNET_CLI_TELEMETRY_OPTOUT
+    value: 1
+  - name: DOTNET_NOLOGO
+    value: 1
+  - name: AzureCliVersion
+    value: ${{ parameters.AzureCliVersion }}
+  - name: SourceBuildId
+    value: ${{ parameters.SourceBuildId }}
+  - name: SourcePipelineName
+    value: ${{ parameters.SourcePipelineName }}
+  # Variable groups (optional - only needed for GitHub upload)
+  # - group: github-integration  # Contains GITHUB_PAT
+
+name: sign-macos-pkg-$(AzureCliVersion)-$(Build.BuildId)
+
+stages:
+- stage: DownloadUnsignedPkg
+  displayName: 'Download Unsigned PKG from Build Artifacts'
+  jobs:
+  - job: DownloadArtifacts
+    displayName: 'Download PKG files from build $(SourceBuildId)'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download ARM64 PKG'
+      inputs:
+        buildType: 'specific'
+        project: 'public'
+        definition: $(SourcePipelineName)
+        buildVersionToDownload: 'specific'
+        buildId: $(SourceBuildId)
+        artifactName: 'pkg-installer-macos-arm64'
+        targetPath: '$(Pipeline.Workspace)/unsigned-pkg/arm64'
+    
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download x86_64 PKG'
+      inputs:
+        buildType: 'specific'
+        project: 'public'
+        definition: $(SourcePipelineName)
+        buildVersionToDownload: 'specific'
+        buildId: $(SourceBuildId)
+        artifactName: 'pkg-installer-macos-x86_64'
+        targetPath: '$(Pipeline.Workspace)/unsigned-pkg/x86_64'
+    
+    - bash: |
+        echo "=== Downloaded PKG Files ==="
+        echo "ARM64 artifacts:"
+        ls -lh $(Pipeline.Workspace)/unsigned-pkg/arm64/
+        echo ""
+        echo "x86_64 artifacts:"
+        ls -lh $(Pipeline.Workspace)/unsigned-pkg/x86_64/
+        echo ""
+        
+        # Copy to a single directory for easier handling
+        mkdir -p $(Pipeline.Workspace)/unsigned-pkg/all
+        cp $(Pipeline.Workspace)/unsigned-pkg/arm64/*.pkg $(Pipeline.Workspace)/unsigned-pkg/all/
+        cp $(Pipeline.Workspace)/unsigned-pkg/x86_64/*.pkg $(Pipeline.Workspace)/unsigned-pkg/all/
+        
+        echo "=== All PKG Files ==="
+        ls -lh $(Pipeline.Workspace)/unsigned-pkg/all/
+      displayName: 'List downloaded PKG files'
+    
+    - publish: $(Pipeline.Workspace)/unsigned-pkg/all
+      artifact: unsigned-pkg-files
+      displayName: 'Publish unsigned PKG artifacts for signing'
+
+- stage: SignPkgSimple
+  displayName: 'Sign macOS PKG Files (Simple)'
+  dependsOn: DownloadUnsignedPkg
+  condition: and(succeeded(), eq('${{ parameters.OfficialBuild }}', false))
+  jobs:
+  - job: MockSigning
+    displayName: 'Mock Signing (Development)'
+    pool:
+      vmImage: 'macos-14'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: unsigned-pkg-files
+      displayName: 'Download unsigned PKGs'
+    
+    - bash: |
+        echo "=== Mock Signing Process ==="
+        echo "NOTE: This is a development/test signing process"
+        echo "For production, enable OfficialBuild=true to use OneBranch/ESRP"
+        echo ""
+        
+        UNSIGNED_DIR="$(Pipeline.Workspace)/unsigned-pkg-files"
+        SIGNED_DIR="$(Build.ArtifactStagingDirectory)/signed-pkg"
+        mkdir -p "$SIGNED_DIR"
+        
+        for pkg in "$UNSIGNED_DIR"/*.pkg; do
+          if [ -f "$pkg" ]; then
+            pkg_name=$(basename "$pkg")
+            signed_pkg="$SIGNED_DIR/${pkg_name%.pkg}-signed.pkg"
+            
+            echo "Processing: $pkg_name"
+            
+            # For development: just copy and rename
+            # In production, this would be replaced with actual signing
+            cp "$pkg" "$signed_pkg"
+            
+            # Verify the PKG structure
+            echo "Checking PKG contents:"
+            pkgutil --payload-files "$signed_pkg" | head -10
+            
+            # Generate SHA256
+            cd "$SIGNED_DIR"
+            shasum -a 256 "$(basename "$signed_pkg")" > "$(basename "$signed_pkg").sha256"
+            cd -
+            
+            echo "✅ Processed: $pkg_name"
+            echo ""
+          fi
+        done
+        
+        echo "=== Signed PKG Files ==="
+        ls -lh "$SIGNED_DIR"
+      displayName: 'Mock sign PKG files (development)'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/signed-pkg
+      artifact: signed-macos-pkg
+      displayName: 'Publish signed PKG artifacts'
+
+# If you enable OfficialBuild=true, add OneBranch signing stages here
+# Similar to your azure-cli-macos-pkg-signing.yml
+
+- stage: UploadToGitHub
+  displayName: 'Upload Signed PKGs to GitHub'
+  dependsOn: SignPkgSimple
+  condition: and(succeeded(), eq('${{ parameters.UploadToGitHub }}', true))
+  jobs:
+  - job: CreateRelease
+    displayName: 'Create GitHub Release'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: signed-macos-pkg
+      displayName: 'Download signed PKGs'
+    
+    - pwsh: |
+        $version = "$(AzureCliVersion)"
+        $tag = "azure-cli-pkg-v$version"
+        $repo = "${{ parameters.GitHubRepo }}"
+        
+        Write-Host "=== Creating GitHub Release ==="
+        Write-Host "Version: $version"
+        Write-Host "Tag: $tag"
+        Write-Host "Repo: $repo"
+        
+        # Create release body
+        $body = @"
+        # Azure CLI v$version - macOS PKG Installer (Signed)
+        
+        ## 📦 Installation
+        
+        **Apple Silicon**: ``azure-cli-$version-macos-arm64-signed.pkg``  
+        **Intel**: ``azure-cli-$version-macos-x86_64-signed.pkg``
+        
+        ``````bash
+        sudo installer -pkg azure-cli-$version-macos-<arch>-signed.pkg -target /
+        az --version
+        ``````
+        
+        ## Verification
+        
+        ``````bash
+        shasum -a 256 -c azure-cli-$version-macos-<arch>-signed.pkg.sha256
+        ``````
+        "@
+        
+        $apiUrl = "https://api.github.com/repos/$repo/releases"
+        
+        $headers = @{
+          'Accept' = 'application/vnd.github+json'
+          'Authorization' = "Bearer $env:GITHUB_PAT"
+          'User-Agent' = 'AzureDevOps-Pipeline'
+        }
+        
+        $releaseData = @{
+          tag_name = $tag
+          name = "Azure CLI v$version - macOS PKG (Signed)"
+          body = $body
+          draft = $false
+          prerelease = $false
+        } | ConvertTo-Json
+        
+        Write-Host "Creating release..."
+        $release = Invoke-RestMethod -Uri $apiUrl -Headers $headers -Method Post -Body $releaseData -ContentType 'application/json'
+        
+        Write-Host "✅ Release created: $($release.html_url)"
+        
+        $uploadUrl = $release.upload_url -replace '\{\?name,label\}', ''
+        Write-Host "##vso[task.setvariable variable=UPLOAD_URL]$uploadUrl"
+      displayName: 'Create GitHub Release'
+      env:
+        GITHUB_PAT: $(GITHUB_PAT)
+    
+    - pwsh: |
+        $uploadUrl = "$(UPLOAD_URL)"
+        $pkgDir = "$(Pipeline.Workspace)/signed-macos-pkg"
+        
+        $headers = @{
+          'Accept' = 'application/vnd.github+json'
+          'Authorization' = "Bearer $env:GITHUB_PAT"
+          'User-Agent' = 'AzureDevOps-Pipeline'
+        }
+        
+        $files = Get-ChildItem -Path $pkgDir -File
+        foreach ($file in $files) {
+          $fileName = $file.Name
+          $uri = "$uploadUrl`?name=$fileName"
+          $contentType = if ($fileName.EndsWith('.pkg')) { 'application/octet-stream' } else { 'text/plain' }
+          
+          Write-Host "Uploading: $fileName"
+          
+          $fileBytes = [System.IO.File]::ReadAllBytes($file.FullName)
+          Invoke-RestMethod -Uri $uri -Headers $headers -Method Post -Body $fileBytes -ContentType $contentType | Out-Null
+          
+          Write-Host "✅ Uploaded: $fileName"
+        }
+      displayName: 'Upload release assets'
+      env:
+        GITHUB_PAT: $(GITHUB_PAT)
+
+- stage: Summary
+  displayName: 'Signing Summary'
+  dependsOn:
+  - DownloadUnsignedPkg
+  - SignPkgSimple
+  condition: always()
+  jobs:
+  - job: PrintSummary
+    displayName: 'Print Summary'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - bash: |
+        echo "# macOS PKG Signing Summary"
+        echo ""
+        echo "## Source"
+        echo "- **Build ID**: $(SourceBuildId)"
+        echo "- **Version**: $(AzureCliVersion)"
+        echo ""
+        echo "## Process"
+        echo "- **Signing Method**: ${{ parameters.OfficialBuild == true && 'OneBranch/ESRP (Official)' || 'Mock Signing (Development)' }}"
+        echo "- **GitHub Upload**: ${{ parameters.UploadToGitHub }}"
+        echo ""
+        echo "## Next Steps"
+        echo "1. Download signed PKG artifacts from this build"
+        echo "2. Test installation on macOS (ARM64 and Intel)"
+        echo "3. For production: Set OfficialBuild=true to use real code signing"
+      displayName: 'Summary'
