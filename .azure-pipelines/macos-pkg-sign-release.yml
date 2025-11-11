@@ -208,7 +208,7 @@ stages:
     - task: EsrpCodeSigning@2
       displayName: 'Sign ARM64 PKG using ESRP'
       inputs:
-        ConnectedServiceName: 'anne_esrp_connection'
+        ConnectedServiceName: 'ame_esrp_connection'
         FolderPath: '$(Pipeline.Workspace)'
         Pattern: '**/azure-cli-*-macos-arm64.zip'
         signConfigType: 'inlineSignParams'
@@ -351,7 +351,7 @@ stages:
         echo "## Process"
         if [ "${{ parameters.OfficialBuild }}" == "True" ]; then
           echo "- **Signing Method**: ESRP (Service Connection)"
-          echo "- **Service Connection**: anne_esrp_connection"
+          echo "- **Service Connection**: ame_esrp_connection"
           echo "- **KeyCode**: CP-401337-Apple"
         else
           echo "- **Signing Method**: Mock Signing (Development)"
