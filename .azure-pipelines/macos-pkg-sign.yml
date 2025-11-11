@@ -248,24 +248,25 @@ stages:
         Write-Host "ZIP file: $zipName"
       displayName: 'Compress ARM64 PKG for signing'
     
-    - task: onebranch.pipeline.signing@1
+    - task: EsrpCodeSigning@2
       displayName: 'Sign ARM64 PKG using ESRP'
       inputs:
-        command: 'sign'
-        files_to_sign: '**/azure-cli-*-macos-arm64.zip'
-        search_root: '$(Pipeline.Workspace)'
-        inline_operation: |
+        ConnectedServiceName: 'anne_esrp_connection'  # Using the same service connection as MSI signing
+        FolderPath: '$(Pipeline.Workspace)'
+        Pattern: '**/azure-cli-*-macos-arm64.zip'
+        signConfigType: 'inlineSignParams'
+        inlineOperation: |
           [
             {
               "KeyCode": "CP-401337-Apple",
               "OperationCode": "MacAppDeveloperSign",
-              "ToolName": "sign",
-              "ToolVersion": "1.0",
               "Parameters": {
                 "Hardening": "Enable",
                 "OpusInfo": "http://microsoft.com",
                 "BundleId": "com.microsoft.azure.cli"
-              }
+              },
+              "ToolName": "sign",
+              "ToolVersion": "1.0"
             }
           ]
     
