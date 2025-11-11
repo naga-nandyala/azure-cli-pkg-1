@@ -300,40 +300,8 @@ stages:
       displayName: 'Extract signed ARM64 PKG'
     
     - publish: $(Build.ArtifactStagingDirectory)/signed-pkg
-      artifact: signed-macos-pkg-arm64
-      displayName: 'Publish signed ARM64 PKG'
-  
-  - job: CollectSignedPkgs
-    displayName: 'Collect Signed PKGs'
-    dependsOn:
-    - SignARM64
-    pool:
-      vmImage: 'ubuntu-latest'
-    
-    steps:
-    - checkout: none
-    
-    - download: current
-      artifact: signed-macos-pkg-arm64
-      displayName: 'Download signed ARM64 PKG'
-    
-    - bash: |
-        echo "=== Collecting Signed PKG Files ==="
-        
-        SIGNED_DIR="$(Build.ArtifactStagingDirectory)/signed-pkg"
-        mkdir -p "$SIGNED_DIR"
-        
-        echo "Copying ARM64 signed PKG..."
-        cp "$(Pipeline.Workspace)/signed-macos-pkg-arm64"/* "$SIGNED_DIR/"
-        
-        echo ""
-        echo "=== Final Signed Artifacts ==="
-        ls -lh "$SIGNED_DIR"
-      displayName: 'Collect all signed PKGs'
-    
-    - publish: $(Build.ArtifactStagingDirectory)/signed-pkg
       artifact: signed-macos-pkg
-      displayName: 'Publish final signed PKG artifacts'
+      displayName: 'Publish signed PKG artifacts'
 
 - stage: Summary
   displayName: 'Signing Summary'
