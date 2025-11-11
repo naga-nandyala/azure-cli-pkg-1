@@ -178,18 +178,28 @@ stages:
     displayName: 'Sign ARM64 PKG with ESRP'
     pool:
       type: windows
+      isCustom: true
+      name: Azure Pipelines
+      vmImage: windows-2022
     
     variables:
+      - name: runCodesignValidationInjection
+        value: false
+      - name: NugetSecurityAnalysisWarningLevel
+        value: none
+      - name: skipNugetSecurityAnalysis
+        value: true
       - name: ob_outputDirectory
         value: '$(Build.ArtifactStagingDirectory)/ONEBRANCH_ARTIFACT'
       - name: ob_sdl_binskim_enabled
-        value: false  # PKG files don't need BinSkim
+        value: true
       - name: ob_sdl_credscan_enabled
         value: false
       - name: ob_sdl_sbom_enabled
         value: true
       - name: ob_sdl_sbom_packageName
         value: 'Microsoft.AzureCLI.macOS.arm64'
+      - group: mscodehub-macos-package-signing
     
     steps:
     - checkout: none
@@ -254,7 +264,7 @@ stages:
               "ToolVersion": "1.0",
               "Parameters": {
                 "Hardening": "Enable",
-                "OpusInfo": "http://www.microsoft.com",
+                "OpusInfo": "http://microsoft.com",
                 "BundleId": "com.microsoft.azure.cli"
               }
             }
