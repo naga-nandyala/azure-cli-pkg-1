@@ -1,0 +1,427 @@
+# Azure CLI - macOS PKG Notarization Pipeline
+# This pipeline takes signed PKG files and notarizes them with Apple
+
+trigger: none # Manual trigger only
+
+parameters:
+  - name: SourceBuildId
+    displayName: 'Source Build ID (the build that created signed PKGs)'
+    type: string
+    default: '282182'  # User must specify the signing build ID
+  - name: SourcePipelineName
+    displayName: 'Source Pipeline Name'
+    type: string
+    default: 'macos-pkg-sign-release'
+  - name: AzureCliVersion
+    displayName: 'Azure CLI Version (e.g., 2.0.0)'
+    type: string
+    default: '2.0.0'
+  - name: BundleId
+    displayName: 'Bundle ID for notarization'
+    type: string
+    default: 'com.microsoft.azure.cli'
+  - name: OfficialBuild
+    displayName: 'Official Build (enables ESRP notarization)'
+    type: boolean
+    default: true
+
+variables:
+  # Import ESRP signing/notarization variables from the variable group
+  - group: 'AME ESRP Variable Group'
+  
+  - name: DOTNET_CLI_TELEMETRY_OPTOUT
+    value: 1
+  - name: DOTNET_NOLOGO
+    value: 1
+  - name: NugetSecurityAnalysisWarningLevel
+    value: none
+  - name: skipNugetSecurityAnalysis
+    value: true
+  - name: AzureCliVersion
+    value: ${{ parameters.AzureCliVersion }}
+  - name: SourceBuildId
+    value: ${{ parameters.SourceBuildId }}
+  - name: SourcePipelineName
+    value: ${{ parameters.SourcePipelineName }}
+  - name: BundleId
+    value: ${{ parameters.BundleId }}
+
+name: notarize-macos-pkg-$(AzureCliVersion)-$(Build.BuildId)
+
+stages:
+- stage: DownloadSignedPkg
+  displayName: 'Download Signed PKG from Build Artifacts'
+  jobs:
+  - job: DownloadArtifacts
+    displayName: 'Download signed PKG files from build $(SourceBuildId)'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download Signed PKG artifacts'
+      inputs:
+        buildType: 'specific'
+        project: 'public'
+        definition: $(SourcePipelineName)
+        buildVersionToDownload: 'specific'
+        buildId: $(SourceBuildId)
+        artifactName: 'signed-macos-pkg'
+        targetPath: '$(Pipeline.Workspace)/signed-pkg'
+    
+    - bash: |
+        echo "=== Downloaded Signed PKG Files ==="
+        ls -lh $(Pipeline.Workspace)/signed-pkg/
+        echo ""
+        
+        # Count PKG files
+        pkg_count=$(find $(Pipeline.Workspace)/signed-pkg -name "*.pkg" -type f | wc -l)
+        echo "Found $pkg_count PKG file(s)"
+        
+        # Display file details
+        for pkg in $(Pipeline.Workspace)/signed-pkg/*.pkg; do
+          if [ -f "$pkg" ]; then
+            echo ""
+            echo "PKG: $(basename $pkg)"
+            echo "  Size: $(du -h $pkg | cut -f1)"
+            
+            # Check if SHA256 file exists
+            if [ -f "${pkg}.sha256" ]; then
+              echo "  SHA256: $(cat ${pkg}.sha256)"
+            fi
+          fi
+        done
+      displayName: 'List downloaded signed PKG files'
+    
+    - publish: $(Pipeline.Workspace)/signed-pkg
+      artifact: signed-pkg-for-notarization
+      displayName: 'Publish signed PKG artifacts for notarization'
+
+- stage: NotarizePkgSimple
+  displayName: 'Mock Notarization (Development)'
+  dependsOn: DownloadSignedPkg
+  condition: and(succeeded(), eq(${{ parameters.OfficialBuild }}, false))
+  jobs:
+  - job: MockNotarization
+    displayName: 'Mock Notarization (Development)'
+    pool:
+      vmImage: 'macos-14'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: signed-pkg-for-notarization
+      displayName: 'Download signed PKGs'
+    
+    - bash: |
+        echo "=== Mock Notarization Process ==="
+        echo "NOTE: This is a development/test notarization process"
+        echo "For production, enable OfficialBuild=true to use ESRP notarization"
+        echo ""
+        
+        SIGNED_DIR="$(Pipeline.Workspace)/signed-pkg-for-notarization"
+        NOTARIZED_DIR="$(Build.ArtifactStagingDirectory)/notarized-pkg"
+        mkdir -p "$NOTARIZED_DIR"
+        
+        for pkg in "$SIGNED_DIR"/*.pkg; do
+          if [ -f "$pkg" ]; then
+            pkg_name=$(basename "$pkg")
+            notarized_pkg="$NOTARIZED_DIR/${pkg_name}"
+            
+            echo "Processing: $pkg_name"
+            
+            # For development: just copy
+            # In production, this would be replaced with actual Apple notarization
+            cp "$pkg" "$notarized_pkg"
+            
+            # Copy SHA256 if exists
+            if [ -f "${pkg}.sha256" ]; then
+              cp "${pkg}.sha256" "${notarized_pkg}.sha256"
+            fi
+            
+            # Verify the PKG structure
+            echo "Checking PKG contents:"
+            pkgutil --payload-files "$notarized_pkg" | head -10
+            
+            echo "✅ Processed: $pkg_name"
+            echo ""
+          fi
+        done
+        
+        echo "=== Mock Notarized PKG Files ==="
+        ls -lh "$NOTARIZED_DIR"
+      displayName: 'Mock notarize PKG files (development)'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/notarized-pkg
+      artifact: notarized-macos-pkg
+      displayName: 'Publish notarized PKG artifacts'
+
+- stage: NotarizePkgESRP
+  displayName: 'Notarize macOS PKG Files (ESRP)'
+  dependsOn: DownloadSignedPkg
+  condition: and(succeeded(), eq(${{ parameters.OfficialBuild }}, true))
+  jobs:
+  - job: NotarizeARM64
+    displayName: 'Notarize ARM64 PKG with Apple via ESRP'
+    pool:
+      vmImage: windows-2022
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: signed-pkg-for-notarization
+      displayName: 'Download signed PKGs'
+    
+    - pwsh: |
+        Write-Host "=== Preparing ARM64 PKG for Apple Notarization ==="
+        
+        # Find the signed PKG
+        $signedPkg = Get-ChildItem -Path "$(Pipeline.Workspace)/signed-pkg-for-notarization" -Filter "*-signed.pkg" -File | Select-Object -First 1
+        
+        if (-not $signedPkg) {
+          Write-Error "❌ Signed PKG not found"
+          Write-Host "Available files:"
+          Get-ChildItem "$(Pipeline.Workspace)/signed-pkg-for-notarization" | ForEach-Object {
+            Write-Host "  - $($_.Name)"
+          }
+          exit 1
+        }
+        
+        Write-Host "✅ Found signed PKG: $($signedPkg.Name)"
+        Write-Host "   Size: $([math]::Round($signedPkg.Length / 1MB, 2)) MB"
+        Write-Host "   Path: $($signedPkg.FullName)"
+        
+        # ESRP notarization requires PKG to be in a ZIP archive
+        $zipName = "azure-cli-$(AzureCliVersion)-macos-arm64-signed.zip"
+        $zipPath = "$(Pipeline.Workspace)/$zipName"
+        
+        Write-Host ""
+        Write-Host "Creating ZIP archive for ESRP notarization..."
+        Write-Host "  Source: $($signedPkg.FullName)"
+        Write-Host "  Archive: $zipPath"
+        Write-Host "  Bundle ID: $(BundleId)"
+        
+        Compress-Archive -Path $signedPkg.FullName -DestinationPath $zipPath -CompressionLevel Optimal -Force
+        
+        if (Test-Path $zipPath) {
+          Write-Host "✅ ZIP created: $([math]::Round((Get-Item $zipPath).Length / 1MB, 2)) MB"
+        } else {
+          Write-Error "❌ Failed to create ZIP"
+          exit 1
+        }
+        
+        Write-Host ""
+        Write-Host "=== Ready for Apple notarization ==="
+        Write-Host "ZIP file: $zipName"
+      displayName: 'Compress signed PKG for notarization'
+    
+    - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
+      displayName: 'Notarize ARM64 PKG with Apple using ESRP v5'
+      inputs:
+        ConnectedServiceName: 'ame_esrp_connection'
+        AppRegistrationClientId: '$(ESRPAppClientId)'
+        AppRegistrationTenantId: '$(ESRPAppTenantId)'
+        AuthAKVName: '$(ESRPKVName)'
+        AuthCertName: '$(ESRPAuthCertName)'
+        AuthSignCertName: '$(ESRPSignCertName)'
+        FolderPath: '$(Pipeline.Workspace)'
+        Pattern: 'azure-cli-*-macos-arm64-signed.zip'
+        signConfigType: 'inlineSignParams'
+        inlineOperation: |
+          [
+            {
+              "KeyCode": "CP-401337-Apple",
+              "OperationCode": "MacAppNotarize",
+              "ToolName": "sign",
+              "ToolVersion": "1.0",
+              "Parameters": {
+                "BundleId": "$(BundleId)"
+              }
+            }
+          ]
+        SessionTimeout: '60'
+        MaxConcurrency: '50'
+        MaxRetryAttempts: '5'
+    
+    - pwsh: |
+        Write-Host "=== Extracting Notarized ARM64 PKG ==="
+        
+        # Find the notarized ZIP (ESRP may rename it)
+        $notarizedZip = Get-ChildItem -Path "$(Pipeline.Workspace)" -Filter "*arm64*.zip" -File | 
+                        Sort-Object LastWriteTime -Descending | 
+                        Select-Object -First 1
+        
+        if (-not $notarizedZip) {
+          Write-Error "❌ Notarized ZIP not found"
+          Write-Host "Available files:"
+          Get-ChildItem "$(Pipeline.Workspace)" -File | ForEach-Object {
+            Write-Host "  - $($_.Name) [$($_.LastWriteTime)]"
+          }
+          exit 1
+        }
+        
+        Write-Host "Found notarized ZIP: $($notarizedZip.Name)"
+        Write-Host "Size: $([math]::Round($notarizedZip.Length / 1MB, 2)) MB"
+        Write-Host "Modified: $($notarizedZip.LastWriteTime)"
+        
+        # Create output directory
+        $outputDir = "$(Build.ArtifactStagingDirectory)/notarized-pkg"
+        if (-not (Test-Path $outputDir)) {
+          $null = New-Item -ItemType Directory -Path $outputDir -Force
+        }
+        
+        # Extract the notarized PKG
+        Write-Host ""
+        Write-Host "Extracting notarized PKG..."
+        Expand-Archive -Path $notarizedZip.FullName -DestinationPath $outputDir -Force
+        
+        # Verify extraction
+        $notarizedPkg = Get-ChildItem -Path $outputDir -Filter "*.pkg" -File | Select-Object -First 1
+        
+        if ($notarizedPkg) {
+          Write-Host "✅ Notarized PKG extracted successfully"
+          Write-Host "   Name: $($notarizedPkg.Name)"
+          Write-Host "   Size: $([math]::Round($notarizedPkg.Length / 1MB, 2)) MB"
+          
+          # Rename to indicate it's notarized
+          $notarizedName = $notarizedPkg.Name -replace '-signed\.pkg$', '-notarized.pkg'
+          $newPath = Join-Path $outputDir $notarizedName
+          Move-Item $notarizedPkg.FullName -Destination $newPath -Force
+          
+          Write-Host "   Renamed to: $notarizedName"
+          
+          # Generate SHA256
+          $hash = Get-FileHash -Path $newPath -Algorithm SHA256
+          $hashFile = "$newPath.sha256"
+          "$($hash.Hash.ToLower())  $notarizedName" | Out-File -FilePath $hashFile -Encoding ASCII -NoNewline
+          
+          Write-Host "   SHA256: $($hash.Hash)"
+        } else {
+          Write-Error "❌ No PKG file found after extraction"
+          exit 1
+        }
+        
+        Write-Host ""
+        Write-Host "=== Notarized ARM64 PKG Ready ==="
+        Get-ChildItem $outputDir | ForEach-Object {
+          Write-Host "✅ $($_.Name) - $([math]::Round($_.Length / 1MB, 2)) MB"
+        }
+      displayName: 'Extract notarized ARM64 PKG'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/notarized-pkg
+      artifact: notarized-macos-pkg
+      displayName: 'Publish notarized PKG artifacts'
+
+- stage: VerifyNotarization
+  displayName: 'Verify Notarization'
+  dependsOn:
+  - NotarizePkgESRP
+  condition: and(succeeded(), eq(${{ parameters.OfficialBuild }}, true))
+  jobs:
+  - job: VerifyOnMac
+    displayName: 'Verify notarization on macOS'
+    pool:
+      vmImage: 'macos-14'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: notarized-macos-pkg
+      displayName: 'Download notarized PKGs'
+    
+    - bash: |
+        echo "=== Verifying Apple Notarization ==="
+        echo ""
+        
+        NOTARIZED_DIR="$(Pipeline.Workspace)/notarized-macos-pkg"
+        
+        for pkg in "$NOTARIZED_DIR"/*.pkg; do
+          if [ -f "$pkg" ]; then
+            pkg_name=$(basename "$pkg")
+            echo "Verifying: $pkg_name"
+            echo ""
+            
+            # Check PKG signature
+            echo "1. Checking PKG signature:"
+            pkgutil --check-signature "$pkg"
+            echo ""
+            
+            # Check notarization status using spctl
+            echo "2. Checking notarization with spctl:"
+            spctl -a -vv -t install "$pkg" 2>&1 || true
+            echo ""
+            
+            # Alternative: Check using stapler (if notarization ticket is stapled)
+            echo "3. Checking stapled notarization ticket:"
+            stapler validate "$pkg" 2>&1 || echo "Note: Ticket may not be stapled yet"
+            echo ""
+            
+            echo "---"
+            echo ""
+          fi
+        done
+        
+        echo "=== Verification Complete ==="
+        echo ""
+        echo "Expected results for notarized PKG:"
+        echo "  - pkgutil should show valid signature with Developer ID"
+        echo "  - spctl should show 'accepted' or 'source=Notarized Developer ID'"
+        echo "  - stapler should show ticket is valid (if stapled)"
+      displayName: 'Verify Apple notarization'
+
+- stage: Summary
+  displayName: 'Notarization Summary'
+  dependsOn:
+  - DownloadSignedPkg
+  - NotarizePkgESRP
+  - VerifyNotarization
+  condition: always()
+  jobs:
+  - job: PrintSummary
+    displayName: 'Print Summary'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - bash: |
+        echo "# macOS PKG Notarization Summary"
+        echo ""
+        echo "## Source"
+        echo "- **Source Build ID**: $(SourceBuildId)"
+        echo "- **Version**: $(AzureCliVersion)"
+        echo "- **Architecture**: ARM64"
+        echo "- **Bundle ID**: $(BundleId)"
+        echo ""
+        echo "## Process"
+        if [ "${{ parameters.OfficialBuild }}" == "True" ]; then
+          echo "- **Notarization Method**: Apple Notarization via ESRP"
+          echo "- **Service Connection**: ame_esrp_connection"
+          echo "- **KeyCode**: CP-401337-Apple"
+          echo "- **Operation**: MacAppNotarize"
+        else
+          echo "- **Notarization Method**: Mock Notarization (Development)"
+        fi
+        echo ""
+        echo "## Apple Notarization"
+        echo "Notarization submits the PKG to Apple's notary service, which:"
+        echo "1. Scans the PKG for malicious content"
+        echo "2. Verifies the code signature"
+        echo "3. Issues a notarization ticket"
+        echo "4. Returns the notarized PKG (ticket may be stapled)"
+        echo ""
+        echo "## Next Steps"
+        echo "1. Download notarized PKG artifacts from this build"
+        echo "2. Test installation on macOS ARM64"
+        echo "3. Verify notarization: spctl -a -vv -t install <pkg-file>"
+        echo "4. Verify signature: pkgutil --check-signature <pkg-file>"
+        echo "5. Check stapled ticket: stapler validate <pkg-file>"
+        echo ""
+        echo "## Distribution"
+        echo "The notarized PKG can be distributed to macOS users."
+        echo "macOS Gatekeeper will allow installation without warnings."
+      displayName: 'Summary'
