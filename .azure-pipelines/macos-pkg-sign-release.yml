@@ -93,7 +93,7 @@ stages:
 - stage: SignPkgSimple
   displayName: 'Sign macOS PKG Files (Simple)'
   dependsOn: DownloadUnsignedPkg
-  condition: and(succeeded(), eq('${{ parameters.OfficialBuild }}', false))
+  condition: and(succeeded(), eq(${{ parameters.OfficialBuild }}, false))
   jobs:
   - job: MockSigning
     displayName: 'Mock Signing (Development)'
@@ -151,9 +151,9 @@ stages:
       displayName: 'Publish signed PKG artifacts'
 
 - stage: SignPkgESRP
-  displayName: 'Sign macOS PKG Files (ESRP - REQUIRES PRSS SERVICE CONNECTION)'
+  displayName: 'Sign macOS PKG Files (ESRP)'
   dependsOn: DownloadUnsignedPkg
-  condition: and(succeeded(), eq('${{ parameters.OfficialBuild }}', true))
+  condition: and(succeeded(), eq(${{ parameters.OfficialBuild }}, true))
   jobs:
   - job: SignARM64
     displayName: 'Sign ARM64 PKG with ESRP'
