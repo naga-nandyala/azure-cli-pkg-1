@@ -30,6 +30,9 @@ parameters:
     default: 'naga-nandyala/azure-cli-pkg-1'
 
 variables:
+  # Import ESRP signing variables from the variable group
+  - group: 'AME ESRP Variable Group'
+  
   - name: DOTNET_CLI_TELEMETRY_OPTOUT
     value: 1
   - name: DOTNET_NOLOGO
@@ -44,17 +47,6 @@ variables:
     value: ${{ parameters.SourceBuildId }}
   - name: SourcePipelineName
     value: ${{ parameters.SourcePipelineName }}
-  # ESRP Signing Variables - Replace with your actual values
-  - name: ESRPAppClientId
-    value: 'YOUR_APP_CLIENT_ID_HERE'  # Replace with your App Registration Client ID
-  - name: ESRPAppTenantId
-    value: 'YOUR_TENANT_ID_HERE'  # Replace with your Tenant ID
-  - name: ESRPKVName
-    value: 'YOUR_KEY_VAULT_NAME_HERE'  # Replace with your Azure Key Vault name
-  - name: ESRPAuthCertName
-    value: 'YOUR_AUTH_CERT_NAME_HERE'  # Replace with auth certificate name in Key Vault
-  - name: ESRPSignCertName
-    value: 'YOUR_SIGN_CERT_NAME_HERE'  # Replace with signing certificate name in Key Vault
 
 name: sign-macos-pkg-$(AzureCliVersion)-$(Build.BuildId)
 
