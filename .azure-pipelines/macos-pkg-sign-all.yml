@@ -164,32 +164,45 @@ stages:
         
         # Find all binaries that need signing:
         # 1. Mach-O executables (including Python)
-        # 2. Dynamic libraries (.dylib, .so)
-        # 3. Frameworks
+        # 2. macOS Dynamic libraries (.dylib)
+        # NOTE: .so files are often Linux ELF binaries, only include if Mach-O
         
         echo "Scanning for Mach-O binaries..."
         
-        # Use 'file' command to identify Mach-O binaries
+        # Use 'file' command to identify ONLY Mach-O binaries
         find . -type f | while read filepath; do
           filetype=$(file -b "$filepath")
           
-          # Check if it's a Mach-O binary
-          if echo "$filetype" | grep -q "Mach-O"; then
+          # Only include if it's a Mach-O binary (excludes Linux ELF .so files)
+          if echo "$filetype" | grep -q -i "Mach-O"; then
             echo "$filepath"
           fi
-          
-          # Also include .dylib and .so files
-          if [[ "$filepath" == *.dylib ]] || [[ "$filepath" == *.so ]]; then
-            echo "$filepath"
-          fi
-        done > "$FILES_TO_SIGN"
+        done | sort -u > "$FILES_TO_SIGN"
         
         echo ""
         echo "=== Files identified for signing ==="
-        echo "Total files: $(wc -l < $FILES_TO_SIGN)"
+        echo "Total Mach-O binaries: $(wc -l < $FILES_TO_SIGN)"
         echo ""
         echo "Sample (first 20):"
         head -20 "$FILES_TO_SIGN"
+        
+        # Show file types for debugging
+        echo ""
+        echo "=== File type breakdown ==="
+        echo "(.dylib files):"
+        grep '\.dylib$' "$FILES_TO_SIGN" | wc -l || echo "0"
+        echo "(executables without extension):"
+        grep -v '\.' "$FILES_TO_SIGN" | wc -l || echo "0"
+        
+        # Show any .so files that were EXCLUDED (Linux ELF)
+        echo ""
+        echo "=== Files EXCLUDED (Linux ELF, not Mach-O) ==="
+        find . -type f -name "*.so" | while read filepath; do
+          filetype=$(file -b "$filepath")
+          if ! echo "$filetype" | grep -q -i "Mach-O"; then
+            echo "  EXCLUDED: $filepath ($filetype)"
+          fi
+        done | head -10
         
       displayName: 'Identify binaries for signing'
     
