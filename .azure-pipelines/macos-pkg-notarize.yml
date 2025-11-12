@@ -7,11 +7,11 @@ parameters:
   - name: SourceBuildId
     displayName: 'Source Build ID (the build that created signed PKGs)'
     type: string
-    default: '282182'  # User must specify the signing build ID
+    default: '282373'  # Updated to use the fully-signed PKG build
   - name: SourcePipelineName
     displayName: 'Source Pipeline Name'
     type: string
-    default: 'macos-pkg-sign-release'
+    default: 'macos-pkg-sign-all'  # Changed from macos-pkg-sign-release
   - name: AzureCliVersion
     displayName: 'Azure CLI Version (e.g., 2.0.0)'
     type: string
@@ -61,14 +61,14 @@ stages:
     - checkout: none
     
     - task: DownloadPipelineArtifact@2
-      displayName: 'Download Signed PKG artifacts'
+      displayName: 'Download Fully-Signed PKG artifact'
       inputs:
         buildType: 'specific'
         project: 'public'
         definition: $(SourcePipelineName)
         buildVersionToDownload: 'specific'
         buildId: $(SourceBuildId)
-        artifactName: 'signed-macos-pkg'
+        artifactName: 'fully-signed-macos-pkg'  # Changed from 'signed-macos-pkg'
         targetPath: '$(Pipeline.Workspace)/signed-pkg'
     
     - bash: |
@@ -177,13 +177,18 @@ stages:
       displayName: 'Download signed PKGs'
     
     - pwsh: |
-        Write-Host "=== Preparing ARM64 PKG for Apple Notarization ==="
+        Write-Host "=== Preparing Fully-Signed PKG for Apple Notarization ==="
         
-        # Find the signed PKG
-        $signedPkg = Get-ChildItem -Path "$(Pipeline.Workspace)/signed-pkg-for-notarization" -Filter "*-signed.pkg" -File | Select-Object -First 1
+        # Find the fully-signed PKG from macos-pkg-sign-all pipeline
+        $signedPkg = Get-ChildItem -Path "$(Pipeline.Workspace)/signed-pkg-for-notarization" -Filter "*fully-signed.pkg" -File | Select-Object -First 1
         
         if (-not $signedPkg) {
-          Write-Error "❌ Signed PKG not found"
+          Write-Host "⚠️  Fully-signed PKG not found, checking for other PKG files..."
+          $signedPkg = Get-ChildItem -Path "$(Pipeline.Workspace)/signed-pkg-for-notarization" -Filter "*.pkg" -File | Select-Object -First 1
+        }
+        
+        if (-not $signedPkg) {
+          Write-Error "❌ No PKG file found in artifact"
           Write-Host "Available files:"
           Get-ChildItem "$(Pipeline.Workspace)/signed-pkg-for-notarization" | ForEach-Object {
             Write-Host "  - $($_.Name)"
@@ -200,7 +205,7 @@ stages:
         $targetPath = "$(Pipeline.Workspace)/$($signedPkg.Name)"
         
         Write-Host ""
-        Write-Host "Copying signed PKG for ESRP notarization..."
+        Write-Host "Copying fully-signed PKG for ESRP notarization..."
         Write-Host "  Source: $($signedPkg.FullName)"
         Write-Host "  Target: $targetPath"
         Write-Host "  Bundle ID: $(BundleId)"
@@ -217,7 +222,8 @@ stages:
         Write-Host ""
         Write-Host "=== Ready for Apple notarization ==="
         Write-Host "PKG file: $($signedPkg.Name)"
-      displayName: 'Prepare signed PKG for notarization'
+        Write-Host "Note: This PKG is fully signed (binaries + PKG container)"
+      displayName: 'Prepare fully-signed PKG for notarization'
     
     - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
       displayName: 'Notarize ARM64 PKG with Apple using ESRP v5'
@@ -229,7 +235,7 @@ stages:
         AuthCertName: '$(ESRPAuthCertName)'
         AuthSignCertName: '$(ESRPSignCertName)'
         FolderPath: '$(Pipeline.Workspace)'
-        Pattern: 'azure-cli-*-macos-arm64-signed.pkg'
+        Pattern: '*fully-signed.pkg'  # Updated to match the artifact from macos-pkg-sign-all
         signConfigType: 'inlineSignParams'
         inlineOperation: |
           [
@@ -248,10 +254,10 @@ stages:
         MaxRetryAttempts: '5'
     
     - pwsh: |
-        Write-Host "=== Collecting Notarized ARM64 PKG ==="
+        Write-Host "=== Collecting Notarized PKG ==="
         
         # Find the notarized PKG (ESRP processes it in-place)
-        $notarizedPkg = Get-ChildItem -Path "$(Pipeline.Workspace)" -Filter "*arm64-signed.pkg" -File | 
+        $notarizedPkg = Get-ChildItem -Path "$(Pipeline.Workspace)" -Filter "*fully-signed.pkg" -File | 
                         Sort-Object LastWriteTime -Descending | 
                         Select-Object -First 1
         
@@ -278,8 +284,8 @@ stages:
         Write-Host ""
         Write-Host "Processing notarized PKG..."
         
-        # Rename to indicate it's notarized
-        $notarizedName = $notarizedPkg.Name -replace '-signed\.pkg$', '-notarized.pkg'
+        # Rename to indicate it's notarized (replace 'fully-signed' with 'notarized')
+        $notarizedName = $notarizedPkg.Name -replace 'fully-signed\.pkg$', 'notarized.pkg'
         $newPath = Join-Path $outputDir $notarizedName
         Copy-Item -Path $notarizedPkg.FullName -Destination $newPath -Force
         
@@ -300,11 +306,11 @@ stages:
         }
         
         Write-Host ""
-        Write-Host "=== Notarized ARM64 PKG Ready ==="
+        Write-Host "=== Notarized PKG Ready ==="
         Get-ChildItem $outputDir | ForEach-Object {
           Write-Host "✅ $($_.Name) - $([math]::Round($_.Length / 1MB, 2)) MB"
         }
-      displayName: 'Collect notarized ARM64 PKG'
+      displayName: 'Collect notarized PKG'
     
     - publish: $(Build.ArtifactStagingDirectory)/notarized-pkg
       artifact: notarized-macos-pkg
