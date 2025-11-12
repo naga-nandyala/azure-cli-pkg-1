@@ -544,8 +544,8 @@ stages:
         DISTRIBUTION="$(Pipeline.Workspace)/Distribution"
         OUTPUT_PKG="$(Pipeline.Workspace)/azure-cli-$(AzureCliVersion)-macos-arm64-signed-binaries.pkg"
         
-        # Create component package
-        COMPONENT_PKG="$(Pipeline.Workspace)/azure-cli-component.pkg"
+        # Create component package with exact name expected by Distribution file
+        COMPONENT_PKG="$(Pipeline.Workspace)/azure-cli-component-$(AzureCliVersion)-macos-arm64.pkg"
         
         echo "Creating component PKG from merged payload (with signed binaries)..."
         echo "Source directory: $MERGED_PAYLOAD"
