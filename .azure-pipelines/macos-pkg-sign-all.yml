@@ -251,12 +251,14 @@ stages:
     
     - pwsh: |
         Write-Host "=== Preparing binaries for ESRP signing ==="
+        Write-Host "NOTE: ESRP MacAppDeveloperSign requires ZIP archives, not individual files"
+        Write-Host "Workaround: Compress each binary into individual ZIP files"
         
         $unsignedDir = "$(Pipeline.Workspace)/unsigned-binaries"
         $fileListPath = "$(Pipeline.Workspace)/files-to-sign.txt"
         $toBeSignedDir = "$(Pipeline.Workspace)/toBeSigned"
         
-        # Create directory for files to be signed (FLAT structure for ESRP)
+        # Create directory for ZIP files to be signed
         if (Test-Path $toBeSignedDir) {
           Remove-Item -Path $toBeSignedDir -Recurse -Force
         }
@@ -274,10 +276,10 @@ stages:
         Write-Host "Files to sign: $($filesToSign.Count)"
         
         Write-Host ""
-        Write-Host "Copying files to FLAT signing directory..."
-        Write-Host "(ESRP Pattern doesn't support subdirectories, so we flatten)"
+        Write-Host "Creating individual ZIP files for each binary..."
+        Write-Host "(Required because ESRP MacAppDeveloperSign only accepts ZIP/DMG archives)"
         
-        $copiedCount = 0
+        $zippedCount = 0
         $fileMapping = @{}
         
         foreach ($relPath in $filesToSign) {
@@ -289,17 +291,25 @@ stages:
           if (Test-Path $sourcePath) {
             # Create unique flat filename (replace / with __)
             $flatName = $relPath -replace '[/\\]', '__'
-            $targetPath = Join-Path $toBeSignedDir $flatName
+            $zipName = "$flatName.zip"
+            $zipPath = Join-Path $toBeSignedDir $zipName
             
-            Copy-Item -Path $sourcePath -Destination $targetPath -Force
+            # Compress individual file to ZIP
+            # Note: Archive will contain the file with its original name
+            $fileName = Split-Path $sourcePath -Leaf
+            Compress-Archive -Path $sourcePath -DestinationPath $zipPath -Force
             
             # Store mapping for later reconstruction
-            $fileMapping[$flatName] = $relPath
+            $fileMapping[$zipName] = @{
+              "OriginalPath" = $relPath
+              "FileName" = $fileName
+            }
             
-            $copiedCount++
+            $zippedCount++
             
-            if ($copiedCount -le 10) {
-              Write-Host "  ✓ $relPath -> $flatName"
+            if ($zippedCount -le 10) {
+              $zipSize = [math]::Round((Get-Item $zipPath).Length / 1KB, 1)
+              Write-Host "  ✓ $relPath -> $zipName ($zipSize KB)"
             }
           } else {
             Write-Warning "File not found: $sourcePath"
@@ -307,19 +317,19 @@ stages:
         }
         
         Write-Host ""
-        Write-Host "✅ Copied $copiedCount files to flat signing directory"
+        Write-Host "✅ Created $zippedCount ZIP files"
         Write-Host ""
-        Write-Host "Signing directory size: $([math]::Round((Get-ChildItem $toBeSignedDir -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB, 2)) MB"
+        Write-Host "ZIP directory size: $([math]::Round((Get-ChildItem $toBeSignedDir -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB, 2)) MB"
         
         # Save mapping for reconstruction
         $mappingPath = "$(Pipeline.Workspace)/file-mapping.json"
         $fileMapping | ConvertTo-Json | Set-Content $mappingPath
         Write-Host "File mapping saved: $mappingPath"
         
-      displayName: 'Prepare binaries for signing (flatten structure)'
+      displayName: 'Prepare binaries for signing (ZIP each file)'
     
     - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
-      displayName: 'ESRP - Sign macOS binaries'
+      displayName: 'ESRP - Sign macOS binaries (ZIP archives)'
       inputs:
         ConnectedServiceName: 'ame_esrp_connection'
         AppRegistrationClientId: '$(ESRPAppClientId)'
@@ -328,7 +338,7 @@ stages:
         AuthCertName: '$(ESRPAuthCertName)'
         AuthSignCertName: '$(ESRPSignCertName)'
         FolderPath: '$(Pipeline.Workspace)/toBeSigned'
-        Pattern: '*'
+        Pattern: '*.zip'
         signConfigType: 'inlineSignParams'
         inlineOperation: |
           [
@@ -338,9 +348,7 @@ stages:
               "ToolName": "sign",
               "ToolVersion": "1.0",
               "Parameters": {
-                "Hardening": "Enable",
-                "OpusInfo": "http://www.microsoft.com",
-                "BundleId": "$(BundleId)"
+                "Hardening": "--options=runtime"
               }
             }
           ]
@@ -349,9 +357,10 @@ stages:
         MaxRetryAttempts: '5'
     
     - pwsh: |
-        Write-Host "=== Restoring directory structure after signing ==="
+        Write-Host "=== Extracting signed binaries from ZIP files ==="
+        Write-Host "NOTE: ESRP signs ZIP archives, need to extract signed binaries"
         
-        $signedDir = "$(Pipeline.Workspace)/toBeSigned"
+        $signedZipsDir = "$(Pipeline.Workspace)/toBeSigned"
         $outputDir = "$(Pipeline.Workspace)/signed-binaries"
         $mappingPath = "$(Pipeline.Workspace)/file-mapping.json"
         
@@ -360,7 +369,7 @@ stages:
           exit 1
         }
         
-        # Read mapping (JSON: flatName -> originalRelPath)
+        # Read mapping (JSON: zipName -> {OriginalPath, FileName})
         $fileMapping = Get-Content $mappingPath | ConvertFrom-Json
         
         # Create output directory
@@ -370,41 +379,60 @@ stages:
         New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
         
         Write-Host ""
-        Write-Host "Restoring files to original paths..."
+        Write-Host "Extracting signed binaries from ZIPs..."
         
-        $restoredCount = 0
+        $extractedCount = 0
         foreach ($property in $fileMapping.PSObject.Properties) {
-          $flatName = $property.Name
-          $originalRelPath = $property.Value
+          $zipName = $property.Name
+          $originalRelPath = $property.Value.OriginalPath
+          $fileName = $property.Value.FileName
           
-          $sourcePath = Join-Path $signedDir $flatName
-          $targetPath = Join-Path $outputDir $originalRelPath
+          $zipPath = Join-Path $signedZipsDir $zipName
           
-          if (Test-Path $sourcePath) {
-            # Create parent directory
-            $targetDir = Split-Path $targetPath -Parent
-            if (-not (Test-Path $targetDir)) {
-              New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+          if (Test-Path $zipPath) {
+            # Create temporary extraction directory
+            $tempExtractDir = Join-Path $env:TEMP "extract-$extractedCount"
+            New-Item -ItemType Directory -Path $tempExtractDir -Force | Out-Null
+            
+            # Extract ZIP (contains single signed file)
+            Expand-Archive -Path $zipPath -DestinationPath $tempExtractDir -Force
+            
+            # Find the extracted signed binary
+            $signedFile = Join-Path $tempExtractDir $fileName
+            
+            if (Test-Path $signedFile) {
+              # Restore to original directory structure
+              $targetPath = Join-Path $outputDir $originalRelPath
+              $targetDir = Split-Path $targetPath -Parent
+              
+              if (-not (Test-Path $targetDir)) {
+                New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+              }
+              
+              # Copy signed binary to output
+              Copy-Item -Path $signedFile -Destination $targetPath -Force
+              $extractedCount++
+              
+              if ($extractedCount -le 10) {
+                Write-Host "  ✓ $zipName -> $originalRelPath"
+              }
+            } else {
+              Write-Warning "Signed file not found in ZIP: $zipPath"
             }
             
-            # Restore file to original path
-            Copy-Item -Path $sourcePath -Destination $targetPath -Force
-            $restoredCount++
-            
-            if ($restoredCount -le 10) {
-              Write-Host "  ✓ $flatName -> $originalRelPath"
-            }
+            # Clean up temp directory
+            Remove-Item -Path $tempExtractDir -Recurse -Force -ErrorAction SilentlyContinue
           } else {
-            Write-Warning "Signed file not found: $sourcePath"
+            Write-Warning "Signed ZIP not found: $zipPath"
           }
         }
         
         Write-Host ""
-        Write-Host "✅ Restored $restoredCount files to original directory structure"
+        Write-Host "✅ Extracted $extractedCount signed binaries from ZIP files"
         Write-Host ""
         Write-Host "Signed binaries size: $([math]::Round((Get-ChildItem $outputDir -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB, 2)) MB"
         
-      displayName: 'Restore directory structure after signing'
+      displayName: 'Extract signed binaries from ZIPs'
     
     - pwsh: |
         Write-Host "=== Verifying signed binaries ==="
