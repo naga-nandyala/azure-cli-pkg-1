@@ -522,77 +522,36 @@ stages:
     
     - bash: |
         set -e
-        echo "=== Creating new Payload archive ==="
+        echo "=== Preparing PKG metadata for repacking ==="
         
-        MERGED_PAYLOAD="$(Pipeline.Workspace)/merged-payload"
         PKG_METADATA="$(Pipeline.Workspace)/pkg-metadata"
-        OUTPUT_DIR="$(Pipeline.Workspace)/repacked-pkg"
         
-        mkdir -p "$OUTPUT_DIR"
-        
-        # Find the component PKG directory
-        COMPONENT_PKG=$(find "$PKG_METADATA" -name "*.pkg" -type d | grep -v "^\.$" | head -1)
-        
-        if [ -z "$COMPONENT_PKG" ]; then
-          echo "❌ ERROR: No component PKG found!"
-          exit 1
-        fi
-        
-        echo "Component PKG: $COMPONENT_PKG"
-        
-        # Create new Payload from merged binaries
-        echo ""
-        echo "Creating Payload archive..."
-        cd "$MERGED_PAYLOAD"
-        
-        # Create the Payload using cpio and gzip (same format as original)
-        find . | cpio -o --format odc | gzip -c > "$OUTPUT_DIR/Payload"
-        
-        echo "✅ New Payload created: $(du -h $OUTPUT_DIR/Payload | cut -f1)"
-        
-        # Copy other PKG components (Bom, PackageInfo, Scripts if exists)
-        echo ""
-        echo "Copying PKG metadata files..."
-        
-        if [ -f "$COMPONENT_PKG/Bom" ]; then
-          cp "$COMPONENT_PKG/Bom" "$OUTPUT_DIR/"
-          echo "  ✓ Bom"
-        fi
-        
-        if [ -f "$COMPONENT_PKG/PackageInfo" ]; then
-          cp "$COMPONENT_PKG/PackageInfo" "$OUTPUT_DIR/"
-          echo "  ✓ PackageInfo"
-        fi
-        
-        if [ -d "$COMPONENT_PKG/Scripts" ]; then
-          cp -R "$COMPONENT_PKG/Scripts" "$OUTPUT_DIR/"
-          echo "  ✓ Scripts"
-        fi
-        
-        # Copy Distribution file
+        # Copy Distribution file if it exists (needed for productbuild)
         if [ -f "$PKG_METADATA/Distribution" ]; then
           cp "$PKG_METADATA/Distribution" "$(Pipeline.Workspace)/"
-          echo "  ✓ Distribution"
+          echo "✅ Distribution file copied"
+        else
+          echo "ℹ️  No Distribution file found (will use simple productbuild)"
         fi
         
-        echo ""
-        echo "✅ PKG components ready for repacking"
-        
-      displayName: 'Create new Payload archive'
+      displayName: 'Prepare PKG metadata'
     
     - bash: |
         set -e
         echo "=== Building new PKG with signed binaries ==="
         
-        REPACKED_DIR="$(Pipeline.Workspace)/repacked-pkg"
+        MERGED_PAYLOAD="$(Pipeline.Workspace)/merged-payload"
         DISTRIBUTION="$(Pipeline.Workspace)/Distribution"
         OUTPUT_PKG="$(Pipeline.Workspace)/azure-cli-$(AzureCliVersion)-macos-arm64-signed-binaries.pkg"
         
         # Create component package
         COMPONENT_PKG="$(Pipeline.Workspace)/azure-cli-component.pkg"
         
-        echo "Creating component PKG from repacked contents..."
-        pkgbuild --root "$REPACKED_DIR" \
+        echo "Creating component PKG from merged payload (with signed binaries)..."
+        echo "Source directory: $MERGED_PAYLOAD"
+        echo "Directory size: $(du -sh $MERGED_PAYLOAD | cut -f1)"
+        
+        pkgbuild --root "$MERGED_PAYLOAD" \
                  --identifier "$(BundleId)" \
                  --version "$(AzureCliVersion)" \
                  --install-location "/usr/local/az" \
