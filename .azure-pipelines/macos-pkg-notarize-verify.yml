@@ -7,7 +7,7 @@ parameters:
   - name: SourceBuildId
     displayName: 'Source Build ID (the notarization build)'
     type: string
-    default: '282390'  # The notarization build that created the notarized PKG
+    default: '283737'  # The notarization build that created the notarized PKG
   - name: SourcePipelineName
     displayName: 'Source Pipeline Name'
     type: string
