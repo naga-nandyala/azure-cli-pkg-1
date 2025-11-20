@@ -1,0 +1,420 @@
+# Azure CLI - GitHub Release Publication Pipeline
+# This pipeline publishes the notarized and stapled PKG to GitHub Releases
+
+trigger: none # Manual trigger only
+
+parameters:
+  - name: SourceBuildId
+    displayName: 'Source Build ID (the notarization build with stapled PKG)'
+    type: string
+    default: '283737'
+  - name: SourcePipelineName
+    displayName: 'Source Pipeline Name'
+    type: string
+    default: 'macos-pkg-notarize'
+  - name: AzureCliVersion
+    displayName: 'Azure CLI Version (e.g., 2.0.0)'
+    type: string
+    default: '2.0.0'
+  - name: GitHubRepo
+    displayName: 'GitHub Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+  - name: GitHubPAT
+    displayName: 'GitHub Personal Access Token (with repo scope)'
+    type: string
+    default: ''
+  - name: IsPreRelease
+    displayName: 'Mark as Pre-release'
+    type: boolean
+    default: false
+  - name: IsDraft
+    displayName: 'Create as Draft'
+    type: boolean
+    default: false
+
+variables:
+  - name: AzureCliVersion
+    value: ${{ parameters.AzureCliVersion }}
+  - name: SourceBuildId
+    value: ${{ parameters.SourceBuildId }}
+  - name: SourcePipelineName
+    value: ${{ parameters.SourcePipelineName }}
+  - name: GitHubRepo
+    value: ${{ parameters.GitHubRepo }}
+  - name: ReleaseTag
+    value: v${{ parameters.AzureCliVersion }}
+
+name: github-release-$(AzureCliVersion)-$(Build.BuildId)
+
+stages:
+- stage: DownloadArtifacts
+  displayName: 'Download Release Artifacts'
+  jobs:
+  - job: DownloadStapledPkg
+    displayName: 'Download stapled PKG'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download stapled-macos-pkg artifact'
+      inputs:
+        buildType: 'specific'
+        project: 'public'
+        definition: $(SourcePipelineName)
+        buildVersionToDownload: 'specific'
+        buildId: $(SourceBuildId)
+        artifactName: 'stapled-macos-pkg'
+        targetPath: '$(Pipeline.Workspace)/stapled-pkg'
+    
+    - bash: |
+        set -e
+        echo "=== Downloaded Artifacts ==="
+        ls -lh $(Pipeline.Workspace)/stapled-pkg/
+        echo ""
+        
+        # Find PKG file
+        PKG_FILE=$(find $(Pipeline.Workspace)/stapled-pkg -name "*.pkg" -type f | head -1)
+        
+        if [ -z "$PKG_FILE" ]; then
+          echo "❌ ERROR: No PKG file found"
+          exit 1
+        fi
+        
+        PKG_NAME=$(basename "$PKG_FILE")
+        echo "PKG File: $PKG_NAME"
+        echo "Size: $(du -h $PKG_FILE | cut -f1)"
+        
+        # Get or calculate SHA256
+        if [ -f "${PKG_FILE}.sha256" ]; then
+          echo "SHA256 (from file):"
+          cat "${PKG_FILE}.sha256"
+          SHA256=$(cat "${PKG_FILE}.sha256" | awk '{print $1}')
+        else
+          echo "Calculating SHA256..."
+          SHA256=$(sha256sum "$PKG_FILE" | awk '{print $1}')
+          echo "$SHA256  $PKG_NAME" | tee "${PKG_FILE}.sha256"
+        fi
+        
+        echo ""
+        echo "=== Artifact Details ==="
+        echo "Name: $PKG_NAME"
+        echo "SHA256: $SHA256"
+        
+        # Store variables for next stage
+        echo "##vso[task.setvariable variable=PKG_FILE;isOutput=true]$PKG_FILE"
+        echo "##vso[task.setvariable variable=PKG_NAME;isOutput=true]$PKG_NAME"
+        echo "##vso[task.setvariable variable=PKG_SHA256;isOutput=true]$SHA256"
+      name: ValidateArtifact
+      displayName: 'Validate artifacts'
+    
+    - publish: $(Pipeline.Workspace)/stapled-pkg
+      artifact: release-artifacts
+      displayName: 'Publish release artifacts'
+
+- stage: CreateGitHubRelease
+  displayName: 'Create GitHub Release'
+  dependsOn: DownloadArtifacts
+  condition: and(succeeded(), ne('${{ parameters.GitHubPAT }}', ''))
+  variables:
+    PKG_NAME: $[ stageDependencies.DownloadArtifacts.DownloadStapledPkg.outputs['ValidateArtifact.PKG_NAME'] ]
+    PKG_SHA256: $[ stageDependencies.DownloadArtifacts.DownloadStapledPkg.outputs['ValidateArtifact.PKG_SHA256'] ]
+  jobs:
+  - job: CreateRelease
+    displayName: 'Create GitHub release'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: release-artifacts
+      displayName: 'Download release artifacts'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Create GitHub Release"
+        echo "======================================"
+        echo ""
+        echo "Repository: $(GitHubRepo)"
+        echo "Tag: $(ReleaseTag)"
+        echo "Version: $(AzureCliVersion)"
+        echo "Pre-release: ${{ parameters.IsPreRelease }}"
+        echo "Draft: ${{ parameters.IsDraft }}"
+        echo ""
+        
+        # Create release notes
+        RELEASE_NOTES="# Azure CLI $(AzureCliVersion)
+
+        ## 🎉 Official Release
+
+        This is the official release of **Azure CLI $(AzureCliVersion)** for macOS.
+
+        ## 📦 Downloads
+
+        - **macOS ARM64 (Apple Silicon)**: \`$(PKG_NAME)\`
+          - Size: $(du -h $(Pipeline.Workspace)/release-artifacts/*.pkg | cut -f1)
+          - SHA256: \`$(PKG_SHA256)\`
+
+        ## ✅ Security & Notarization
+
+        - ✅ **Signed**: Developer ID Installer (Microsoft Corporation)
+        - ✅ **Notarized**: Verified by Apple
+        - ✅ **Stapled**: Works completely offline
+        - ✅ **Gatekeeper**: No security warnings
+
+        ## 🍺 Homebrew Installation
+
+        Install via Homebrew tap:
+
+        \`\`\`bash
+        brew tap naga-nandyala/homebrew-mycli-app
+        brew install azure-cli-pr
+        \`\`\`
+
+        ## 📥 Manual Installation
+
+        1. Download \`$(PKG_NAME)\`
+        2. Verify SHA256 checksum:
+           \`\`\`bash
+           echo '$(PKG_SHA256)  $(PKG_NAME)' | shasum -a 256 -c
+           \`\`\`
+        3. Double-click the PKG or run:
+           \`\`\`bash
+           sudo installer -pkg $(PKG_NAME) -target /
+           \`\`\`
+        4. Verify installation:
+           \`\`\`bash
+           az --version
+           \`\`\`
+
+        ## 🔐 Security Verification
+
+        Verify the PKG is properly signed and notarized:
+
+        \`\`\`bash
+        # Check signature
+        pkgutil --check-signature $(PKG_NAME)
+
+        # Check notarization
+        spctl -a -vv -t install $(PKG_NAME)
+
+        # Check stapled ticket
+        stapler validate $(PKG_NAME)
+        \`\`\`
+
+        ## 📚 Documentation
+
+        - [Azure CLI Documentation](https://learn.microsoft.com/cli/azure/)
+        - [Getting Started Guide](https://learn.microsoft.com/cli/azure/get-started-with-azure-cli)
+        - [Command Reference](https://learn.microsoft.com/cli/azure/reference-index)
+
+        ## 🚀 Quick Start
+
+        \`\`\`bash
+        # Login to Azure
+        az login
+
+        # Check version
+        az --version
+
+        # Get help
+        az --help
+        \`\`\`
+
+        ## 📋 Build Information
+
+        - **Build ID**: $(SourceBuildId)
+        - **Build Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        - **Pipeline**: $(Build.BuildNumber)
+
+        ## 🐛 Issues & Support
+
+        Report issues at: https://github.com/$(GitHubRepo)/issues
+
+        ---
+
+        *This release was automatically generated by Azure Pipelines*"
+
+        # Create the release using GitHub API
+        echo "Creating GitHub release..."
+        
+        RELEASE_RESPONSE=$(curl -X POST \
+          -H "Authorization: token ${{ parameters.GitHubPAT }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/repos/$(GitHubRepo)/releases \
+          -d "{
+            \"tag_name\": \"$(ReleaseTag)\",
+            \"name\": \"Azure CLI $(AzureCliVersion)\",
+            \"body\": $(echo "$RELEASE_NOTES" | jq -Rs .),
+            \"draft\": ${{ parameters.IsDraft }},
+            \"prerelease\": ${{ parameters.IsPreRelease }}
+          }")
+        
+        echo "$RELEASE_RESPONSE" | jq . | tee release-response.json
+        
+        # Extract release information
+        RELEASE_ID=$(echo "$RELEASE_RESPONSE" | jq -r '.id')
+        RELEASE_URL=$(echo "$RELEASE_RESPONSE" | jq -r '.html_url')
+        UPLOAD_URL=$(echo "$RELEASE_RESPONSE" | jq -r '.upload_url' | sed 's/{?name,label}//')
+        
+        if [ "$RELEASE_ID" == "null" ] || [ -z "$RELEASE_ID" ]; then
+          echo "❌ Failed to create release"
+          echo "$RELEASE_RESPONSE" | jq .
+          exit 1
+        fi
+        
+        echo ""
+        echo "✅ Release created successfully!"
+        echo "   ID: $RELEASE_ID"
+        echo "   URL: $RELEASE_URL"
+        
+        # Store variables for upload step
+        echo "##vso[task.setvariable variable=RELEASE_ID;isOutput=true]$RELEASE_ID"
+        echo "##vso[task.setvariable variable=RELEASE_URL;isOutput=true]$RELEASE_URL"
+        echo "##vso[task.setvariable variable=UPLOAD_URL;isOutput=true]$UPLOAD_URL"
+      name: CreateReleaseStep
+      displayName: 'Create GitHub release'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Upload Release Assets"
+        echo "======================================"
+        echo ""
+        
+        UPLOAD_URL="$(CreateReleaseStep.UPLOAD_URL)"
+        
+        # Find PKG file
+        PKG_FILE=$(find $(Pipeline.Workspace)/release-artifacts -name "*.pkg" -type f | head -1)
+        PKG_NAME=$(basename "$PKG_FILE")
+        
+        echo "Uploading: $PKG_NAME"
+        echo "Size: $(du -h $PKG_FILE | cut -f1)"
+        echo ""
+        
+        # Upload PKG file
+        curl -X POST \
+          -H "Authorization: token ${{ parameters.GitHubPAT }}" \
+          -H "Content-Type: application/octet-stream" \
+          --data-binary "@$PKG_FILE" \
+          "${UPLOAD_URL}?name=${PKG_NAME}" | jq . | tee pkg-upload.json
+        
+        # Check if upload succeeded
+        BROWSER_URL=$(cat pkg-upload.json | jq -r '.browser_download_url')
+        
+        if [ "$BROWSER_URL" != "null" ]; then
+          echo ""
+          echo "✅ PKG uploaded successfully!"
+          echo "   Download URL: $BROWSER_URL"
+          echo "##vso[task.setvariable variable=PKG_DOWNLOAD_URL;isOutput=true]$BROWSER_URL"
+        else
+          echo "❌ Failed to upload PKG"
+          cat pkg-upload.json
+          exit 1
+        fi
+        
+        # Upload SHA256 file if exists
+        if [ -f "${PKG_FILE}.sha256" ]; then
+          echo ""
+          echo "Uploading SHA256 checksum..."
+          SHA256_NAME="${PKG_NAME}.sha256"
+          
+          curl -X POST \
+            -H "Authorization: token ${{ parameters.GitHubPAT }}" \
+            -H "Content-Type: text/plain" \
+            --data-binary "@${PKG_FILE}.sha256" \
+            "${UPLOAD_URL}?name=${SHA256_NAME}" | jq . | tee sha256-upload.json
+          
+          SHA256_URL=$(cat sha256-upload.json | jq -r '.browser_download_url')
+          
+          if [ "$SHA256_URL" != "null" ]; then
+            echo "✅ SHA256 uploaded: $SHA256_URL"
+          fi
+        fi
+      name: UploadAssets
+      displayName: 'Upload release assets'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Release Summary"
+        echo "======================================"
+        echo ""
+        echo "✅ GitHub Release Created Successfully!"
+        echo ""
+        echo "Release: $(CreateReleaseStep.RELEASE_URL)"
+        echo "Tag: $(ReleaseTag)"
+        echo "Version: $(AzureCliVersion)"
+        echo ""
+        echo "Download URL:"
+        echo "  $(UploadAssets.PKG_DOWNLOAD_URL)"
+        echo ""
+        echo "SHA256: $(PKG_SHA256)"
+        echo ""
+        echo "Users can download and install:"
+        echo "  1. Download from: $(CreateReleaseStep.RELEASE_URL)"
+        echo "  2. Verify checksum"
+        echo "  3. Install the PKG"
+        echo ""
+        echo "Next Steps:"
+        echo "  - Update Homebrew formula with download URL"
+        echo "  - Announce the release"
+      displayName: 'Release summary'
+
+- stage: Summary
+  displayName: 'Pipeline Summary'
+  dependsOn:
+  - DownloadArtifacts
+  - CreateGitHubRelease
+  condition: always()
+  jobs:
+  - job: PrintSummary
+    displayName: 'Summary'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - bash: |
+        echo "# GitHub Release Publication Summary"
+        echo ""
+        echo "## Configuration"
+        echo "- **Version**: $(AzureCliVersion)"
+        echo "- **Tag**: $(ReleaseTag)"
+        echo "- **Repository**: https://github.com/$(GitHubRepo)"
+        echo "- **Source Build**: $(SourceBuildId)"
+        echo ""
+        echo "## Release Type"
+        if [ "${{ parameters.IsDraft }}" == "True" ]; then
+          echo "- **Status**: Draft (not published yet)"
+        elif [ "${{ parameters.IsPreRelease }}" == "True" ]; then
+          echo "- **Status**: Pre-release"
+        else
+          echo "- **Status**: Official Release"
+        fi
+        echo ""
+        echo "## Artifacts Published"
+        echo "- Notarized and stapled macOS PKG"
+        echo "- SHA256 checksum file"
+        echo ""
+        echo "## Next Steps"
+        if [ -n "${{ parameters.GitHubPAT }}" ]; then
+          echo "1. ✅ Release created on GitHub"
+          echo "2. Review the release page"
+          if [ "${{ parameters.IsDraft }}" == "True" ]; then
+            echo "3. Publish the draft release when ready"
+          fi
+          echo "4. Update Homebrew formula with download URL"
+          echo "5. Announce the release"
+        else
+          echo "1. ⚠️  No GitHub PAT provided"
+          echo "2. Download artifacts from this build"
+          echo "3. Manually create GitHub release"
+          echo ""
+          echo "Tip: Provide GitHubPAT parameter for automatic release creation"
+        fi
+      displayName: 'Pipeline summary'

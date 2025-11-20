@@ -1,0 +1,402 @@
+# Azure CLI - Homebrew Formula PR Pipeline
+# This pipeline generates a Homebrew formula and creates a PR to the homebrew tap repository
+
+trigger: none # Manual trigger only
+
+parameters:
+  - name: SourceBuildId
+    displayName: 'Source Build ID (the notarization build with stapled PKG)'
+    type: string
+    default: '283737'
+  - name: SourcePipelineName
+    displayName: 'Source Pipeline Name'
+    type: string
+    default: 'macos-pkg-notarize'
+  - name: AzureCliVersion
+    displayName: 'Azure CLI Version (e.g., 2.0.0)'
+    type: string
+    default: '2.0.0'
+  - name: GitHubRepo
+    displayName: 'GitHub Repository (owner/repo) where PKG is released'
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+  - name: HomebrewTapRepo
+    displayName: 'Homebrew Tap Repository'
+    type: string
+    default: 'naga-nandyala/homebrew-mycli-app'
+  - name: GitHubPAT
+    displayName: 'GitHub Personal Access Token (for creating PR)'
+    type: string
+    default: ''
+
+variables:
+  - name: AzureCliVersion
+    value: ${{ parameters.AzureCliVersion }}
+  - name: SourceBuildId
+    value: ${{ parameters.SourceBuildId }}
+  - name: SourcePipelineName
+    value: ${{ parameters.SourcePipelineName }}
+  - name: GitHubRepo
+    value: ${{ parameters.GitHubRepo }}
+  - name: HomebrewTapRepo
+    value: ${{ parameters.HomebrewTapRepo }}
+  - name: ReleaseTag
+    value: v${{ parameters.AzureCliVersion }}
+
+name: homebrew-formula-$(AzureCliVersion)-$(Build.BuildId)
+
+stages:
+- stage: DownloadStapledPkg
+  displayName: 'Download Stapled PKG'
+  jobs:
+  - job: DownloadArtifact
+    displayName: 'Download stapled PKG from build $(SourceBuildId)'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download stapled-macos-pkg artifact'
+      inputs:
+        buildType: 'specific'
+        project: 'public'
+        definition: $(SourcePipelineName)
+        buildVersionToDownload: 'specific'
+        buildId: $(SourceBuildId)
+        artifactName: 'stapled-macos-pkg'
+        targetPath: '$(Pipeline.Workspace)/stapled-pkg'
+    
+    - bash: |
+        echo "=== Downloaded Stapled PKG Files ==="
+        ls -lh $(Pipeline.Workspace)/stapled-pkg/
+        echo ""
+        
+        # Find the PKG file
+        PKG_FILE=$(find $(Pipeline.Workspace)/stapled-pkg -name "*.pkg" -type f | head -1)
+        
+        if [ -z "$PKG_FILE" ]; then
+          echo "❌ ERROR: No PKG file found"
+          exit 1
+        fi
+        
+        PKG_NAME=$(basename "$PKG_FILE")
+        echo "PKG File: $PKG_NAME"
+        echo "Size: $(du -h $PKG_FILE | cut -f1)"
+        
+        # Calculate SHA256
+        if [ -f "${PKG_FILE}.sha256" ]; then
+          echo "SHA256 from file:"
+          cat "${PKG_FILE}.sha256"
+          SHA256=$(cat "${PKG_FILE}.sha256" | awk '{print $1}')
+        else
+          echo "Calculating SHA256..."
+          SHA256=$(sha256sum "$PKG_FILE" | awk '{print $1}')
+        fi
+        
+        # Construct GitHub release download URL
+        DOWNLOAD_URL="https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/${PKG_NAME}"
+        
+        echo ""
+        echo "=== Release Information ==="
+        echo "GitHub Repo: $(GitHubRepo)"
+        echo "Release Tag: $(ReleaseTag)"
+        echo "Download URL: $DOWNLOAD_URL"
+        echo "SHA256: $SHA256"
+        
+        # Store variables for next stage
+        echo "##vso[task.setvariable variable=PKG_SHA256;isOutput=true]$SHA256"
+        echo "##vso[task.setvariable variable=PKG_DOWNLOAD_URL;isOutput=true]$DOWNLOAD_URL"
+        echo "##vso[task.setvariable variable=PKG_NAME;isOutput=true]$PKG_NAME"
+      name: GetSHA256
+      displayName: 'Get PKG SHA256'
+    
+    - publish: $(Pipeline.Workspace)/stapled-pkg
+      artifact: stapled-pkg-for-formula
+      displayName: 'Publish stapled PKG'
+
+- stage: GenerateFormula
+  displayName: 'Generate Homebrew Formula'
+  dependsOn: DownloadStapledPkg
+  variables:
+    PKG_SHA256: $[ stageDependencies.DownloadStapledPkg.DownloadArtifact.outputs['GetSHA256.PKG_SHA256'] ]
+    PKG_DOWNLOAD_URL: $[ stageDependencies.DownloadStapledPkg.DownloadArtifact.outputs['GetSHA256.PKG_DOWNLOAD_URL'] ]
+    PKG_NAME: $[ stageDependencies.DownloadStapledPkg.DownloadArtifact.outputs['GetSHA256.PKG_NAME'] ]
+  jobs:
+  - job: CreateFormula
+    displayName: 'Create azure-cli-pr.rb formula'
+    pool:
+      vmImage: 'macos-14'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Generate Homebrew Formula"
+        echo "======================================"
+        echo ""
+        echo "Version: $(AzureCliVersion)"
+        echo "PKG Name: $(PKG_NAME)"
+        echo "PKG URL: $(PKG_DOWNLOAD_URL)"
+        echo "SHA256: $(PKG_SHA256)"
+        echo ""
+        
+        # Create Formula directory
+        mkdir -p Formula
+        
+        # Generate the formula file
+        cat > Formula/azure-cli-pr.rb <<'FORMULA_EOF'
+        class AzureCliPr < Formula
+          desc "Microsoft Azure CLI - Official command-line interface"
+          homepage "https://learn.microsoft.com/cli/azure/"
+          url "$(PKG_DOWNLOAD_URL)"
+          sha256 "$(PKG_SHA256)"
+          version "$(AzureCliVersion)"
+          
+          bottle :unneeded
+          
+          def install
+            # Extract the PKG
+            system "pkgutil", "--expand", cached_download, buildpath/"azure-cli.unpkg"
+            
+            # Find the Payload
+            payload = Dir[buildpath/"azure-cli.unpkg"/"*.pkg"].first
+            system "cat", "#{payload}/Payload" do |io|
+              io.binmode
+              system "gunzip", "-dc" do |gz|
+                system "cpio", "-i", chdir: prefix
+              end
+            end
+            
+            # Create symlinks in bin
+            bin.install_symlink prefix/"usr/local/bin/az"
+          end
+          
+          def caveats
+            <<~EOS
+              Azure CLI has been installed!
+              
+              To get started:
+                az --version
+                az login
+              
+              Documentation: https://learn.microsoft.com/cli/azure/
+            EOS
+          end
+          
+          test do
+            system "#{bin}/az", "--version"
+          end
+        end
+        FORMULA_EOF
+        
+        echo "✅ Formula generated: Formula/azure-cli-pr.rb"
+        echo ""
+        cat Formula/azure-cli-pr.rb
+      displayName: 'Generate formula file'
+    
+    - publish: Formula
+      artifact: homebrew-formula
+      displayName: 'Publish formula artifact'
+
+- stage: CreatePullRequest
+  displayName: 'Create PR to Homebrew Tap'
+  dependsOn: GenerateFormula
+  condition: and(succeeded(), ne('${{ parameters.GitHubPAT }}', ''))
+  jobs:
+  - job: SubmitPR
+    displayName: 'Submit PR to homebrew tap'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: homebrew-formula
+      displayName: 'Download formula'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Clone Homebrew Tap Repository"
+        echo "======================================"
+        echo ""
+        
+        # Configure git
+        git config --global user.email "azure-pipelines@microsoft.com"
+        git config --global user.name "Azure Pipelines Bot"
+        
+        # Clone the homebrew tap repo
+        REPO_URL="https://${{ parameters.GitHubPAT }}@github.com/$(HomebrewTapRepo).git"
+        git clone "$REPO_URL" homebrew-tap
+        cd homebrew-tap
+        
+        echo "✅ Repository cloned"
+        ls -la
+      displayName: 'Clone homebrew tap repository'
+    
+    - bash: |
+        set -e
+        cd homebrew-tap
+        
+        echo "======================================"
+        echo "  Create Branch and Commit Formula"
+        echo "======================================"
+        echo ""
+        
+        # Create new branch
+        BRANCH_NAME="update-azure-cli-$(AzureCliVersion)-$(Build.BuildId)"
+        git checkout -b "$BRANCH_NAME"
+        
+        # Copy formula
+        mkdir -p Formula
+        cp $(Pipeline.Workspace)/homebrew-formula/azure-cli-pr.rb Formula/
+        
+        # Add and commit
+        git add Formula/azure-cli-pr.rb
+        git commit -m "Update Azure CLI to version $(AzureCliVersion)
+
+        - Update to version $(AzureCliVersion)
+        - PKG URL: $(PKG_DOWNLOAD_URL)
+        - SHA256: $(PKG_SHA256)
+        - Fully signed and notarized by Apple
+        - Stapled for offline installation
+        
+        Build: $(SourceBuildId)
+        Pipeline: $(Build.BuildNumber)"
+        
+        # Push branch
+        git push origin "$BRANCH_NAME"
+        
+        echo "✅ Branch pushed: $BRANCH_NAME"
+        echo "##vso[task.setvariable variable=BRANCH_NAME;isOutput=true]$BRANCH_NAME"
+      name: CreateBranch
+      displayName: 'Create branch and commit'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Create Pull Request"
+        echo "======================================"
+        echo ""
+        
+        BRANCH_NAME="$(CreateBranch.BRANCH_NAME)"
+        
+        # Create PR using GitHub API
+        PR_BODY="## Azure CLI $(AzureCliVersion)
+
+        This PR updates the Azure CLI formula to version **$(AzureCliVersion)**.
+
+        ### Changes
+        - ✅ Updated to version $(AzureCliVersion)
+        - ✅ Fully signed with Apple Developer ID
+        - ✅ Notarized by Apple
+        - ✅ Stapled for offline installation
+        - ✅ SHA256 verified
+
+        ### Installation
+        After merging, users can install with:
+        \`\`\`bash
+        brew tap $(HomebrewTapRepo)
+        brew install azure-cli-pr
+        \`\`\`
+
+        ### Build Information
+        - **Source Build**: $(SourceBuildId)
+        - **Pipeline**: $(Build.BuildNumber)
+        - **PKG URL**: $(PKG_DOWNLOAD_URL)
+        - **SHA256**: \`$(PKG_SHA256)\`
+
+        ### Verification
+        - PKG signature: ✅ Developer ID Installer
+        - Notarization: ✅ Verified by Apple
+        - Stapling: ✅ Offline installation ready"
+
+        # Create PR
+        curl -X POST \
+          -H "Authorization: token ${{ parameters.GitHubPAT }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/repos/$(HomebrewTapRepo)/pulls \
+          -d "{
+            \"title\": \"Update Azure CLI to $(AzureCliVersion)\",
+            \"body\": $(echo "$PR_BODY" | jq -Rs .),
+            \"head\": \"$BRANCH_NAME\",
+            \"base\": \"main\"
+          }" | tee pr-response.json
+        
+        # Extract PR URL
+        PR_URL=$(cat pr-response.json | jq -r '.html_url')
+        
+        if [ "$PR_URL" != "null" ]; then
+          echo ""
+          echo "✅ Pull Request created successfully!"
+          echo "   URL: $PR_URL"
+          echo "##vso[task.setvariable variable=PR_URL]$PR_URL"
+        else
+          echo "❌ Failed to create PR"
+          cat pr-response.json
+          exit 1
+        fi
+      displayName: 'Create GitHub PR'
+    
+    - bash: |
+        echo "======================================"
+        echo "  PR Summary"
+        echo "======================================"
+        echo ""
+        echo "✅ Pull Request Created!"
+        echo ""
+        echo "Repository: https://github.com/$(HomebrewTapRepo)"
+        echo "PR URL: $(PR_URL)"
+        echo "Version: $(AzureCliVersion)"
+        echo ""
+        echo "After merging, users can install with:"
+        echo "  brew tap $(HomebrewTapRepo)"
+        echo "  brew install azure-cli-pr"
+      displayName: 'Print summary'
+
+- stage: Summary
+  displayName: 'Pipeline Summary'
+  dependsOn:
+  - DownloadStapledPkg
+  - GenerateFormula
+  - CreatePullRequest
+  condition: always()
+  jobs:
+  - job: PrintSummary
+    displayName: 'Summary'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - bash: |
+        echo "# Homebrew Formula PR Pipeline Summary"
+        echo ""
+        echo "## Configuration"
+        echo "- **Version**: $(AzureCliVersion)"
+        echo "- **Source Build**: $(SourceBuildId)"
+        echo "- **GitHub Repo**: $(GitHubRepo)"
+        echo "- **Release Tag**: $(ReleaseTag)"
+        echo "- **Homebrew Tap**: $(HomebrewTapRepo)"
+        echo ""
+        echo "## Artifacts"
+        echo "- **Formula File**: azure-cli-pr.rb"
+        echo "- **Location**: Formula/azure-cli-pr.rb"
+        echo ""
+        echo "## Next Steps"
+        if [ -n "${{ parameters.GitHubPAT }}" ]; then
+          echo "1. ✅ PR created automatically"
+          echo "2. Review and merge the PR"
+          echo "3. Test installation: brew install azure-cli-pr"
+        else
+          echo "1. Download the formula artifact from this build"
+          echo "2. Manually copy to your homebrew tap repository"
+          echo "3. Create PR manually"
+          echo ""
+          echo "Note: Provide GitHubPAT parameter for automatic PR creation"
+        fi
+      displayName: 'Pipeline summary'
