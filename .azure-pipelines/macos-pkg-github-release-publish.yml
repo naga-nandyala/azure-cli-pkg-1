@@ -169,8 +169,10 @@ stages:
         echo "Draft: ${{ parameters.IsDraft }}"
         echo ""
         
-        # Authenticate with GitHub using the checked out repo credentials
-        echo "$SYSTEM_ACCESSTOKEN" | gh auth login --with-token
+        # Configure git to use the checked-out credentials
+        cd $(Build.SourcesDirectory)
+        
+        # GH CLI will automatically use the git credentials from checkout
         
         # Find PKG file info
         PKG_FILE=$(find $(Pipeline.Workspace)/release-artifacts -name "*.pkg" -type f | head -1)
@@ -304,8 +306,6 @@ stages:
         
         # Store variables
         echo "##vso[task.setvariable variable=RELEASE_URL;isOutput=true]$RELEASE_URL"
-      env:
-        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
       name: CreateReleaseStep
       displayName: 'Create GitHub release'
     
