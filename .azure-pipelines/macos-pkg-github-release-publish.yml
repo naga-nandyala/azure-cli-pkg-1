@@ -406,19 +406,11 @@ stages:
         echo "- SHA256 checksum file"
         echo ""
         echo "## Next Steps"
-        if [ -n "${{ parameters.GitHubPAT }}" ]; then
-          echo "1. ✅ Release created on GitHub"
-          echo "2. Review the release page"
-          if [ "${{ parameters.IsDraft }}" == "True" ]; then
-            echo "3. Publish the draft release when ready"
-          fi
-          echo "4. Update Homebrew formula with download URL"
-          echo "5. Announce the release"
-        else
-          echo "1. ⚠️  No GitHub PAT provided"
-          echo "2. Download artifacts from this build"
-          echo "3. Manually create GitHub release"
-          echo ""
-          echo "Tip: Provide GitHubPAT parameter for automatic release creation"
+        echo "1. ✅ Release created on GitHub"
+        echo "2. Review the release page"
+        if [ "${{ parameters.IsDraft }}" == "True" ]; then
+          echo "3. Publish the draft release when ready"
         fi
+        echo "4. Update Homebrew formula with download URL"
+        echo "5. Announce the release"
       displayName: 'Pipeline summary'
