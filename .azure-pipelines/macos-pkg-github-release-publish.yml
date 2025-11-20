@@ -20,10 +20,6 @@ parameters:
     displayName: 'GitHub Repository (owner/repo)'
     type: string
     default: 'naga-nandyala/azure-cli-pkg-1'
-  - name: GitHubPAT
-    displayName: 'GitHub Personal Access Token (with repo scope)'
-    type: string
-    default: ''
   - name: IsPreRelease
     displayName: 'Mark as Pre-release'
     type: boolean
@@ -33,7 +29,16 @@ parameters:
     type: boolean
     default: false
 
+resources:
+  repositories:
+  - repository: releaserepo
+    type: github
+    endpoint: github.com_naga-nandyala
+    name: naga-nandyala/azure-cli-pkg-1
+
 variables:
+  - name: GITHUB_TOKEN
+    value: $[ resources.repositories['releaserepo'].token ]
   - name: AzureCliVersion
     value: ${{ parameters.AzureCliVersion }}
   - name: SourceBuildId
@@ -118,7 +123,6 @@ stages:
 - stage: CreateGitHubRelease
   displayName: 'Create GitHub Release'
   dependsOn: DownloadArtifacts
-  condition: and(succeeded(), ne('${{ parameters.GitHubPAT }}', ''))
   variables:
     PKG_NAME: $[ stageDependencies.DownloadArtifacts.DownloadStapledPkg.outputs['ValidateArtifact.PKG_NAME'] ]
     PKG_SHA256: $[ stageDependencies.DownloadArtifacts.DownloadStapledPkg.outputs['ValidateArtifact.PKG_SHA256'] ]
@@ -245,7 +249,7 @@ stages:
         echo "Creating GitHub release..."
         
         RELEASE_RESPONSE=$(curl -X POST \
-          -H "Authorization: token ${{ parameters.GitHubPAT }}" \
+          -H "Authorization: token ${GITHUB_TOKEN}" \
           -H "Accept: application/vnd.github.v3+json" \
           https://api.github.com/repos/$(GitHubRepo)/releases \
           -d "{
@@ -300,7 +304,7 @@ stages:
         
         # Upload PKG file
         curl -X POST \
-          -H "Authorization: token ${{ parameters.GitHubPAT }}" \
+          -H "Authorization: token ${GITHUB_TOKEN}" \
           -H "Content-Type: application/octet-stream" \
           --data-binary "@$PKG_FILE" \
           "${UPLOAD_URL}?name=${PKG_NAME}" | jq . | tee pkg-upload.json
@@ -326,7 +330,7 @@ stages:
           SHA256_NAME="${PKG_NAME}.sha256"
           
           curl -X POST \
-            -H "Authorization: token ${{ parameters.GitHubPAT }}" \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
             -H "Content-Type: text/plain" \
             --data-binary "@${PKG_FILE}.sha256" \
             "${UPLOAD_URL}?name=${SHA256_NAME}" | jq . | tee sha256-upload.json
