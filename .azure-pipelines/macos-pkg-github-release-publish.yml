@@ -29,13 +29,6 @@ parameters:
     type: boolean
     default: false
 
-resources:
-  repositories:
-  - repository: releaserepo
-    type: github
-    endpoint: github.com_naga-nandyala
-    name: naga-nandyala/azure-cli-pkg-1
-
 variables:
   - name: AzureCliVersion
     value: ${{ parameters.AzureCliVersion }}
@@ -131,9 +124,7 @@ stages:
       vmImage: 'ubuntu-latest'
     
     steps:
-    - checkout: releaserepo
-      persistCredentials: true
-      displayName: 'Checkout repository for auth'
+    - checkout: none
     
     - download: current
       artifact: release-artifacts
@@ -142,37 +133,8 @@ stages:
     - bash: |
         set -e
         echo "======================================"
-        echo "  Install GitHub CLI"
+        echo "  Prepare Release Notes"
         echo "======================================"
-        
-        # Install gh CLI
-        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-        sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-        sudo apt update
-        sudo apt install gh jq -y
-        
-        gh --version
-        echo "✅ GitHub CLI installed"
-      displayName: 'Install GitHub CLI'
-    
-    - bash: |
-        set -e
-        echo "======================================"
-        echo "  Create GitHub Release with GH CLI"
-        echo "======================================"
-        echo ""
-        echo "Repository: $(GitHubRepo)"
-        echo "Tag: $(ReleaseTag)"
-        echo "Version: $(AzureCliVersion)"
-        echo "Pre-release: ${{ parameters.IsPreRelease }}"
-        echo "Draft: ${{ parameters.IsDraft }}"
-        echo ""
-        
-        # Configure git to use the checked-out credentials
-        cd $(Build.SourcesDirectory)
-        
-        # GH CLI will automatically use the git credentials from checkout
         
         # Find PKG file info
         PKG_FILE=$(find $(Pipeline.Workspace)/release-artifacts -name "*.pkg" -type f | head -1)
@@ -180,134 +142,119 @@ stages:
         PKG_SIZE=$(du -h "$PKG_FILE" | cut -f1)
         
         # Create release notes
-        RELEASE_NOTES="# Azure CLI $(AzureCliVersion)
+        cat > release-notes.md << 'EOF'
+# Azure CLI $(AzureCliVersion)
 
-        ## 🎉 Official Release
+## 🎉 Official Release
 
-        This is the official release of **Azure CLI $(AzureCliVersion)** for macOS.
+This is the official release of **Azure CLI $(AzureCliVersion)** for macOS.
 
-        ## 📦 Downloads
+## 📦 Downloads
 
-        - **macOS ARM64 (Apple Silicon)**: \`${PKG_NAME}\`
-          - Size: ${PKG_SIZE}
-          - SHA256: \`$(PKG_SHA256)\`
+- **macOS ARM64 (Apple Silicon)**: `$(PKG_NAME)`
+  - Size: ${PKG_SIZE}
+  - SHA256: `$(PKG_SHA256)`
 
-        ## ✅ Security & Notarization
+## ✅ Security & Notarization
 
-        - ✅ **Signed**: Developer ID Installer (Microsoft Corporation)
-        - ✅ **Notarized**: Verified by Apple
-        - ✅ **Stapled**: Works completely offline
-        - ✅ **Gatekeeper**: No security warnings
+- ✅ **Signed**: Developer ID Installer (Microsoft Corporation)
+- ✅ **Notarized**: Verified by Apple
+- ✅ **Stapled**: Works completely offline
+- ✅ **Gatekeeper**: No security warnings
 
-        ## 🍺 Homebrew Installation
+## 🍺 Homebrew Installation
 
-        Install via Homebrew tap:
+Install via Homebrew tap:
 
-        \`\`\`bash
-        brew tap naga-nandyala/homebrew-mycli-app
-        brew install azure-cli-pr
-        \`\`\`
+```bash
+brew tap naga-nandyala/homebrew-mycli-app
+brew install azure-cli-pr
+```
 
-        ## 📥 Manual Installation
+## 📥 Manual Installation
 
-        1. Download \`${PKG_NAME}\`
-        2. Verify SHA256 checksum:
-           \`\`\`bash
-           echo '$(PKG_SHA256)  ${PKG_NAME}' | shasum -a 256 -c
-           \`\`\`
-        3. Double-click the PKG or run:
-           \`\`\`bash
-           sudo installer -pkg ${PKG_NAME} -target /
-           \`\`\`
-        4. Verify installation:
-           \`\`\`bash
-           az --version
-           \`\`\`
+1. Download `$(PKG_NAME)`
+2. Verify SHA256 checksum:
+   ```bash
+   echo '$(PKG_SHA256)  $(PKG_NAME)' | shasum -a 256 -c
+   ```
+3. Double-click the PKG or run:
+   ```bash
+   sudo installer -pkg $(PKG_NAME) -target /
+   ```
+4. Verify installation:
+   ```bash
+   az --version
+   ```
 
-        ## 🔐 Security Verification
+## 🔐 Security Verification
 
-        Verify the PKG is properly signed and notarized:
+Verify the PKG is properly signed and notarized:
 
-        \`\`\`bash
-        # Check signature
-        pkgutil --check-signature ${PKG_NAME}
+```bash
+# Check signature
+pkgutil --check-signature $(PKG_NAME)
 
-        # Check notarization
-        spctl -a -vv -t install ${PKG_NAME}
+# Check notarization
+spctl -a -vv -t install $(PKG_NAME)
 
-        # Check stapled ticket
-        stapler validate ${PKG_NAME}
-        \`\`\`
+# Check stapled ticket
+stapler validate $(PKG_NAME)
+```
 
-        ## 📚 Documentation
+## 📚 Documentation
 
-        - [Azure CLI Documentation](https://learn.microsoft.com/cli/azure/)
-        - [Getting Started Guide](https://learn.microsoft.com/cli/azure/get-started-with-azure-cli)
-        - [Command Reference](https://learn.microsoft.com/cli/azure/reference-index)
+- [Azure CLI Documentation](https://learn.microsoft.com/cli/azure/)
+- [Getting Started Guide](https://learn.microsoft.com/cli/azure/get-started-with-azure-cli)
+- [Command Reference](https://learn.microsoft.com/cli/azure/reference-index)
 
-        ## 🚀 Quick Start
+## 🚀 Quick Start
 
-        \`\`\`bash
-        # Login to Azure
-        az login
+```bash
+# Login to Azure
+az login
 
-        # Check version
-        az --version
+# Check version
+az --version
 
-        # Get help
-        az --help
-        \`\`\`
+# Get help
+az --help
+```
 
-        ## 📋 Build Information
+## 📋 Build Information
 
-        - **Build ID**: $(SourceBuildId)
-        - **Build Date**: $(date -u +\"%Y-%m-%d %H:%M:%S UTC\")
-        - **Pipeline**: $(Build.BuildNumber)
+- **Build ID**: $(SourceBuildId)
+- **Build Date**: $(Build.BuildNumber)
+- **Pipeline**: $(Build.DefinitionName)
 
-        ## 🐛 Issues & Support
+## 🐛 Issues & Support
 
-        Report issues at: https://github.com/$(GitHubRepo)/issues
+Report issues at: https://github.com/$(GitHubRepo)/issues
 
-        ---
+---
 
-        *This release was automatically generated by Azure Pipelines*"
+*This release was automatically generated by Azure Pipelines*
+EOF
         
-        # Save release notes to file
-        echo "$RELEASE_NOTES" > release-notes.md
-        
-        # Create GitHub release with gh CLI
-        DRAFT_FLAG=""
-        PRERELEASE_FLAG=""
-        
-        if [ "${{ parameters.IsDraft }}" == "True" ]; then
-          DRAFT_FLAG="--draft"
-        fi
-        
-        if [ "${{ parameters.IsPreRelease }}" == "True" ]; then
-          PRERELEASE_FLAG="--prerelease"
-        fi
-        
-        echo "Creating release..."
-        gh release create "$(ReleaseTag)" \
-          --repo "$(GitHubRepo)" \
-          --title "Azure CLI $(AzureCliVersion)" \
-          --notes-file release-notes.md \
-          $DRAFT_FLAG \
-          $PRERELEASE_FLAG \
-          "$PKG_FILE" \
-          "${PKG_FILE}.sha256" 2>&1 | tee release-output.txt
-        
-        # Get release URL
-        RELEASE_URL=$(gh release view "$(ReleaseTag)" --repo "$(GitHubRepo)" --json url --jq '.url')
-        
-        echo ""
-        echo "✅ Release created successfully!"
-        echo "   URL: $RELEASE_URL"
-        
-        # Store variables
-        echo "##vso[task.setvariable variable=RELEASE_URL;isOutput=true]$RELEASE_URL"
-      name: CreateReleaseStep
-      displayName: 'Create GitHub release'
+        echo "Release notes created:"
+        cat release-notes.md
+      displayName: 'Prepare release notes'
+    
+    - task: GitHubRelease@1
+      displayName: 'Create GitHub Release'
+      inputs:
+        gitHubConnection: 'github.com_naga-nandyala'
+        repositoryName: '$(GitHubRepo)'
+        action: 'create'
+        target: '$(Build.SourceVersion)'
+        tagSource: 'userSpecifiedTag'
+        tag: '$(ReleaseTag)'
+        title: 'Azure CLI $(AzureCliVersion)'
+        releaseNotesFilePath: '$(System.DefaultWorkingDirectory)/release-notes.md'
+        assets: '$(Pipeline.Workspace)/release-artifacts/*'
+        isDraft: ${{ parameters.IsDraft }}
+        isPreRelease: ${{ parameters.IsPreRelease }}
+        addChangeLog: false
     
     - bash: |
         echo "======================================"
@@ -316,23 +263,12 @@ stages:
         echo ""
         echo "✅ GitHub Release Created Successfully!"
         echo ""
-        echo "Release: $(CreateReleaseStep.RELEASE_URL)"
         echo "Tag: $(ReleaseTag)"
         echo "Version: $(AzureCliVersion)"
+        echo "Repository: https://github.com/$(GitHubRepo)/releases/tag/$(ReleaseTag)"
         echo ""
-        echo "Download URL:"
-        echo "  $(UploadAssets.PKG_DOWNLOAD_URL)"
-        echo ""
+        echo "PKG File: $(PKG_NAME)"
         echo "SHA256: $(PKG_SHA256)"
-        echo ""
-        echo "Users can download and install:"
-        echo "  1. Download from: $(CreateReleaseStep.RELEASE_URL)"
-        echo "  2. Verify checksum"
-        echo "  3. Install the PKG"
-        echo ""
-        echo "Next Steps:"
-        echo "  - Update Homebrew formula with download URL"
-        echo "  - Announce the release"
       displayName: 'Release summary'
 
 - stage: Summary
