@@ -219,13 +219,14 @@ stages:
         cat stapler_output.txt
         echo ""
         
-        if grep -qi "validated\|notarization ticket" stapler_output.txt; then
+        if grep -qi "validate action worked\|validated\|staple.*attached" stapler_output.txt; then
           echo "✅ Notarization Ticket: STAPLED"
           echo "   The notarization ticket is attached to the PKG"
+          echo "   PKG can be installed completely offline"
         else
           echo "⚠️  Notarization Ticket: NOT STAPLED"
           echo "   Note: Ticket can be fetched from Apple servers during installation"
-          echo "   Stapling is optional but recommended for offline installations"
+          echo "   Stapling is recommended for offline installations"
         fi
         
         echo ""
