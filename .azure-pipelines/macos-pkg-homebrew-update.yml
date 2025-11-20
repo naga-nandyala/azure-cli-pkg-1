@@ -24,12 +24,17 @@ parameters:
     displayName: 'Homebrew Tap Repository'
     type: string
     default: 'naga-nandyala/homebrew-mycli-app'
-  - name: GitHubPAT
-    displayName: 'GitHub Personal Access Token (for creating PR)'
-    type: string
-    default: ''
+
+resources:
+  repositories:
+  - repository: homebrewtap
+    type: github
+    endpoint: github.com_naga-nandyala
+    name: naga-nandyala/homebrew-mycli-app
 
 variables:
+  - name: GITHUB_TOKEN
+    value: $[ resources.repositories['homebrewtap'].token ]
   - name: AzureCliVersion
     value: ${{ parameters.AzureCliVersion }}
   - name: SourceBuildId
@@ -205,7 +210,6 @@ stages:
 - stage: CreatePullRequest
   displayName: 'Create PR to Homebrew Tap'
   dependsOn: GenerateFormula
-  condition: and(succeeded(), ne('${{ parameters.GitHubPAT }}', ''))
   jobs:
   - job: SubmitPR
     displayName: 'Submit PR to homebrew tap'
@@ -213,7 +217,9 @@ stages:
       vmImage: 'ubuntu-latest'
     
     steps:
-    - checkout: none
+    - checkout: homebrewtap
+      persistCredentials: true
+      displayName: 'Checkout homebrew tap repository'
     
     - download: current
       artifact: homebrew-formula
@@ -222,7 +228,7 @@ stages:
     - bash: |
         set -e
         echo "======================================"
-        echo "  Clone Homebrew Tap Repository"
+        echo "  Configure Git"
         echo "======================================"
         echo ""
         
@@ -230,18 +236,12 @@ stages:
         git config --global user.email "azure-pipelines@microsoft.com"
         git config --global user.name "Azure Pipelines Bot"
         
-        # Clone the homebrew tap repo
-        REPO_URL="https://${{ parameters.GitHubPAT }}@github.com/$(HomebrewTapRepo).git"
-        git clone "$REPO_URL" homebrew-tap
-        cd homebrew-tap
-        
-        echo "✅ Repository cloned"
+        echo "✅ Git configured"
         ls -la
-      displayName: 'Clone homebrew tap repository'
+      displayName: 'Configure git'
     
     - bash: |
         set -e
-        cd homebrew-tap
         
         echo "======================================"
         echo "  Create Branch and Commit Formula"
@@ -280,14 +280,37 @@ stages:
     - bash: |
         set -e
         echo "======================================"
-        echo "  Create Pull Request"
+        echo "  Install GitHub CLI"
+        echo "======================================"
+        
+        # Install gh CLI
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+        sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+        sudo apt update
+        sudo apt install gh -y
+        
+        gh --version
+        echo "✅ GitHub CLI installed"
+      displayName: 'Install GitHub CLI'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Create Pull Request with GitHub CLI"
         echo "======================================"
         echo ""
         
         BRANCH_NAME="$(CreateBranch.BRANCH_NAME)"
         
-        # Create PR using GitHub API
-        PR_BODY="## Azure CLI $(AzureCliVersion)
+        # Authenticate with GitHub
+        echo "${GITHUB_TOKEN}" | gh auth login --with-token
+        
+        # Create PR
+        PR_URL=$(gh pr create \
+          --repo "$(HomebrewTapRepo)" \
+          --title "Update Azure CLI to $(AzureCliVersion)" \
+          --body "## Azure CLI $(AzureCliVersion)
 
         This PR updates the Azure CLI formula to version **$(AzureCliVersion)**.
 
@@ -314,33 +337,14 @@ stages:
         ### Verification
         - PKG signature: ✅ Developer ID Installer
         - Notarization: ✅ Verified by Apple
-        - Stapling: ✅ Offline installation ready"
-
-        # Create PR
-        curl -X POST \
-          -H "Authorization: token ${{ parameters.GitHubPAT }}" \
-          -H "Accept: application/vnd.github.v3+json" \
-          https://api.github.com/repos/$(HomebrewTapRepo)/pulls \
-          -d "{
-            \"title\": \"Update Azure CLI to $(AzureCliVersion)\",
-            \"body\": $(echo "$PR_BODY" | jq -Rs .),
-            \"head\": \"$BRANCH_NAME\",
-            \"base\": \"main\"
-          }" | tee pr-response.json
+        - Stapling: ✅ Offline installation ready" \
+          --head "$BRANCH_NAME" \
+          --base "main")
         
-        # Extract PR URL
-        PR_URL=$(cat pr-response.json | jq -r '.html_url')
-        
-        if [ "$PR_URL" != "null" ]; then
-          echo ""
-          echo "✅ Pull Request created successfully!"
-          echo "   URL: $PR_URL"
-          echo "##vso[task.setvariable variable=PR_URL]$PR_URL"
-        else
-          echo "❌ Failed to create PR"
-          cat pr-response.json
-          exit 1
-        fi
+        echo ""
+        echo "✅ Pull Request created successfully!"
+        echo "   URL: $PR_URL"
+        echo "##vso[task.setvariable variable=PR_URL]$PR_URL"
       displayName: 'Create GitHub PR'
     
     - bash: |
@@ -388,15 +392,7 @@ stages:
         echo "- **Location**: Formula/azure-cli-pr.rb"
         echo ""
         echo "## Next Steps"
-        if [ -n "${{ parameters.GitHubPAT }}" ]; then
-          echo "1. ✅ PR created automatically"
-          echo "2. Review and merge the PR"
-          echo "3. Test installation: brew install azure-cli-pr"
-        else
-          echo "1. Download the formula artifact from this build"
-          echo "2. Manually copy to your homebrew tap repository"
-          echo "3. Create PR manually"
-          echo ""
-          echo "Note: Provide GitHubPAT parameter for automatic PR creation"
-        fi
+        echo "1. ✅ PR created automatically"
+        echo "2. Review and merge the PR"
+        echo "3. Test installation: brew install azure-cli-pr"
       displayName: 'Pipeline summary'

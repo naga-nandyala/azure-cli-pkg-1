@@ -282,6 +282,8 @@ stages:
         echo "##vso[task.setvariable variable=RELEASE_ID;isOutput=true]$RELEASE_ID"
         echo "##vso[task.setvariable variable=RELEASE_URL;isOutput=true]$RELEASE_URL"
         echo "##vso[task.setvariable variable=UPLOAD_URL;isOutput=true]$UPLOAD_URL"
+      env:
+        GITHUB_TOKEN: $(GITHUB_TOKEN)
       name: CreateReleaseStep
       displayName: 'Create GitHub release'
     
@@ -341,6 +343,8 @@ stages:
             echo "✅ SHA256 uploaded: $SHA256_URL"
           fi
         fi
+      env:
+        GITHUB_TOKEN: $(GITHUB_TOKEN)
       name: UploadAssets
       displayName: 'Upload release assets'
     
