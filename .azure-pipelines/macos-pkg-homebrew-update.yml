@@ -152,56 +152,42 @@ stages:
         # Create Formula directory
         mkdir -p Formula
         
-        # Generate the formula file
-        cat > Formula/azure-cli-pr.rb <<'FORMULA_EOF'
-        class AzureCliPr < Formula
-          desc "Microsoft Azure CLI - Official command-line interface"
-          homepage "https://learn.microsoft.com/cli/azure/"
-          url "$(PKG_DOWNLOAD_URL)"
-          sha256 "$(PKG_SHA256)"
-          version "$(AzureCliVersion)"
-          
-          bottle :unneeded
-          
-          def install
-            # Extract the PKG
-            system "pkgutil", "--expand", cached_download, buildpath/"azure-cli.unpkg"
-            
-            # Find the Payload
-            payload = Dir[buildpath/"azure-cli.unpkg"/"*.pkg"].first
-            system "cat", "#{payload}/Payload" do |io|
-              io.binmode
-              system "gunzip", "-dc" do |gz|
-                system "cpio", "-i", chdir: prefix
-              end
-            end
-            
-            # Create symlinks in bin
-            bin.install_symlink prefix/"usr/local/bin/az"
-          end
-          
-          def caveats
-            <<~EOS
-              Azure CLI has been installed!
-              
-              To get started:
-                az --version
-                az login
-              
-              Documentation: https://learn.microsoft.com/cli/azure/
-            EOS
-          end
-          
-          test do
-            system "#{bin}/az", "--version"
-          end
-        end
-        FORMULA_EOF
+        # Generate the formula file with proper variable expansion
+        cat > Formula/azure-cli-pr.rb <<FORMULA_EOF
+class AzureCliPr < Formula
+  desc "Microsoft Azure CLI - Official command-line interface"
+  homepage "https://learn.microsoft.com/cli/azure/"
+  url "$(PKG_DOWNLOAD_URL)"
+  sha256 "$(PKG_SHA256)"
+  version "$(AzureCliVersion)"
+  
+  bottle :unneeded
+  
+  def install
+    system "pkgutil", "--expand", cached_download, buildpath/"azure-cli.unpkg"
+    payload = Dir[buildpath/"azure-cli.unpkg"/"*.pkg"].first
+    system "tar", "-xzf", "#{payload}/Payload", "-C", prefix
+    bin.install_symlink prefix/"usr/local/bin/az"
+  end
+  
+  def caveats
+    "Azure CLI installed. Run 'az --version' to verify."
+  end
+  
+  test do
+    system "#{bin}/az", "--version"
+  end
+end
+FORMULA_EOF
         
         echo "✅ Formula generated: Formula/azure-cli-pr.rb"
         echo ""
         cat Formula/azure-cli-pr.rb
       displayName: 'Generate formula file'
+    
+    - publish: Formula
+      artifact: homebrew-formula
+      displayName: 'Publish formula artifact'
     
     - publish: Formula
       artifact: homebrew-formula
@@ -297,47 +283,38 @@ stages:
     - bash: |
         set -e
         echo "======================================"
-        echo "  Create Pull Request with GitHub CLI"
+        echo "  Create Pull Request"
         echo "======================================"
         echo ""
         
         BRANCH_NAME="$(CreateBranch.BRANCH_NAME)"
         
-        # Authenticate with GitHub
+        # Authenticate with GitHub using service connection token
         echo "${GITHUB_TOKEN}" | gh auth login --with-token
         
-        # Create PR
+        # Create PR with simplified body
         PR_URL=$(gh pr create \
           --repo "$(HomebrewTapRepo)" \
           --title "Update Azure CLI to $(AzureCliVersion)" \
           --body "## Azure CLI $(AzureCliVersion)
 
-        This PR updates the Azure CLI formula to version **$(AzureCliVersion)**.
+This PR updates the Azure CLI formula to version $(AzureCliVersion).
 
-        ### Changes
-        - ✅ Updated to version $(AzureCliVersion)
-        - ✅ Fully signed with Apple Developer ID
-        - ✅ Notarized by Apple
-        - ✅ Stapled for offline installation
-        - ✅ SHA256 verified
+### Changes
+- Updated to version $(AzureCliVersion)
+- Fully signed with Apple Developer ID
+- Notarized by Apple
+- Stapled for offline installation
 
-        ### Installation
-        After merging, users can install with:
-        \`\`\`bash
-        brew tap $(HomebrewTapRepo)
-        brew install azure-cli-pr
-        \`\`\`
+### Installation
+\`\`\`bash
+brew tap $(HomebrewTapRepo)
+brew install azure-cli-pr
+\`\`\`
 
-        ### Build Information
-        - **Source Build**: $(SourceBuildId)
-        - **Pipeline**: $(Build.BuildNumber)
-        - **PKG URL**: $(PKG_DOWNLOAD_URL)
-        - **SHA256**: \`$(PKG_SHA256)\`
-
-        ### Verification
-        - PKG signature: ✅ Developer ID Installer
-        - Notarization: ✅ Verified by Apple
-        - Stapling: ✅ Offline installation ready" \
+### Build Information
+- Source Build: $(SourceBuildId)
+- Pipeline: $(Build.BuildNumber)" \
           --head "$BRANCH_NAME" \
           --base "main")
         
