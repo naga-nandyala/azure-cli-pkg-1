@@ -202,11 +202,44 @@ stages:
         echo "Repository: $(GitHubRepo)"
         echo ""
         
-        # Construct PKG download URL
-        PKG_URL="https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/azure-cli-$(AzureCliVersion).pkg"
+        # Construct PKG download URL (using the actual filename from the release)
+        PKG_URL="https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/azure-cli-$(AzureCliVersion)-macos-arm64-notarized.pkg"
         
         echo "Downloading PKG from: $PKG_URL"
-        curl -L -o azure-cli.pkg "$PKG_URL"
+        
+        # Download and check if it's actually a PKG file
+        HTTP_CODE=$(curl -L -w "%{http_code}" -o azure-cli.pkg "$PKG_URL")
+        
+        echo ""
+        echo "HTTP Response Code: $HTTP_CODE"
+        
+        if [ "$HTTP_CODE" != "200" ]; then
+          echo "❌ ERROR: Failed to download PKG (HTTP $HTTP_CODE)"
+          echo ""
+          echo "This likely means:"
+          echo "1. The release exists but has no PKG asset attached"
+          echo "2. The PKG filename doesn't match azure-cli-$(AzureCliVersion)-macos-arm64-notarized.pkg"
+          echo "3. The release $(ReleaseTag) doesn't exist"
+          echo ""
+          echo "Please check: https://github.com/$(GitHubRepo)/releases/tag/$(ReleaseTag)"
+          exit 1
+        fi
+        
+        # Check file size (should be at least 10MB for real PKG)
+        FILE_SIZE=$(stat -f%z azure-cli.pkg 2>/dev/null || stat -c%s azure-cli.pkg)
+        echo "Downloaded file size: $FILE_SIZE bytes ($(numfmt --to=iec $FILE_SIZE 2>/dev/null || echo 'N/A'))"
+        
+        if [ "$FILE_SIZE" -lt 1000000 ]; then
+          echo ""
+          echo "❌ ERROR: Downloaded file is too small ($FILE_SIZE bytes)"
+          echo "Expected a PKG file of 10+ MB, got less than 1 MB"
+          echo ""
+          echo "The release likely has no valid PKG asset."
+          echo ""
+          echo "Downloaded content:"
+          head -20 azure-cli.pkg
+          exit 1
+        fi
         
         echo ""
         echo "✅ PKG downloaded successfully"

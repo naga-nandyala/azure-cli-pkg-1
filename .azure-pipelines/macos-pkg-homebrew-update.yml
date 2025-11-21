@@ -160,17 +160,11 @@ stages:
         printf '  sha256 "%s"\n' "$(PKG_SHA256)" >> Formula/azure-cli-pr.rb
         printf '  version "%s"\n' "$(AzureCliVersion)" >> Formula/azure-cli-pr.rb
         printf '\n' >> Formula/azure-cli-pr.rb
-        printf '  bottle :unneeded\n' >> Formula/azure-cli-pr.rb
-        printf '\n' >> Formula/azure-cli-pr.rb
         printf '  def install\n' >> Formula/azure-cli-pr.rb
         printf '    system "pkgutil", "--expand", cached_download, buildpath/"azure-cli.unpkg"\n' >> Formula/azure-cli-pr.rb
         printf '    payload = Dir[buildpath/"azure-cli.unpkg"/"*.pkg"].first\n' >> Formula/azure-cli-pr.rb
         printf '    system "tar", "-xzf", "#{payload}/Payload", "-C", prefix\n' >> Formula/azure-cli-pr.rb
         printf '    bin.install_symlink prefix/"usr/local/bin/az"\n' >> Formula/azure-cli-pr.rb
-        printf '  end\n' >> Formula/azure-cli-pr.rb
-        printf '\n' >> Formula/azure-cli-pr.rb
-        printf '  def caveats\n' >> Formula/azure-cli-pr.rb
-        printf '    "Azure CLI installed. Run '"'"'az --version'"'"' to verify."\n' >> Formula/azure-cli-pr.rb
         printf '  end\n' >> Formula/azure-cli-pr.rb
         printf '\n' >> Formula/azure-cli-pr.rb
         printf '  test do\n' >> Formula/azure-cli-pr.rb
