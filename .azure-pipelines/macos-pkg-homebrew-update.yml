@@ -228,6 +228,17 @@ stages:
         echo "======================================"
         echo ""
         
+        # Check current git state
+        echo "Current branch:"
+        git branch -a
+        echo ""
+        echo "Current status:"
+        git status
+        echo ""
+        
+        # Checkout main branch (we're in detached HEAD state)
+        git checkout -B main origin/main
+        
         # Copy formula
         mkdir -p Formula
         cp $(Pipeline.Workspace)/homebrew-formula/azure-cli-pr.rb Formula/
