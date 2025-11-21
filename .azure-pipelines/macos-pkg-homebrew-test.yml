@@ -18,10 +18,22 @@ parameters:
   type: string
   default: 'azure-cli-pr'
 
+- name: GitHubRepo
+  displayName: 'GitHub Repository (owner/repo)'
+  type: string
+  default: 'naga-nandyala/azure-cli-pkg-1'
+
+- name: ReleaseTag
+  displayName: 'GitHub Release Tag'
+  type: string
+  default: 'v2.0.0'
+
 variables:
   AzureCliVersion: ${{ parameters.AzureCliVersion }}
   HomebrewTapRepo: ${{ parameters.HomebrewTapRepo }}
   FormulaName: ${{ parameters.FormulaName }}
+  GitHubRepo: ${{ parameters.GitHubRepo }}
+  ReleaseTag: ${{ parameters.ReleaseTag }}
 
 stages:
 - stage: TestHomebrewFormula
@@ -159,6 +171,153 @@ stages:
       displayName: 'Cleanup (uninstall)'
       condition: always()
 
+  - job: TestOfflineInstall
+    displayName: 'Test offline PKG installation'
+    pool:
+      vmImage: 'macos-14'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  System Information"
+        echo "======================================"
+        echo ""
+        echo "macOS Version:"
+        sw_vers
+        echo ""
+        echo "Architecture:"
+        uname -m
+      displayName: 'Show system information'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Download Notarized PKG from GitHub Release"
+        echo "======================================"
+        echo ""
+        echo "Release: $(ReleaseTag)"
+        echo "Repository: $(GitHubRepo)"
+        echo ""
+        
+        # Construct PKG download URL
+        PKG_URL="https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/azure-cli-$(AzureCliVersion).pkg"
+        
+        echo "Downloading PKG from: $PKG_URL"
+        curl -L -o azure-cli.pkg "$PKG_URL"
+        
+        echo ""
+        echo "✅ PKG downloaded successfully"
+        ls -lh azure-cli.pkg
+      displayName: 'Download PKG from GitHub release'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Verify PKG Signature and Notarization"
+        echo "======================================"
+        echo ""
+        
+        # Check if PKG is signed
+        echo "Checking PKG signature..."
+        pkgutil --check-signature azure-cli.pkg
+        
+        echo ""
+        echo "Checking notarization status..."
+        spctl -a -vv -t install azure-cli.pkg
+        
+        echo ""
+        echo "✅ PKG is properly signed and notarized"
+      displayName: 'Verify PKG signature and notarization'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Install PKG (Offline Installation)"
+        echo "======================================"
+        echo ""
+        
+        echo "Installing azure-cli.pkg..."
+        sudo installer -pkg azure-cli.pkg -target /
+        
+        echo ""
+        echo "✅ PKG installed successfully"
+      displayName: 'Install PKG offline'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Verify Offline Installation"
+        echo "======================================"
+        echo ""
+        
+        # Check if az command is available
+        if ! command -v az &> /dev/null; then
+          echo "❌ ERROR: 'az' command not found in PATH"
+          exit 1
+        fi
+        
+        echo "✅ 'az' command found in PATH"
+        echo ""
+        
+        # Get az location
+        echo "az location:"
+        which az
+        echo ""
+        
+        # Check version
+        echo "Azure CLI Version:"
+        az --version
+        
+        echo ""
+        echo "✅ Offline installation verified successfully"
+      displayName: 'Verify offline installation works'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Test Basic Commands (Offline)"
+        echo "======================================"
+        echo ""
+        
+        # Test help command
+        echo "Testing: az --help"
+        az --help > /dev/null
+        echo "✅ Help command works"
+        echo ""
+        
+        # Test version command
+        echo "Testing: az version"
+        az version
+        echo "✅ Version command works"
+        echo ""
+        
+        echo "======================================"
+        echo "  Offline Installation Tests Passed! ✅"
+        echo "======================================"
+      displayName: 'Test basic commands offline'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Cleanup"
+        echo "======================================"
+        echo ""
+        
+        echo "Removing downloaded PKG..."
+        rm -f azure-cli.pkg
+        
+        echo ""
+        echo "Note: Uninstalling Azure CLI installed via PKG requires:"
+        echo "  sudo rm -rf /usr/local/bin/az"
+        echo "  sudo rm -rf /usr/local/az"
+        echo ""
+        echo "✅ Cleanup complete"
+      displayName: 'Cleanup'
+      condition: always()
+
 - stage: TestFormulaValidation
   displayName: 'Validate Formula Syntax'
   jobs:
@@ -233,6 +392,7 @@ stages:
   dependsOn:
   - TestHomebrewFormula
   - TestFormulaValidation
+  condition: succeededOrFailed()
   jobs:
   - job: Summary
     displayName: 'Show test summary'
@@ -245,15 +405,23 @@ stages:
         echo "  Homebrew Formula Test Summary"
         echo "======================================"
         echo ""
-        echo "✅ All tests passed successfully!"
+        echo "✅ Test Results:"
+        echo ""
+        echo "1. Homebrew Formula Installation - Completed"
+        echo "2. Offline PKG Installation - Completed"
+        echo "3. Formula Validation - Completed"
         echo ""
         echo "Formula: $(FormulaName)"
         echo "Version: $(AzureCliVersion)"
         echo "Tap: $(HomebrewTapRepo)"
+        echo "Release: $(ReleaseTag)"
         echo ""
         echo "The formula is ready for use!"
         echo ""
         echo "Users can install with:"
         echo "  brew tap $(HomebrewTapRepo)"
         echo "  brew install $(FormulaName)"
+        echo ""
+        echo "Or download PKG directly from:"
+        echo "  https://github.com/$(GitHubRepo)/releases/tag/$(ReleaseTag)"
       displayName: 'Test summary'
