@@ -1,0 +1,259 @@
+trigger: none
+
+pr: none
+
+parameters:
+- name: AzureCliVersion
+  displayName: 'Azure CLI Version to Test'
+  type: string
+  default: '2.0.0'
+
+- name: HomebrewTapRepo
+  displayName: 'Homebrew Tap Repository (owner/repo)'
+  type: string
+  default: 'naga-nandyala/homebrew-mycli-app'
+
+- name: FormulaName
+  displayName: 'Formula Name'
+  type: string
+  default: 'azure-cli-pr'
+
+variables:
+  AzureCliVersion: ${{ parameters.AzureCliVersion }}
+  HomebrewTapRepo: ${{ parameters.HomebrewTapRepo }}
+  FormulaName: ${{ parameters.FormulaName }}
+
+stages:
+- stage: TestHomebrewFormula
+  displayName: 'Test Homebrew Formula Installation'
+  jobs:
+  - job: TestOnMacOS
+    displayName: 'Test formula on macOS'
+    pool:
+      vmImage: 'macos-14'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  System Information"
+        echo "======================================"
+        echo ""
+        echo "macOS Version:"
+        sw_vers
+        echo ""
+        echo "Homebrew Version:"
+        brew --version
+        echo ""
+        echo "Architecture:"
+        uname -m
+      displayName: 'Show system information'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Add Homebrew Tap"
+        echo "======================================"
+        echo ""
+        echo "Adding tap: $(HomebrewTapRepo)"
+        
+        brew tap $(HomebrewTapRepo)
+        
+        echo ""
+        echo "✅ Tap added successfully"
+        echo ""
+        echo "Available formulas in tap:"
+        brew search $(HomebrewTapRepo)
+      displayName: 'Add Homebrew tap'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Install Formula"
+        echo "======================================"
+        echo ""
+        echo "Installing: $(FormulaName)"
+        
+        brew install $(FormulaName)
+        
+        echo ""
+        echo "✅ Formula installed successfully"
+      displayName: 'Install Azure CLI from formula'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Verify Installation"
+        echo "======================================"
+        echo ""
+        
+        # Check if az command is available
+        if ! command -v az &> /dev/null; then
+          echo "❌ ERROR: 'az' command not found in PATH"
+          exit 1
+        fi
+        
+        echo "✅ 'az' command found in PATH"
+        echo ""
+        
+        # Get az location
+        echo "az location:"
+        which az
+        echo ""
+        
+        # Check version
+        echo "Azure CLI Version:"
+        az --version
+        
+        echo ""
+        echo "✅ Azure CLI is working correctly"
+      displayName: 'Verify az command works'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Test Basic Commands"
+        echo "======================================"
+        echo ""
+        
+        # Test help command
+        echo "Testing: az --help"
+        az --help > /dev/null
+        echo "✅ Help command works"
+        echo ""
+        
+        # Test version command
+        echo "Testing: az version"
+        az version
+        echo "✅ Version command works"
+        echo ""
+        
+        # Test extension list (should work without login)
+        echo "Testing: az extension list"
+        az extension list
+        echo "✅ Extension list works"
+        echo ""
+        
+        echo "======================================"
+        echo "  All Tests Passed! ✅"
+        echo "======================================"
+      displayName: 'Test basic az commands'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Cleanup"
+        echo "======================================"
+        echo ""
+        
+        echo "Uninstalling $(FormulaName)..."
+        brew uninstall $(FormulaName)
+        
+        echo "Removing tap..."
+        brew untap $(HomebrewTapRepo)
+        
+        echo ""
+        echo "✅ Cleanup complete"
+      displayName: 'Cleanup (uninstall)'
+      condition: always()
+
+- stage: TestFormulaValidation
+  displayName: 'Validate Formula Syntax'
+  jobs:
+  - job: ValidateFormula
+    displayName: 'Validate formula with brew audit'
+    pool:
+      vmImage: 'macos-14'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Add Tap and Audit Formula"
+        echo "======================================"
+        echo ""
+        
+        # Add tap
+        brew tap $(HomebrewTapRepo)
+        
+        echo "Running brew audit on $(FormulaName)..."
+        echo ""
+        
+        # Audit the formula (checks for common issues)
+        brew audit --formula $(FormulaName)
+        
+        echo ""
+        echo "✅ Formula audit passed"
+      displayName: 'Audit formula'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Formula Information"
+        echo "======================================"
+        echo ""
+        
+        echo "Formula info:"
+        brew info $(FormulaName)
+        
+        echo ""
+        echo "Formula contents:"
+        brew cat $(FormulaName)
+        
+        echo ""
+        echo "✅ Formula inspection complete"
+      displayName: 'Show formula details'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Test Formula Installation (Dry Run)"
+        echo "======================================"
+        echo ""
+        
+        # Test installation without actually installing
+        brew fetch $(FormulaName)
+        
+        echo ""
+        echo "✅ Formula can be fetched successfully"
+      displayName: 'Test formula fetch'
+    
+    - bash: |
+        brew untap $(HomebrewTapRepo)
+        echo "✅ Cleanup complete"
+      displayName: 'Cleanup'
+      condition: always()
+
+- stage: TestSummary
+  displayName: 'Test Summary'
+  dependsOn:
+  - TestHomebrewFormula
+  - TestFormulaValidation
+  jobs:
+  - job: Summary
+    displayName: 'Show test summary'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - bash: |
+        echo "======================================"
+        echo "  Homebrew Formula Test Summary"
+        echo "======================================"
+        echo ""
+        echo "✅ All tests passed successfully!"
+        echo ""
+        echo "Formula: $(FormulaName)"
+        echo "Version: $(AzureCliVersion)"
+        echo "Tap: $(HomebrewTapRepo)"
+        echo ""
+        echo "The formula is ready for use!"
+        echo ""
+        echo "Users can install with:"
+        echo "  brew tap $(HomebrewTapRepo)"
+        echo "  brew install $(FormulaName)"
+      displayName: 'Test summary'
