@@ -152,42 +152,36 @@ stages:
         # Create Formula directory
         mkdir -p Formula
         
-        # Generate the formula file with proper variable expansion
-        cat > Formula/azure-cli-pr.rb <<FORMULA_EOF
-class AzureCliPr < Formula
-  desc "Microsoft Azure CLI - Official command-line interface"
-  homepage "https://learn.microsoft.com/cli/azure/"
-  url "$(PKG_DOWNLOAD_URL)"
-  sha256 "$(PKG_SHA256)"
-  version "$(AzureCliVersion)"
-  
-  bottle :unneeded
-  
-  def install
-    system "pkgutil", "--expand", cached_download, buildpath/"azure-cli.unpkg"
-    payload = Dir[buildpath/"azure-cli.unpkg"/"*.pkg"].first
-    system "tar", "-xzf", "#{payload}/Payload", "-C", prefix
-    bin.install_symlink prefix/"usr/local/bin/az"
-  end
-  
-  def caveats
-    "Azure CLI installed. Run 'az --version' to verify."
-  end
-  
-  test do
-    system "#{bin}/az", "--version"
-  end
-end
-FORMULA_EOF
+        # Generate the formula file using printf to avoid heredoc issues
+        printf 'class AzureCliPr < Formula\n' > Formula/azure-cli-pr.rb
+        printf '  desc "Microsoft Azure CLI - Official command-line interface"\n' >> Formula/azure-cli-pr.rb
+        printf '  homepage "https://learn.microsoft.com/cli/azure/"\n' >> Formula/azure-cli-pr.rb
+        printf '  url "%s"\n' "$(PKG_DOWNLOAD_URL)" >> Formula/azure-cli-pr.rb
+        printf '  sha256 "%s"\n' "$(PKG_SHA256)" >> Formula/azure-cli-pr.rb
+        printf '  version "%s"\n' "$(AzureCliVersion)" >> Formula/azure-cli-pr.rb
+        printf '\n' >> Formula/azure-cli-pr.rb
+        printf '  bottle :unneeded\n' >> Formula/azure-cli-pr.rb
+        printf '\n' >> Formula/azure-cli-pr.rb
+        printf '  def install\n' >> Formula/azure-cli-pr.rb
+        printf '    system "pkgutil", "--expand", cached_download, buildpath/"azure-cli.unpkg"\n' >> Formula/azure-cli-pr.rb
+        printf '    payload = Dir[buildpath/"azure-cli.unpkg"/"*.pkg"].first\n' >> Formula/azure-cli-pr.rb
+        printf '    system "tar", "-xzf", "#{payload}/Payload", "-C", prefix\n' >> Formula/azure-cli-pr.rb
+        printf '    bin.install_symlink prefix/"usr/local/bin/az"\n' >> Formula/azure-cli-pr.rb
+        printf '  end\n' >> Formula/azure-cli-pr.rb
+        printf '\n' >> Formula/azure-cli-pr.rb
+        printf '  def caveats\n' >> Formula/azure-cli-pr.rb
+        printf '    "Azure CLI installed. Run '"'"'az --version'"'"' to verify."\n' >> Formula/azure-cli-pr.rb
+        printf '  end\n' >> Formula/azure-cli-pr.rb
+        printf '\n' >> Formula/azure-cli-pr.rb
+        printf '  test do\n' >> Formula/azure-cli-pr.rb
+        printf '    system "#{bin}/az", "--version"\n' >> Formula/azure-cli-pr.rb
+        printf '  end\n' >> Formula/azure-cli-pr.rb
+        printf 'end\n' >> Formula/azure-cli-pr.rb
         
         echo "✅ Formula generated: Formula/azure-cli-pr.rb"
         echo ""
         cat Formula/azure-cli-pr.rb
       displayName: 'Generate formula file'
-    
-    - publish: Formula
-      artifact: homebrew-formula
-      displayName: 'Publish formula artifact'
     
     - publish: Formula
       artifact: homebrew-formula
@@ -292,31 +286,14 @@ FORMULA_EOF
         # Authenticate with GitHub using service connection token
         echo "${GITHUB_TOKEN}" | gh auth login --with-token
         
-        # Create PR with simplified body
+        # Create PR - use variable for body to avoid YAML parsing issues
+        PR_BODY="Update Azure CLI to version $(AzureCliVersion). This PR updates the formula with the latest notarized and stapled package."
+        
         PR_URL=$(gh pr create \
           --repo "$(HomebrewTapRepo)" \
           --title "Update Azure CLI to $(AzureCliVersion)" \
-          --body "## Azure CLI $(AzureCliVersion)
-
-This PR updates the Azure CLI formula to version $(AzureCliVersion).
-
-### Changes
-- Updated to version $(AzureCliVersion)
-- Fully signed with Apple Developer ID
-- Notarized by Apple
-- Stapled for offline installation
-
-### Installation
-\`\`\`bash
-brew tap $(HomebrewTapRepo)
-brew install azure-cli-pr
-\`\`\`
-
-### Build Information
-- Source Build: $(SourceBuildId)
-- Pipeline: $(Build.BuildNumber)" \
-          --head "$BRANCH_NAME" \
-          --base "main")
+          --body "${PR_BODY}" \
+          --base main)
         
         echo ""
         echo "✅ Pull Request created successfully!"
