@@ -280,7 +280,7 @@ stages:
   dependsOn:
   - DownloadStapledPkg
   - GenerateFormula
-  - CreatePullRequest
+  - CommitToHomebrew
   condition: always()
   jobs:
   - job: PrintSummary
@@ -290,7 +290,7 @@ stages:
     
     steps:
     - bash: |
-        echo "# Homebrew Formula PR Pipeline Summary"
+        echo "# Homebrew Formula Update Pipeline Summary"
         echo ""
         echo "## Configuration"
         echo "- **Version**: $(AzureCliVersion)"
@@ -304,7 +304,6 @@ stages:
         echo "- **Location**: Formula/azure-cli-pr.rb"
         echo ""
         echo "## Next Steps"
-        echo "1. ✅ PR created automatically"
-        echo "2. Review and merge the PR"
-        echo "3. Test installation: brew install azure-cli-pr"
+        echo "1. ✅ Formula committed to main branch"
+        echo "2. Test installation: brew tap $(HomebrewTapRepo) && brew install azure-cli-pr"
       displayName: 'Pipeline summary'
