@@ -224,19 +224,15 @@ stages:
         set -e
         
         echo "======================================"
-        echo "  Create Branch and Commit Formula"
+        echo "  Commit Formula to Main Branch"
         echo "======================================"
         echo ""
-        
-        # Create new branch
-        BRANCH_NAME="update-azure-cli-$(AzureCliVersion)-$(Build.BuildId)"
-        git checkout -b "$BRANCH_NAME"
         
         # Copy formula
         mkdir -p Formula
         cp $(Pipeline.Workspace)/homebrew-formula/azure-cli-pr.rb Formula/
         
-        # Add and commit
+        # Add and commit directly to main
         git add Formula/azure-cli-pr.rb
         git commit -m "Update Azure CLI to version $(AzureCliVersion)
 
@@ -249,70 +245,27 @@ stages:
         Build: $(SourceBuildId)
         Pipeline: $(Build.BuildNumber)"
         
-        # Push branch
-        git push origin "$BRANCH_NAME"
+        # Push directly to main
+        git push origin main
         
-        echo "✅ Branch pushed: $BRANCH_NAME"
-        echo "##vso[task.setvariable variable=BRANCH_NAME;isOutput=true]$BRANCH_NAME"
-      name: CreateBranch
-      displayName: 'Create branch and commit'
-    
-    - bash: |
-        set -e
-        echo "======================================"
-        echo "  Install GitHub CLI"
-        echo "======================================"
-        
-        # Install gh CLI
-        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-        sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-        sudo apt update
-        sudo apt install gh -y
-        
-        gh --version
-        echo "✅ GitHub CLI installed"
-      displayName: 'Install GitHub CLI'
-    
-    - bash: |
-        set -e
-        echo "======================================"
-        echo "  Create Pull Request"
-        echo "======================================"
+        COMMIT_SHA=$(git rev-parse HEAD)
         echo ""
-        
-        BRANCH_NAME="$(CreateBranch.BRANCH_NAME)"
-        
-        # Authenticate with GitHub using service connection token
-        echo "${GITHUB_TOKEN}" | gh auth login --with-token
-        
-        # Create PR - use variable for body to avoid YAML parsing issues
-        PR_BODY="Update Azure CLI to version $(AzureCliVersion). This PR updates the formula with the latest notarized and stapled package."
-        
-        PR_URL=$(gh pr create \
-          --repo "$(HomebrewTapRepo)" \
-          --title "Update Azure CLI to $(AzureCliVersion)" \
-          --body "${PR_BODY}" \
-          --base main)
-        
-        echo ""
-        echo "✅ Pull Request created successfully!"
-        echo "   URL: $PR_URL"
-        echo "##vso[task.setvariable variable=PR_URL]$PR_URL"
-      displayName: 'Create GitHub PR'
+        echo "✅ Formula committed to main branch!"
+        echo "   Repository: https://github.com/$(HomebrewTapRepo)"
+        echo "   Commit: $COMMIT_SHA"
+      displayName: 'Commit and push to main'
     
     - bash: |
         echo "======================================"
-        echo "  PR Summary"
+        echo "  Update Summary"
         echo "======================================"
         echo ""
-        echo "✅ Pull Request Created!"
+        echo "✅ Formula Updated on Main Branch!"
         echo ""
         echo "Repository: https://github.com/$(HomebrewTapRepo)"
-        echo "PR URL: $(PR_URL)"
         echo "Version: $(AzureCliVersion)"
         echo ""
-        echo "After merging, users can install with:"
+        echo "Users can now install with:"
         echo "  brew tap $(HomebrewTapRepo)"
         echo "  brew install azure-cli-pr"
       displayName: 'Print summary'
