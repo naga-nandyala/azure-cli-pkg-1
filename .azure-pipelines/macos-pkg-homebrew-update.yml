@@ -187,12 +187,12 @@ stages:
       artifact: homebrew-formula
       displayName: 'Publish formula artifact'
 
-- stage: CreatePullRequest
-  displayName: 'Create PR to Homebrew Tap'
+- stage: CommitToHomebrew
+  displayName: 'Commit to Homebrew Tap Main Branch'
   dependsOn: GenerateFormula
   jobs:
-  - job: SubmitPR
-    displayName: 'Submit PR to homebrew tap'
+  - job: CommitFormula
+    displayName: 'Commit formula to main branch'
     pool:
       vmImage: 'ubuntu-latest'
     
