@@ -153,12 +153,13 @@ stages:
         mkdir -p Formula
         
         # Generate the formula file using printf to avoid heredoc issues
+        # Note: Removed explicit version line as it's redundant (version is in URL)
+        # Order: desc, homepage, url, sha256 (proper Homebrew style)
         printf 'class AzureCliPr < Formula\n' > Formula/azure-cli-pr.rb
         printf '  desc "Microsoft Azure CLI - Official command-line interface"\n' >> Formula/azure-cli-pr.rb
         printf '  homepage "https://learn.microsoft.com/cli/azure/"\n' >> Formula/azure-cli-pr.rb
         printf '  url "%s"\n' "$(PKG_DOWNLOAD_URL)" >> Formula/azure-cli-pr.rb
         printf '  sha256 "%s"\n' "$(PKG_SHA256)" >> Formula/azure-cli-pr.rb
-        printf '  version "%s"\n' "$(AzureCliVersion)" >> Formula/azure-cli-pr.rb
         printf '\n' >> Formula/azure-cli-pr.rb
         printf '  def install\n' >> Formula/azure-cli-pr.rb
         printf '    system "pkgutil", "--expand", cached_download, buildpath/"azure-cli.unpkg"\n' >> Formula/azure-cli-pr.rb

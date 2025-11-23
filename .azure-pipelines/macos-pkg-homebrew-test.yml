@@ -156,19 +156,28 @@ stages:
     - bash: |
         set -e
         echo "======================================"
-        echo "  Cleanup"
+        echo "  Cleanup - Uninstall Homebrew Formula"
         echo "======================================"
         echo ""
         
         echo "Uninstalling $(FormulaName)..."
-        brew uninstall $(FormulaName)
+        brew uninstall $(FormulaName) || echo "Formula already uninstalled"
         
+        # Verify uninstallation
+        if command -v az &> /dev/null; then
+          echo "⚠️  WARNING: 'az' command still found in PATH"
+          which az
+        else
+          echo "✅ Azure CLI uninstalled successfully"
+        fi
+        
+        echo ""
         echo "Removing tap..."
-        brew untap $(HomebrewTapRepo)
+        brew untap $(HomebrewTapRepo) || echo "Tap already removed"
         
         echo ""
         echo "✅ Cleanup complete"
-      displayName: 'Cleanup (uninstall)'
+      displayName: 'Cleanup - Uninstall Homebrew'
       condition: always()
 
   - job: TestOfflineInstall
@@ -335,20 +344,39 @@ stages:
     - bash: |
         set -e
         echo "======================================"
-        echo "  Cleanup"
+        echo "  Cleanup - Uninstall Azure CLI"
         echo "======================================"
         echo ""
         
+        echo "Uninstalling Azure CLI installed via PKG..."
+        
+        # Remove the az symlink
+        if [ -L "/usr/local/bin/az" ]; then
+          echo "Removing symlink: /usr/local/bin/az"
+          sudo rm -f /usr/local/bin/az
+        fi
+        
+        # Remove the Azure CLI installation directory
+        if [ -d "/usr/local/az" ]; then
+          echo "Removing directory: /usr/local/az"
+          sudo rm -rf /usr/local/az
+        fi
+        
+        # Verify uninstallation
+        if command -v az &> /dev/null; then
+          echo "⚠️  WARNING: 'az' command still found in PATH"
+          which az
+        else
+          echo "✅ Azure CLI uninstalled successfully"
+        fi
+        
+        echo ""
         echo "Removing downloaded PKG..."
         rm -f azure-cli.pkg
         
         echo ""
-        echo "Note: Uninstalling Azure CLI installed via PKG requires:"
-        echo "  sudo rm -rf /usr/local/bin/az"
-        echo "  sudo rm -rf /usr/local/az"
-        echo ""
         echo "✅ Cleanup complete"
-      displayName: 'Cleanup'
+      displayName: 'Cleanup - Uninstall PKG'
       condition: always()
 
 - stage: TestFormulaValidation
