@@ -411,47 +411,81 @@ stages:
         echo ""
         
         echo "Checking installation locations:"
-        if [ -f /usr/local/bin/az ]; then
-          echo "✅ Found: /usr/local/bin/az"
-          ls -la /usr/local/bin/az
-        else
-          echo "❌ Not found: /usr/local/bin/az"
-        fi
+        echo ""
         
-        if [ -d /usr/local/az ]; then
-          echo "✅ Found directory: /usr/local/az"
-          ls -la /usr/local/az/bin/az 2>/dev/null || echo "   But no az binary in /usr/local/az/bin/"
+        # Check expected symlink location
+        echo "1. Checking /usr/local/bin/az (expected symlink):"
+        if [ -f /usr/local/bin/az ] || [ -L /usr/local/bin/az ]; then
+          echo "   ✅ Found: /usr/local/bin/az"
+          ls -la /usr/local/bin/az
+          if [ -L /usr/local/bin/az ]; then
+            echo "   Symlink target: $(readlink /usr/local/bin/az)"
+          fi
         else
-          echo "❌ Not found: /usr/local/az directory"
+          echo "   ❌ Not found: /usr/local/bin/az"
         fi
         echo ""
         
-        # Check if az command is available
-        if ! command -v az &> /dev/null; then
-          echo "❌ ERROR: 'az' command not found in PATH"
+        # Check actual installation directory
+        echo "2. Checking /usr/local/az directory (actual installation):"
+        if [ -d /usr/local/az ]; then
+          echo "   ✅ Found directory: /usr/local/az"
+          echo "   Contents:"
+          ls -la /usr/local/az/ 2>/dev/null | head -15
           echo ""
-          echo "Let's try adding /usr/local/bin to PATH and checking again..."
-          export PATH="/usr/local/bin:$PATH"
-          hash -r
           
-          if command -v az &> /dev/null; then
-            echo "✅ Found after adding /usr/local/bin to PATH!"
-            echo "   This confirms /usr/local/bin was missing from PATH"
+          if [ -f /usr/local/az/bin/az ]; then
+            echo "   ✅ Found az executable: /usr/local/az/bin/az"
+            ls -la /usr/local/az/bin/az
+            
+            # Check if it's executable
+            if [ -x /usr/local/az/bin/az ]; then
+              echo "   ✅ File is executable"
+            else
+              echo "   ❌ ERROR: File is NOT executable (fixing...)"
+              sudo chmod +x /usr/local/az/bin/az
+              echo "   ✅ Made executable"
+            fi
           else
-            echo "❌ Still not found even after adding /usr/local/bin"
+            echo "   ❌ Not found: /usr/local/az/bin/az"
+          fi
+        else
+          echo "   ❌ Not found: /usr/local/az directory"
+        fi
+        echo ""
+        
+        # Check if symlink exists and create if needed
+        echo "3. Ensuring symlink exists:"
+        if [ ! -L /usr/local/bin/az ]; then
+          if [ -f /usr/local/az/bin/az ]; then
+            echo "   Creating symlink: /usr/local/bin/az -> /usr/local/az/bin/az"
+            sudo ln -sf /usr/local/az/bin/az /usr/local/bin/az
+            echo "   ✅ Symlink created"
+          else
+            echo "   ❌ ERROR: Cannot create symlink - source file doesn't exist"
             exit 1
           fi
         else
-          echo "✅ 'az' command found in PATH"
+          echo "   ✅ Symlink already exists"
         fi
-        
-        echo ""
-        echo "az location:"
-        which az
         echo ""
         
-        echo "Azure CLI Version:"
-        az --version
+        # Verify az command works
+        echo "4. Testing az command:"
+        if command -v az &> /dev/null; then
+          echo "   ✅ 'az' command found in PATH"
+          echo "   Location: $(which az)"
+          echo ""
+          echo "   Azure CLI Version:"
+          az --version | head -10
+        else
+          echo "   ❌ ERROR: 'az' command still not found in PATH"
+          echo ""
+          echo "   This suggests the PKG post-install script failed to:"
+          echo "   - Create the symlink at /usr/local/bin/az"
+          echo "   - Set executable permissions on /usr/local/az/bin/az"
+          exit 1
+        fi
         
         echo ""
         echo "✅ Offline installation verified successfully"
