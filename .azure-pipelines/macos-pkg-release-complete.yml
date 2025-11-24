@@ -526,6 +526,19 @@ stages:
         echo ""
         echo "✅ Merged payload ready"
         echo "Size: $(du -sh $MERGED_PAYLOAD | cut -f1)"
+        echo ""
+        
+        # Verify critical files exist
+        echo "Verifying critical files exist:"
+        if [ -f "$MERGED_PAYLOAD/bin/az" ]; then
+          echo "✅ bin/az exists"
+        else
+          echo "❌ ERROR: bin/az is MISSING!"
+          echo "This shell script should have been in the original payload"
+          echo "Checking original payload:"
+          ls -la "$ORIGINAL_PAYLOAD/bin/" || echo "bin/ directory missing in original payload!"
+          exit 1
+        fi
         
         # CRITICAL: Set executable permissions on all binaries
         echo ""

@@ -5,13 +5,13 @@ trigger: none # Manual trigger only
 
 parameters:
   - name: SourceBuildId
-    displayName: 'Source Build ID (the notarization build with stapled PKG)'
+    displayName: 'Source Build ID (the complete pipeline build with stapled PKG)'
     type: string
-    default: '283737'
+    default: '284346'
   - name: SourcePipelineName
     displayName: 'Source Pipeline Name'
     type: string
-    default: 'macos-pkg-notarize'
+    default: 'macos-pkg-release-complete'
   - name: AzureCliVersion
     displayName: 'Azure CLI Version (e.g., 2.0.0)'
     type: string
@@ -131,8 +131,8 @@ stages:
       artifact: stapled-pkg-for-formula
       displayName: 'Publish stapled PKG'
 
-- stage: GenerateFormula
-  displayName: 'Generate Homebrew Formula'
+- stage: GenerateFormulaAndCask
+  displayName: 'Generate Homebrew Formula and Cask'
   dependsOn: DownloadStapledPkg
   variables:
     PKG_SHA256: $[ stageDependencies.DownloadStapledPkg.DownloadArtifact.outputs['GetSHA256.PKG_SHA256'] ]
@@ -163,8 +163,6 @@ stages:
         mkdir -p Formula
         
         # Generate the formula file using printf to avoid heredoc issues
-        # Note: Removed explicit version line as it's redundant (version is in URL)
-        # Order: desc, homepage, url, sha256 (proper Homebrew style)
         printf 'class AzureCliPr < Formula\n' > Formula/azure-cli-pr.rb
         printf '  desc "Microsoft Azure CLI - Official command-line interface"\n' >> Formula/azure-cli-pr.rb
         printf '  homepage "https://learn.microsoft.com/cli/azure/"\n' >> Formula/azure-cli-pr.rb
@@ -172,10 +170,20 @@ stages:
         printf '  sha256 "%s"\n' "$(PKG_SHA256)" >> Formula/azure-cli-pr.rb
         printf '\n' >> Formula/azure-cli-pr.rb
         printf '  def install\n' >> Formula/azure-cli-pr.rb
+        printf '    # Extract the PKG contents to get the payload\n' >> Formula/azure-cli-pr.rb
         printf '    system "pkgutil", "--expand", cached_download, buildpath/"azure-cli.unpkg"\n' >> Formula/azure-cli-pr.rb
         printf '    payload = Dir[buildpath/"azure-cli.unpkg"/"*.pkg"].first\n' >> Formula/azure-cli-pr.rb
+        printf '    \n' >> Formula/azure-cli-pr.rb
+        printf '    # Extract the Payload archive to the Cellar prefix\n' >> Formula/azure-cli-pr.rb
         printf '    system "tar", "-xzf", "#{payload}/Payload", "-C", prefix\n' >> Formula/azure-cli-pr.rb
-        printf '    bin.install_symlink prefix/"usr/local/bin/az"\n' >> Formula/azure-cli-pr.rb
+        printf '    \n' >> Formula/azure-cli-pr.rb
+        printf '    # The PKG installs to absolute paths, so files are at:\n' >> Formula/azure-cli-pr.rb
+        printf '    #   prefix/bin/az (wrapper script)\n' >> Formula/azure-cli-pr.rb
+        printf '    #   prefix/microsoft/azure-cli/ (Python venv)\n' >> Formula/azure-cli-pr.rb
+        printf '    # Homebrew bin.install will create symlinks automatically from prefix/bin/\n' >> Formula/azure-cli-pr.rb
+        printf '    \n' >> Formula/azure-cli-pr.rb
+        printf '    # Ensure the wrapper script is executable\n' >> Formula/azure-cli-pr.rb
+        printf '    chmod 0755, prefix/"bin/az"\n' >> Formula/azure-cli-pr.rb
         printf '  end\n' >> Formula/azure-cli-pr.rb
         printf '\n' >> Formula/azure-cli-pr.rb
         printf '  test do\n' >> Formula/azure-cli-pr.rb
@@ -191,10 +199,88 @@ stages:
     - publish: Formula
       artifact: homebrew-formula
       displayName: 'Publish formula artifact'
+  
+  - job: CreateCask
+    displayName: 'Create azure-cli-pr.rb cask'
+    pool:
+      vmImage: 'macos-14'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Generate Homebrew Cask"
+        echo "======================================"
+        echo ""
+        echo "Version: $(AzureCliVersion)"
+        echo "PKG Name: $(PKG_NAME)"
+        echo "PKG URL: $(PKG_DOWNLOAD_URL)"
+        echo "SHA256: $(PKG_SHA256)"
+        echo ""
+        
+        # Create Casks directory
+        mkdir -p Casks
+        
+        # Generate the cask file using printf
+        printf 'cask "azure-cli-pr" do\n' > Casks/azure-cli-pr.rb
+        printf '  version "%s"\n' "$(AzureCliVersion)" >> Casks/azure-cli-pr.rb
+        printf '  sha256 "%s"\n' "$(PKG_SHA256)" >> Casks/azure-cli-pr.rb
+        printf '\n' >> Casks/azure-cli-pr.rb
+        printf '  url "%s"\n' "$(PKG_DOWNLOAD_URL)" >> Casks/azure-cli-pr.rb
+        printf '  name "Azure CLI PR"\n' >> Casks/azure-cli-pr.rb
+        printf '  desc "Microsoft Azure command-line interface (PKG installer)"\n' >> Casks/azure-cli-pr.rb
+        printf '  homepage "https://learn.microsoft.com/cli/azure/"\n' >> Casks/azure-cli-pr.rb
+        printf '\n' >> Casks/azure-cli-pr.rb
+        printf '  depends_on macos: ">= :catalina"\n' >> Casks/azure-cli-pr.rb
+        printf '\n' >> Casks/azure-cli-pr.rb
+        printf '  pkg "%s"\n' "$(PKG_NAME)" >> Casks/azure-cli-pr.rb
+        printf '\n' >> Casks/azure-cli-pr.rb
+        printf '  uninstall pkgutil: "com.microsoft.azure-cli",\n' >> Casks/azure-cli-pr.rb
+        printf '            delete:  [\n' >> Casks/azure-cli-pr.rb
+        printf '              "/usr/local/bin/az",\n' >> Casks/azure-cli-pr.rb
+        printf '              "/usr/local/microsoft/azure-cli",\n' >> Casks/azure-cli-pr.rb
+        printf '            ]\n' >> Casks/azure-cli-pr.rb
+        printf '\n' >> Casks/azure-cli-pr.rb
+        printf '  zap trash: [\n' >> Casks/azure-cli-pr.rb
+        printf '    "~/.azure",\n' >> Casks/azure-cli-pr.rb
+        printf '  ]\n' >> Casks/azure-cli-pr.rb
+        printf '\n' >> Casks/azure-cli-pr.rb
+        printf '  caveats <<~EOS\n' >> Casks/azure-cli-pr.rb
+        printf '    Azure CLI has been installed successfully!\n' >> Casks/azure-cli-pr.rb
+        printf '    \n' >> Casks/azure-cli-pr.rb
+        printf '    Installation Details:\n' >> Casks/azure-cli-pr.rb
+        printf '      • Executable: /usr/local/bin/az\n' >> Casks/azure-cli-pr.rb
+        printf '      • Runtime: /usr/local/microsoft/azure-cli/\n' >> Casks/azure-cli-pr.rb
+        printf '    \n' >> Casks/azure-cli-pr.rb
+        printf '    This is a PKG-based installation with all dependencies bundled.\n' >> Casks/azure-cli-pr.rb
+        printf '    No additional Homebrew formula dependencies required!\n' >> Casks/azure-cli-pr.rb
+        printf '    \n' >> Casks/azure-cli-pr.rb
+        printf '    To verify installation:\n' >> Casks/azure-cli-pr.rb
+        printf '      az --version\n' >> Casks/azure-cli-pr.rb
+        printf '    \n' >> Casks/azure-cli-pr.rb
+        printf '    To get started:\n' >> Casks/azure-cli-pr.rb
+        printf '      az login\n' >> Casks/azure-cli-pr.rb
+        printf '      az account list\n' >> Casks/azure-cli-pr.rb
+        printf '    \n' >> Casks/azure-cli-pr.rb
+        printf '    Documentation:\n' >> Casks/azure-cli-pr.rb
+        printf '      https://learn.microsoft.com/cli/azure/\n' >> Casks/azure-cli-pr.rb
+        printf '  EOS\n' >> Casks/azure-cli-pr.rb
+        printf 'end\n' >> Casks/azure-cli-pr.rb
+        
+        echo "✅ Cask generated: Casks/azure-cli-pr.rb"
+        echo ""
+        cat Casks/azure-cli-pr.rb
+      displayName: 'Generate cask file'
+    
+    - publish: Casks
+      artifact: homebrew-cask
+      displayName: 'Publish cask artifact'
 
 - stage: CommitToHomebrew
   displayName: 'Commit to Homebrew Tap Main Branch'
-  dependsOn: GenerateFormula
+  dependsOn: GenerateFormulaAndCask
   jobs:
   - job: CommitFormula
     displayName: 'Commit formula to main branch'
@@ -209,6 +295,10 @@ stages:
     - download: current
       artifact: homebrew-formula
       displayName: 'Download formula'
+    
+    - download: current
+      artifact: homebrew-cask
+      displayName: 'Download cask'
     
     - bash: |
         set -e
@@ -244,12 +334,14 @@ stages:
         # Checkout main branch (we're in detached HEAD state)
         git checkout -B main origin/main
         
-        # Copy formula
+        # Copy formula and cask
         mkdir -p Formula
+        mkdir -p Casks
         cp $(Pipeline.Workspace)/homebrew-formula/azure-cli-pr.rb Formula/
+        cp $(Pipeline.Workspace)/homebrew-cask/azure-cli-pr.rb Casks/
         
         # Add and commit directly to main
-        git add Formula/azure-cli-pr.rb
+        git add Formula/azure-cli-pr.rb Casks/azure-cli-pr.rb
         git commit -m "Update Azure CLI to version $(AzureCliVersion)
 
         - Update to version $(AzureCliVersion)
@@ -257,6 +349,7 @@ stages:
         - SHA256: $(PKG_SHA256)
         - Fully signed and notarized by Apple
         - Stapled for offline installation
+        - Updated both Formula and Cask variants
         
         Build: $(SourceBuildId)
         Pipeline: $(Build.BuildNumber)"
@@ -276,21 +369,27 @@ stages:
         echo "  Update Summary"
         echo "======================================"
         echo ""
-        echo "✅ Formula Updated on Main Branch!"
+        echo "✅ Formula and Cask Updated on Main Branch!"
         echo ""
         echo "Repository: https://github.com/$(HomebrewTapRepo)"
         echo "Version: $(AzureCliVersion)"
         echo ""
-        echo "Users can now install with:"
+        echo "Users can now install with either:"
+        echo ""
+        echo "Option 1 - Using Formula (extracts PKG to Cellar):"
         echo "  brew tap $(HomebrewTapRepo)"
         echo "  brew install azure-cli-pr"
+        echo ""
+        echo "Option 2 - Using Cask (native PKG installer - RECOMMENDED):"
+        echo "  brew tap $(HomebrewTapRepo)"
+        echo "  brew install --cask azure-cli-pr"
       displayName: 'Print summary'
 
 - stage: Summary
   displayName: 'Pipeline Summary'
   dependsOn:
   - DownloadStapledPkg
-  - GenerateFormula
+  - GenerateFormulaAndCask
   - CommitToHomebrew
   condition: always()
   jobs:
@@ -301,20 +400,37 @@ stages:
     
     steps:
     - bash: |
-        echo "# Homebrew Formula Update Pipeline Summary"
+        echo "# Homebrew Formula and Cask Update Pipeline Summary"
         echo ""
         echo "## Configuration"
         echo "- **Version**: $(AzureCliVersion)"
         echo "- **Source Build**: $(SourceBuildId)"
+        echo "- **Source Pipeline**: $(SourcePipelineName)"
         echo "- **GitHub Repo**: $(GitHubRepo)"
         echo "- **Release Tag**: $(ReleaseTag)"
         echo "- **Homebrew Tap**: $(HomebrewTapRepo)"
         echo ""
-        echo "## Artifacts"
-        echo "- **Formula File**: azure-cli-pr.rb"
-        echo "- **Location**: Formula/azure-cli-pr.rb"
+        echo "## Artifacts Generated"
+        echo "- **Formula File**: Formula/azure-cli-pr.rb"
+        echo "- **Cask File**: Casks/azure-cli-pr.rb"
         echo ""
-        echo "## Next Steps"
-        echo "1. ✅ Formula committed to main branch"
-        echo "2. Test installation: brew tap $(HomebrewTapRepo) && brew install azure-cli-pr"
+        echo "## Installation Options"
+        echo ""
+        echo "### Option 1: Formula (extracts PKG to Homebrew Cellar)"
+        echo "\`\`\`bash"
+        echo "brew tap $(HomebrewTapRepo)"
+        echo "brew install azure-cli-pr"
+        echo "\`\`\`"
+        echo ""
+        echo "### Option 2: Cask (native PKG installer - RECOMMENDED)"
+        echo "\`\`\`bash"
+        echo "brew tap $(HomebrewTapRepo)"
+        echo "brew install --cask azure-cli-pr"
+        echo "\`\`\`"
+        echo ""
+        echo "## Why Cask is Recommended"
+        echo "- ✅ Uses native PKG installer (same as sudo installer -pkg)"
+        echo "- ✅ Installs to standard Microsoft paths (/usr/local/bin/az)"
+        echo "- ✅ Preserves all permissions and metadata"
+        echo "- ✅ Works exactly as designed by Microsoft"
       displayName: 'Pipeline summary'
