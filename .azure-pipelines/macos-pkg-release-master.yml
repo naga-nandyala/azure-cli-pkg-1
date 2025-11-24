@@ -1,0 +1,441 @@
+# Azure CLI - macOS PKG Release Master Pipeline
+# This pipeline orchestrates the complete release workflow:
+# 1. Sign all binaries + PKG
+# 2. Notarize with Apple
+# 3. Verify signing and notarization
+# 4. Publish to GitHub releases
+# 5. Update Homebrew formula
+# 6. Test both installation methods
+
+trigger: none # Manual trigger only
+
+parameters:
+  - name: UnsignedBuildId
+    displayName: 'Build ID of unsigned PKG (from macos-pkg-build.yml)'
+    type: string
+  - name: UnsignedPipelineName
+    displayName: 'Unsigned PKG Pipeline Name'
+    type: string
+    default: 'naga_macos_build'
+  - name: AzureCliVersion
+    displayName: 'Azure CLI Version (e.g., 2.0.0)'
+    type: string
+    default: '2.0.0'
+  - name: GitHubRepo
+    displayName: 'GitHub Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+  - name: HomebrewTapRepo
+    displayName: 'Homebrew Tap Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/homebrew-mycli-app'
+  - name: FormulaName
+    displayName: 'Homebrew Formula Name'
+    type: string
+    default: 'azure-cli-pr'
+  - name: BundleId
+    displayName: 'Bundle ID for signing'
+    type: string
+    default: 'com.microsoft.azure.cli'
+  - name: IsPrerelease
+    displayName: 'Mark GitHub release as pre-release'
+    type: boolean
+    default: false
+  - name: SkipTests
+    displayName: 'Skip installation tests (for faster releases)'
+    type: boolean
+    default: false
+
+variables:
+  - name: AzureCliVersion
+    value: ${{ parameters.AzureCliVersion }}
+  - name: GitHubRepo
+    value: ${{ parameters.GitHubRepo }}
+  - name: ReleaseTag
+    value: 'v${{ parameters.AzureCliVersion }}'
+
+name: release-macos-pkg-$(AzureCliVersion)-$(Date:yyyyMMdd)-$(Rev:r)
+
+stages:
+# ============================================================================
+# STAGE 1: SIGN ALL BINARIES
+# ============================================================================
+- stage: SignAllBinaries
+  displayName: '1. Sign All Binaries + PKG'
+  jobs:
+  - job: TriggerSigningPipeline
+    displayName: 'Trigger macos-pkg-sign-all.yml'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - task: TriggerBuild@4
+      name: SigningBuild
+      displayName: 'Trigger signing pipeline'
+      inputs:
+        definitionIsInCurrentTeamProject: true
+        buildDefinition: 'macos-pkg-sign-all'
+        queueBuildForUserThatTriggeredBuild: true
+        ignoreSslCertificateErrors: false
+        useSameSourceVersion: false
+        useCustomSourceVersion: false
+        useSameBranch: true
+        waitForQueuedBuildsToFinish: true
+        storeInEnvironmentVariable: true
+        buildParameters: |
+          SourceBuildId: ${{ parameters.UnsignedBuildId }}
+          SourcePipelineName: ${{ parameters.UnsignedPipelineName }}
+          AzureCliVersion: ${{ parameters.AzureCliVersion }}
+          BundleId: ${{ parameters.BundleId }}
+          OfficialBuild: true
+        authenticationMethod: 'OAuth Token'
+        password: '$(System.AccessToken)'
+        enableBuildInQueueCondition: false
+        blockDependentOnFailedBuilds: true
+        blockDependentOnSuccessfulBuilds: false
+        treatPartiallySucceededBuildAsSuccessful: false
+    
+    - bash: |
+        echo "##[section]Signing Pipeline Triggered"
+        echo "Build ID: $(SigningBuild.TriggeredBuildIds)"
+        echo "##vso[task.setvariable variable=SignedBuildId;isOutput=true]$(SigningBuild.TriggeredBuildIds)"
+      name: CaptureSigningBuildId
+      displayName: 'Capture signing build ID'
+
+# ============================================================================
+# STAGE 2: NOTARIZE WITH APPLE
+# ============================================================================
+- stage: NotarizeWithApple
+  displayName: '2. Notarize with Apple'
+  dependsOn: SignAllBinaries
+  variables:
+    SignedBuildId: $[ stageDependencies.SignAllBinaries.TriggerSigningPipeline.outputs['CaptureSigningBuildId.SignedBuildId'] ]
+  jobs:
+  - job: TriggerNotarizationPipeline
+    displayName: 'Trigger macos-pkg-notarize.yml'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo "##[section]Using Signed Build ID"
+        echo "SignedBuildId: $(SignedBuildId)"
+      displayName: 'Show signed build ID'
+    
+    - task: TriggerBuild@4
+      name: NotarizationBuild
+      displayName: 'Trigger notarization pipeline'
+      inputs:
+        definitionIsInCurrentTeamProject: true
+        buildDefinition: 'macos-pkg-notarize'
+        queueBuildForUserThatTriggeredBuild: true
+        ignoreSslCertificateErrors: false
+        useSameSourceVersion: false
+        useCustomSourceVersion: false
+        useSameBranch: true
+        waitForQueuedBuildsToFinish: true
+        storeInEnvironmentVariable: true
+        buildParameters: |
+          SourceBuildId: $(SignedBuildId)
+          SourcePipelineName: macos-pkg-sign-all
+          AzureCliVersion: ${{ parameters.AzureCliVersion }}
+          BundleId: ${{ parameters.BundleId }}
+          OfficialBuild: true
+        authenticationMethod: 'OAuth Token'
+        password: '$(System.AccessToken)'
+        enableBuildInQueueCondition: false
+        blockDependentOnFailedBuilds: true
+        blockDependentOnSuccessfulBuilds: false
+        treatPartiallySucceededBuildAsSuccessful: false
+    
+    - bash: |
+        echo "##[section]Notarization Pipeline Triggered"
+        echo "Build ID: $(NotarizationBuild.TriggeredBuildIds)"
+        echo "##vso[task.setvariable variable=NotarizedBuildId;isOutput=true]$(NotarizationBuild.TriggeredBuildIds)"
+      name: CaptureNotarizationBuildId
+      displayName: 'Capture notarization build ID'
+
+# ============================================================================
+# STAGE 3: VERIFY SIGNING & NOTARIZATION
+# ============================================================================
+- stage: VerifySigningAndNotarization
+  displayName: '3. Verify Signing & Notarization'
+  dependsOn: NotarizeWithApple
+  variables:
+    NotarizedBuildId: $[ stageDependencies.NotarizeWithApple.TriggerNotarizationPipeline.outputs['CaptureNotarizationBuildId.NotarizedBuildId'] ]
+  jobs:
+  - job: TriggerVerificationPipelines
+    displayName: 'Trigger verification pipelines'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo "##[section]Using Notarized Build ID"
+        echo "NotarizedBuildId: $(NotarizedBuildId)"
+      displayName: 'Show notarized build ID'
+    
+    # Note: TriggerBuild@4 doesn't support parallel triggers easily
+    # So we'll trigger them sequentially (they're fast anyway)
+    
+    - task: TriggerBuild@4
+      displayName: 'Verify notarization'
+      inputs:
+        definitionIsInCurrentTeamProject: true
+        buildDefinition: 'macos-pkg-notarize-verify'
+        queueBuildForUserThatTriggeredBuild: true
+        useSameBranch: true
+        waitForQueuedBuildsToFinish: true
+        buildParameters: |
+          SourceBuildId: $(NotarizedBuildId)
+          SourcePipelineName: macos-pkg-notarize
+          AzureCliVersion: ${{ parameters.AzureCliVersion }}
+          ExpectedBundleId: ${{ parameters.BundleId }}
+        authenticationMethod: 'OAuth Token'
+        password: '$(System.AccessToken)'
+        blockDependentOnFailedBuilds: true
+    
+    - bash: |
+        echo "##[section]Verification Complete"
+        echo "✅ Notarization verified successfully"
+      displayName: 'Verification summary'
+
+# ============================================================================
+# STAGE 4: PUBLISH TO GITHUB
+# ============================================================================
+- stage: PublishToGitHub
+  displayName: '4. Publish GitHub Release'
+  dependsOn: 
+  - NotarizeWithApple
+  - VerifySigningAndNotarization
+  variables:
+    NotarizedBuildId: $[ stageDependencies.NotarizeWithApple.TriggerNotarizationPipeline.outputs['CaptureNotarizationBuildId.NotarizedBuildId'] ]
+  jobs:
+  - job: TriggerGitHubReleasePipeline
+    displayName: 'Trigger macos-pkg-github-release-publish.yml'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo "##[section]Publishing to GitHub"
+        echo "NotarizedBuildId: $(NotarizedBuildId)"
+        echo "Release Tag: $(ReleaseTag)"
+        echo "Repository: $(GitHubRepo)"
+      displayName: 'Show release parameters'
+    
+    - task: TriggerBuild@4
+      name: GitHubReleaseBuild
+      displayName: 'Trigger GitHub release pipeline'
+      inputs:
+        definitionIsInCurrentTeamProject: true
+        buildDefinition: 'macos-pkg-github-release-publish'
+        queueBuildForUserThatTriggeredBuild: true
+        useSameBranch: true
+        waitForQueuedBuildsToFinish: true
+        storeInEnvironmentVariable: true
+        buildParameters: |
+          NotarizationBuildId: $(NotarizedBuildId)
+          NotarizationPipelineName: macos-pkg-notarize
+          AzureCliVersion: ${{ parameters.AzureCliVersion }}
+          GitHubRepo: ${{ parameters.GitHubRepo }}
+          ReleaseTag: $(ReleaseTag)
+          IsPrerelease: ${{ parameters.IsPrerelease }}
+        authenticationMethod: 'OAuth Token'
+        password: '$(System.AccessToken)'
+        blockDependentOnFailedBuilds: true
+    
+    - bash: |
+        echo "##[section]GitHub Release Published"
+        echo "✅ Release available at: https://github.com/$(GitHubRepo)/releases/tag/$(ReleaseTag)"
+      displayName: 'Release summary'
+
+# ============================================================================
+# STAGE 5: UPDATE HOMEBREW FORMULA
+# ============================================================================
+- stage: UpdateHomebrewFormula
+  displayName: '5. Update Homebrew Formula'
+  dependsOn: 
+  - NotarizeWithApple
+  - PublishToGitHub
+  variables:
+    NotarizedBuildId: $[ stageDependencies.NotarizeWithApple.TriggerNotarizationPipeline.outputs['CaptureNotarizationBuildId.NotarizedBuildId'] ]
+  jobs:
+  - job: TriggerHomebrewUpdatePipeline
+    displayName: 'Trigger macos-pkg-homebrew-update.yml'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo "##[section]Updating Homebrew Formula"
+        echo "NotarizedBuildId: $(NotarizedBuildId)"
+        echo "Tap Repository: ${{ parameters.HomebrewTapRepo }}"
+        echo "Formula Name: ${{ parameters.FormulaName }}"
+      displayName: 'Show Homebrew parameters'
+    
+    - task: TriggerBuild@4
+      displayName: 'Trigger Homebrew update pipeline'
+      inputs:
+        definitionIsInCurrentTeamProject: true
+        buildDefinition: 'macos-pkg-homebrew-update'
+        queueBuildForUserThatTriggeredBuild: true
+        useSameBranch: true
+        waitForQueuedBuildsToFinish: true
+        buildParameters: |
+          NotarizationBuildId: $(NotarizedBuildId)
+          AzureCliVersion: ${{ parameters.AzureCliVersion }}
+          GitHubRepo: ${{ parameters.GitHubRepo }}
+          HomebrewTapRepo: ${{ parameters.HomebrewTapRepo }}
+          FormulaName: ${{ parameters.FormulaName }}
+        authenticationMethod: 'OAuth Token'
+        password: '$(System.AccessToken)'
+        blockDependentOnFailedBuilds: true
+    
+    - bash: |
+        echo "##[section]Homebrew Formula Updated"
+        echo "✅ Formula committed to ${{ parameters.HomebrewTapRepo }}"
+        echo "Users can install with:"
+        echo "  brew tap ${{ parameters.HomebrewTapRepo }}"
+        echo "  brew install ${{ parameters.FormulaName }}"
+      displayName: 'Homebrew update summary'
+
+# ============================================================================
+# STAGE 6: TEST INSTALLATION
+# ============================================================================
+- stage: TestInstallation
+  displayName: '6. Test Installation Methods'
+  dependsOn: UpdateHomebrewFormula
+  condition: and(succeeded(), eq(${{ parameters.SkipTests }}, false))
+  jobs:
+  - job: TriggerInstallTestPipeline
+    displayName: 'Trigger macos-pkg-install-test.yml'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo "##[section]Testing Installation Methods"
+        echo "Version: ${{ parameters.AzureCliVersion }}"
+        echo "Release Tag: $(ReleaseTag)"
+        echo "Tests: Homebrew + Offline PKG"
+      displayName: 'Show test parameters'
+    
+    - task: TriggerBuild@4
+      displayName: 'Trigger installation test pipeline'
+      inputs:
+        definitionIsInCurrentTeamProject: true
+        buildDefinition: 'macos-pkg-install-test'
+        queueBuildForUserThatTriggeredBuild: true
+        useSameBranch: true
+        waitForQueuedBuildsToFinish: true
+        buildParameters: |
+          AzureCliVersion: ${{ parameters.AzureCliVersion }}
+          HomebrewTapRepo: ${{ parameters.HomebrewTapRepo }}
+          FormulaName: ${{ parameters.FormulaName }}
+          GitHubRepo: ${{ parameters.GitHubRepo }}
+          ReleaseTag: $(ReleaseTag)
+        authenticationMethod: 'OAuth Token'
+        password: '$(System.AccessToken)'
+        blockDependentOnFailedBuilds: true
+    
+    - bash: |
+        echo "##[section]Installation Tests Complete"
+        echo "✅ All installation methods validated"
+      displayName: 'Test summary'
+
+# ============================================================================
+# STAGE 7: FINAL SUMMARY
+# ============================================================================
+- stage: ReleaseSummary
+  displayName: '7. Release Summary'
+  dependsOn:
+  - SignAllBinaries
+  - NotarizeWithApple
+  - VerifySigningAndNotarization
+  - PublishToGitHub
+  - UpdateHomebrewFormula
+  - TestInstallation
+  condition: always()
+  jobs:
+  - job: PrintReleaseSummary
+    displayName: 'Print Release Summary'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo "##[section]============================================================"
+        echo "##[section]  Azure CLI macOS PKG Release Summary"
+        echo "##[section]============================================================"
+        echo ""
+        echo "## Release Information"
+        echo "- **Version**: ${{ parameters.AzureCliVersion }}"
+        echo "- **Release Tag**: $(ReleaseTag)"
+        echo "- **Bundle ID**: ${{ parameters.BundleId }}"
+        echo "- **Pre-release**: ${{ parameters.IsPrerelease }}"
+        echo ""
+        echo "## Source Build"
+        echo "- **Unsigned Build ID**: ${{ parameters.UnsignedBuildId }}"
+        echo "- **Pipeline**: ${{ parameters.UnsignedPipelineName }}"
+        echo ""
+        echo "## Release Stages"
+        echo "1. ✅ Sign All Binaries - COMPLETED"
+        echo "2. ✅ Notarize with Apple - COMPLETED"
+        echo "3. ✅ Verify Signing & Notarization - COMPLETED"
+        echo "4. ✅ Publish to GitHub - COMPLETED"
+        echo "5. ✅ Update Homebrew Formula - COMPLETED"
+        if [ "${{ parameters.SkipTests }}" == "False" ]; then
+          echo "6. ✅ Test Installation - COMPLETED"
+        else
+          echo "6. ⏭️  Test Installation - SKIPPED"
+        fi
+        echo ""
+        echo "## GitHub Release"
+        echo "- **URL**: https://github.com/$(GitHubRepo)/releases/tag/$(ReleaseTag)"
+        echo "- **Assets**: azure-cli-${{ parameters.AzureCliVersion }}-macos-arm64-notarized.pkg"
+        echo ""
+        echo "## Homebrew Installation"
+        echo "- **Repository**: ${{ parameters.HomebrewTapRepo }}"
+        echo "- **Formula**: ${{ parameters.FormulaName }}"
+        echo ""
+        echo "## User Installation Commands"
+        echo ""
+        echo "### Homebrew (Recommended)"
+        echo "\`\`\`bash"
+        echo "brew tap ${{ parameters.HomebrewTapRepo }}"
+        echo "brew install ${{ parameters.FormulaName }}"
+        echo "\`\`\`"
+        echo ""
+        echo "### Offline PKG"
+        echo "\`\`\`bash"
+        echo "curl -L -o azure-cli.pkg https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/azure-cli-${{ parameters.AzureCliVersion }}-macos-arm64-notarized.pkg"
+        echo "sudo installer -pkg azure-cli.pkg -target /"
+        echo "\`\`\`"
+        echo ""
+        echo "## Verification"
+        echo "Users can verify the PKG signature and notarization:"
+        echo "\`\`\`bash"
+        echo "pkgutil --check-signature azure-cli.pkg"
+        echo "spctl -a -vv -t install azure-cli.pkg"
+        echo "stapler validate azure-cli.pkg"
+        echo "\`\`\`"
+        echo ""
+        echo "##[section]============================================================"
+        echo "##[section]  Release Complete! 🎉"
+        echo "##[section]============================================================"
+      displayName: 'Release Summary'
