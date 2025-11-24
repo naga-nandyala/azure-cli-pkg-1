@@ -1002,8 +1002,6 @@ stages:
   displayName: 'Test Summary'
   dependsOn:
   - TestHomebrewFormula
-  - TestCask
-  - TestOfflineInstall
   - TestFormulaValidation
   condition: succeededOrFailed()
   jobs:
