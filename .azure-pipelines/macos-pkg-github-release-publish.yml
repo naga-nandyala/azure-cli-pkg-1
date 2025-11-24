@@ -195,6 +195,16 @@ stages:
         cat release-notes.md
       displayName: 'Prepare release notes'
     
+    # Delete existing release if it exists (to allow re-running the pipeline)
+    - task: GitHubRelease@1
+      displayName: 'Delete existing release if present'
+      continueOnError: true
+      inputs:
+        gitHubConnection: 'github.com_naga-nandyala'
+        repositoryName: '$(GitHubRepo)'
+        action: 'delete'
+        tag: '$(ReleaseTag)'
+    
     - task: GitHubRelease@1
       displayName: 'Create GitHub Release'
       inputs:
