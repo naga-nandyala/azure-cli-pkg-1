@@ -521,13 +521,35 @@ stages:
     
     - bash: |
         set -e
+        echo "=== Preparing PKG metadata for repacking ==="
+        
+        PKG_METADATA="$(Pipeline.Workspace)/pkg-metadata"
+        
+        # Copy Distribution file if it exists (needed for productbuild)
+        if [ -f "$PKG_METADATA/Distribution" ]; then
+          cp "$PKG_METADATA/Distribution" "$(Pipeline.Workspace)/"
+          echo "✅ Distribution file copied"
+        else
+          echo "ℹ️  No Distribution file found (will use simple productbuild)"
+        fi
+        
+      displayName: 'Prepare PKG metadata'
+    
+    - bash: |
+        set -e
         echo "=== Building new PKG with signed binaries ==="
         
         MERGED_PAYLOAD="$(Pipeline.Workspace)/merged-payload"
+        DISTRIBUTION="$(Pipeline.Workspace)/Distribution"
         OUTPUT_PKG="$(Pipeline.Workspace)/azure-cli-$(AzureCliVersion)-macos-arm64-signed-binaries.pkg"
+        
+        # Create component package with exact name expected by Distribution file
         COMPONENT_PKG="$(Pipeline.Workspace)/azure-cli-component-$(AzureCliVersion)-macos-arm64.pkg"
         
-        echo "Creating component PKG from merged payload..."
+        echo "Creating component PKG from merged payload (with signed binaries)..."
+        echo "Source directory: $MERGED_PAYLOAD"
+        echo "Directory size: $(du -sh $MERGED_PAYLOAD | cut -f1)"
+        
         pkgbuild --root "$MERGED_PAYLOAD" \
                  --identifier "$(BundleId)" \
                  --version "$(AzureCliVersion)" \
@@ -536,16 +558,28 @@ stages:
         
         echo "✅ Component PKG created: $(du -h $COMPONENT_PKG | cut -f1)"
         
+        # Create product archive (distribution package)
         echo ""
         echo "Creating distribution PKG..."
-        productbuild --component "$COMPONENT_PKG" /usr/local/az \
-                     --identifier "$(BundleId)" \
-                     --version "$(AzureCliVersion)" \
-                     "$OUTPUT_PKG"
+        
+        if [ -f "$DISTRIBUTION" ]; then
+          productbuild --distribution "$DISTRIBUTION" \
+                       --package-path "$(Pipeline.Workspace)" \
+                       "$OUTPUT_PKG"
+        else
+          # If no Distribution file, just use the component PKG directly
+          cp "$COMPONENT_PKG" "$OUTPUT_PKG"
+          echo "ℹ️  No Distribution file - using component PKG as final PKG"
+        fi
         
         echo ""
         echo "✅ PKG created: $OUTPUT_PKG"
         echo "Size: $(du -h $OUTPUT_PKG | cut -f1)"
+        
+        # Verify PKG structure
+        echo ""
+        echo "=== PKG Verification ==="
+        pkgutil --check-signature "$OUTPUT_PKG" || echo "Not yet signed (expected)"
         
       displayName: 'Build new PKG with signed binaries'
     
