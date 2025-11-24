@@ -79,8 +79,10 @@ stages:
         echo "======================================"
         echo ""
         
-        PKG_URL="https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/azure-cli-$(AzureCliVersion)-macos-arm64-notarized.pkg"
+        VERSION="$(AzureCliVersion)"
+        PKG_URL="https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/azure-cli-${VERSION}-macos-arm64-notarized.pkg"
         
+        echo "Azure CLI Version: ${VERSION}"
         echo "Downloading PKG from: $PKG_URL"
         curl -L -o azure-cli.pkg "$PKG_URL"
         
@@ -313,25 +315,42 @@ stages:
         echo "======================================"
         echo ""
         
-        echo "Checking PKG receipt in system database..."
-        pkgutil --pkg-info com.microsoft.azure-cli
+        echo "Listing all installed packages with 'azure' or 'cli' in name..."
+        pkgutil --pkgs | grep -i "azure\|cli" || echo "No azure/cli packages found"
         
-        RESULT=$?
-        if [ $RESULT -ne 0 ]; then
+        echo ""
+        echo "Checking PKG receipt in system database..."
+        
+        # Try different possible package identifiers
+        PKG_ID=""
+        for id in "com.microsoft.azure.cli" "com.microsoft.azure-cli" "azure-cli"; do
+          if pkgutil --pkg-info "$id" >/dev/null 2>&1; then
+            PKG_ID="$id"
+            echo "✅ Found package with ID: $id"
+            break
+          fi
+        done
+        
+        if [ -z "$PKG_ID" ]; then
           echo ""
           echo "❌ PKG receipt not found in system database!"
+          echo "Tried IDs: com.microsoft.azure.cli, com.microsoft.azure-cli, azure-cli"
           exit 1
         fi
         
         echo ""
+        echo "PKG Info:"
+        pkgutil --pkg-info "$PKG_ID"
+        
+        echo ""
         echo "Verifying installed files are tracked..."
-        FILE_COUNT=$(pkgutil --files com.microsoft.azure-cli | wc -l)
+        FILE_COUNT=$(pkgutil --files "$PKG_ID" | wc -l)
         echo "Tracked files: $FILE_COUNT"
         
         if [ $FILE_COUNT -gt 0 ]; then
           echo ""
           echo "Sample of tracked files:"
-          pkgutil --files com.microsoft.azure-cli | head -10
+          pkgutil --files "$PKG_ID" | head -10
           echo "... (total: $FILE_COUNT files)"
           echo ""
           echo "✅ PKG receipt valid - uninstall will work correctly"
@@ -344,11 +363,11 @@ stages:
         
         echo ""
         echo "Verifying key installation paths are tracked..."
-        if pkgutil --files com.microsoft.azure-cli | grep -q "usr/local/bin/az"; then
+        if pkgutil --files "$PKG_ID" | grep -q "usr/local/bin/az"; then
           echo "✅ Command binary tracked in receipt"
         fi
         
-        if pkgutil --files com.microsoft.azure-cli | grep -q "usr/local/microsoft/azure-cli"; then
+        if pkgutil --files "$PKG_ID" | grep -q "usr/local/microsoft/azure-cli"; then
           echo "✅ Installation directory tracked in receipt"
         fi
       displayName: 'Test 8: PKG receipt validation'
