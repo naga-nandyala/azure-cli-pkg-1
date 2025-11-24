@@ -527,7 +527,29 @@ stages:
         echo "✅ Merged payload ready"
         echo "Size: $(du -sh $MERGED_PAYLOAD | cut -f1)"
         
-      displayName: 'Merge signed binaries into payload'
+        # CRITICAL: Set executable permissions on all binaries
+        echo ""
+        echo "Setting executable permissions on binaries..."
+        
+        cd "$MERGED_PAYLOAD"
+        
+        # Set execute permissions on wrapper scripts
+        chmod +x bin/az 2>/dev/null || true
+        chmod +x microsoft/azure-cli/bin/az 2>/dev/null || true
+        
+        # Set execute permissions on Python executables
+        find microsoft/azure-cli/bin -type f -name "python*" ! -name "*.pyc" ! -name "*.py" -exec chmod +x {} \; 2>/dev/null || true
+        
+        # Set execute permissions on all Mach-O binaries (dylibs, .so files)
+        find . -type f \( -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \; 2>/dev/null || true
+        
+        # Verify critical files
+        echo ""
+        echo "Verifying permissions on critical files:"
+        ls -l bin/az
+        ls -l microsoft/azure-cli/bin/python* | head -3
+        
+      displayName: 'Merge signed binaries and set permissions'
     
     - bash: |
         set -e
@@ -564,6 +586,7 @@ stages:
                  --identifier "$(BundleId)" \
                  --version "$(AzureCliVersion)" \
                  --install-location "/usr/local" \
+                 --ownership recommended \
                  "$COMPONENT_PKG"
         
         echo "✅ Component PKG created: $(du -h $COMPONENT_PKG | cut -f1)"
