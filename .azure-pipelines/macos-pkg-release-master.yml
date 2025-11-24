@@ -13,6 +13,7 @@ parameters:
   - name: UnsignedBuildId
     displayName: 'Build ID of unsigned PKG (from macos-pkg-build.yml)'
     type: string
+    default: '282071'
   - name: UnsignedPipelineName
     displayName: 'Unsigned PKG Pipeline Name'
     type: string
