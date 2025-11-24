@@ -160,6 +160,107 @@ stages:
     - bash: |
         set -e
         echo "======================================"
+        echo "  Diagnose and Fix Installation"
+        echo "======================================"
+        echo ""
+        
+        echo "Current PATH:"
+        echo "$PATH"
+        echo ""
+        
+        echo "Checking installation locations:"
+        echo ""
+        
+        # Find where Homebrew installed it
+        CELLAR_PATH="/usr/local/Cellar/azure-cli-pr/$(AzureCliVersion)"
+        
+        echo "1. Checking Homebrew Cellar: $CELLAR_PATH"
+        if [ -d "$CELLAR_PATH" ]; then
+          echo "   ✅ Found installation directory"
+          echo "   Total size: $(du -sh "$CELLAR_PATH" | cut -f1)"
+          echo ""
+          echo "   Directory structure (first 20 entries):"
+          ls -la "$CELLAR_PATH/" | head -20
+        else
+          echo "   ❌ Not found: $CELLAR_PATH"
+        fi
+        echo ""
+        
+        # Check for bin/az
+        echo "2. Checking for bin/az executable:"
+        if [ -f "$CELLAR_PATH/bin/az" ]; then
+          echo "   ✅ Found: $CELLAR_PATH/bin/az"
+          ls -la "$CELLAR_PATH/bin/az"
+          
+          # Check permissions
+          if [ -x "$CELLAR_PATH/bin/az" ]; then
+            echo "   ✅ File is already executable"
+          else
+            echo "   ❌ ERROR: File is NOT executable - FIXING NOW"
+            echo "   Setting executable permissions..."
+            chmod +x "$CELLAR_PATH/bin/az"
+            echo "   After fix:"
+            ls -la "$CELLAR_PATH/bin/az"
+          fi
+        else
+          echo "   ❌ Not found: $CELLAR_PATH/bin/az"
+        fi
+        echo ""
+        
+        # Check for microsoft/azure-cli directory
+        echo "3. Checking for microsoft/azure-cli directory:"
+        if [ -d "$CELLAR_PATH/microsoft/azure-cli" ]; then
+          echo "   ✅ Found: $CELLAR_PATH/microsoft/azure-cli"
+          
+          # Check Python executable permissions
+          PYTHON_EXEC="$CELLAR_PATH/microsoft/azure-cli/bin/python3"
+          if [ -f "$PYTHON_EXEC" ]; then
+            echo "   Python executable:"
+            ls -la "$PYTHON_EXEC"
+            
+            if [ -x "$PYTHON_EXEC" ]; then
+              echo "   ✅ Python is executable"
+            else
+              echo "   ❌ Python NOT executable - FIXING NOW"
+              chmod +x "$PYTHON_EXEC"
+              echo "   After fix:"
+              ls -la "$PYTHON_EXEC"
+            fi
+          fi
+        else
+          echo "   ❌ Not found: $CELLAR_PATH/microsoft/azure-cli"
+        fi
+        echo ""
+        
+        # Check symlink in /usr/local/bin
+        echo "4. Checking Homebrew symlink:"
+        if [ -L /usr/local/bin/az ]; then
+          echo "   ✅ Symlink exists: /usr/local/bin/az"
+          ls -la /usr/local/bin/az
+          echo "   Target: $(readlink /usr/local/bin/az)"
+        elif [ -f /usr/local/bin/az ]; then
+          echo "   ⚠️  /usr/local/bin/az exists but is not a symlink"
+          ls -la /usr/local/bin/az
+        else
+          echo "   ❌ Not found: /usr/local/bin/az"
+          echo "   Homebrew should have created this symlink"
+        fi
+        echo ""
+        
+        # Verify wrapper script content
+        echo "5. Checking wrapper script content:"
+        if [ -f "$CELLAR_PATH/bin/az" ]; then
+          echo "   Contents of $CELLAR_PATH/bin/az:"
+          cat "$CELLAR_PATH/bin/az"
+        fi
+        echo ""
+        
+        echo "✅ Diagnostic complete"
+      displayName: 'Diagnose and fix Homebrew installation'
+    
+    - bash: |
+        set -e
+        echo "======================================"
         echo "  Verify Installation"
         echo "======================================"
         echo ""
@@ -167,6 +268,19 @@ stages:
         # Check if az command is available
         if ! command -v az &> /dev/null; then
           echo "❌ ERROR: 'az' command not found in PATH"
+          echo ""
+          echo "Troubleshooting information:"
+          echo "1. Checking if /usr/local/bin is in PATH:"
+          echo "$PATH" | grep -o "/usr/local/bin" || echo "   ❌ /usr/local/bin NOT in PATH"
+          echo ""
+          echo "2. Manual check for /usr/local/bin/az:"
+          ls -la /usr/local/bin/az 2>/dev/null || echo "   ❌ File does not exist"
+          echo ""
+          echo "3. Direct execution test:"
+          if [ -f /usr/local/bin/az ]; then
+            echo "   Attempting to run directly..."
+            /usr/local/bin/az --version || echo "   ❌ Direct execution failed"
+          fi
           exit 1
         fi
         
@@ -413,89 +527,70 @@ stages:
         echo "Checking installation locations:"
         echo ""
         
-        # Check expected symlink location
-        echo "1. Checking /usr/local/bin/az (expected symlink):"
-        if [ -f /usr/local/bin/az ] || [ -L /usr/local/bin/az ]; then
+        # Check expected launcher location (Microsoft standard path)
+        echo "1. Checking /usr/local/bin/az (expected launcher):"
+        if [ -f /usr/local/bin/az ]; then
           echo "   ✅ Found: /usr/local/bin/az"
           ls -la /usr/local/bin/az
-          if [ -L /usr/local/bin/az ]; then
-            echo "   Symlink target: $(readlink /usr/local/bin/az)"
+          
+          # Check if it's executable
+          if [ -x /usr/local/bin/az ]; then
+            echo "   ✅ File is executable"
+          else
+            echo "   ⚠️  WARNING: File is NOT executable (fixing...)"
+            sudo chmod +x /usr/local/bin/az
+            echo "   ✅ Made executable"
           fi
         else
-          echo "   ❌ Not found: /usr/local/bin/az"
+          echo "   ❌ ERROR: /usr/local/bin/az not found!"
+          echo "   PKG should have installed it directly to /usr/local/bin/"
         fi
         echo ""
         
-        # Check actual installation directory
-        echo "2. Checking /usr/local/az directory (actual installation):"
-        if [ -d /usr/local/az ]; then
-          echo "   ✅ Found directory: /usr/local/az"
+        # Check Microsoft standard installation directory
+        echo "2. Checking /usr/local/microsoft/azure-cli/ (Microsoft standard path):"
+        if [ -d /usr/local/microsoft/azure-cli ]; then
+          echo "   ✅ Found directory: /usr/local/microsoft/azure-cli"
           echo "   Contents:"
-          ls -la /usr/local/az/ 2>/dev/null | head -15
+          ls -la /usr/local/microsoft/azure-cli/ 2>/dev/null | head -15
           echo ""
           
-          if [ -f /usr/local/az/bin/az ]; then
-            echo "   ✅ Found az executable: /usr/local/az/bin/az"
-            ls -la /usr/local/az/bin/az
-            
-            # Check if it's executable
-            if [ -x /usr/local/az/bin/az ]; then
-              echo "   ✅ File is executable"
-            else
-              echo "   ❌ ERROR: File is NOT executable (fixing...)"
-              sudo chmod +x /usr/local/az/bin/az
-              echo "   ✅ Made executable"
-            fi
+          if [ -f /usr/local/microsoft/azure-cli/bin/python3 ]; then
+            echo "   ✅ Found Python: /usr/local/microsoft/azure-cli/bin/python3"
+            ls -la /usr/local/microsoft/azure-cli/bin/python3
           else
-            echo "   ❌ Not found: /usr/local/az/bin/az"
+            echo "   ❌ ERROR: Python not found in venv"
           fi
         else
-          echo "   ❌ Not found: /usr/local/az directory"
+          echo "   ❌ ERROR: /usr/local/microsoft/azure-cli directory not found!"
+          echo ""
+          echo "   Checking for OLD incorrect path /usr/local/az/:"
+          if [ -d /usr/local/az ]; then
+            echo "   ⚠️  FOUND OLD PATH: /usr/local/az/"
+            echo "   This means the PKG repack step used wrong install-location!"
+            echo "   Check line 566 in complete pipeline - should be '/usr/local' not '/usr/local/az'"
+            ls -la /usr/local/az/ 2>/dev/null | head -15
+          fi
         fi
         echo ""
         
-        # Check if symlink exists and create if needed
-        echo "3. Ensuring symlink exists:"
-        if [ ! -L /usr/local/bin/az ]; then
-          if [ -f /usr/local/az/bin/az ]; then
-            echo "   Creating symlink: /usr/local/bin/az -> /usr/local/az/bin/az"
-            sudo ln -sf /usr/local/az/bin/az /usr/local/bin/az
-            echo "   ✅ Symlink created"
-          else
-            echo "   ❌ ERROR: Cannot create symlink - source file doesn't exist"
-            exit 1
-          fi
-        else
-          echo "   ✅ Symlink already exists"
-        fi
-        echo ""
-        
-        # Check and fix the az wrapper script
-        echo "4. Checking az wrapper script:"
-        if [ -f /usr/local/az/bin/az ]; then
-          echo "   Contents of /usr/local/az/bin/az:"
-          cat /usr/local/az/bin/az
-          echo ""
+        # Verify wrapper script has correct Python path
+        echo "3. Checking wrapper script Python path:"
+        if [ -f /usr/local/bin/az ]; then
+          echo "   Searching for Python path in wrapper script:"
+          grep -n "VENV_DIR\|/usr/local" /usr/local/bin/az || echo "   (no path found)"
           
-          # Check if it has hardcoded path issue
-          if grep -q "/usr/local/microsoft/azure-cli" /usr/local/az/bin/az; then
-            echo "   ⚠️  Found hardcoded path: /usr/local/microsoft/azure-cli"
-            echo "   Actual location: /usr/local/az/microsoft/azure-cli"
-            echo "   Fixing wrapper script..."
-            
-            sudo sed -i '' 's|/usr/local/microsoft/azure-cli|/usr/local/az/microsoft/azure-cli|g' /usr/local/az/bin/az
-            echo "   ✅ Wrapper script fixed"
-            echo ""
-            echo "   Updated contents:"
-            cat /usr/local/az/bin/az
+          # Verify it points to correct location
+          if grep -q "/usr/local/microsoft/azure-cli" /usr/local/bin/az; then
+            echo "   ✅ Wrapper script has correct Python path"
           else
-            echo "   ✅ Wrapper script looks correct"
+            echo "   ⚠️  WARNING: Wrapper script may have incorrect Python path"
           fi
         fi
         echo ""
         
         # Verify az command works
-        echo "5. Testing az command:"
+        echo "4. Testing az command:"
         if command -v az &> /dev/null; then
           echo "   ✅ 'az' command found in PATH"
           echo "   Location: $(which az)"
@@ -505,14 +600,15 @@ stages:
         else
           echo "   ❌ ERROR: 'az' command still not found in PATH"
           echo ""
-          echo "   This suggests the PKG post-install script failed to:"
-          echo "   - Create the symlink at /usr/local/bin/az"
-          echo "   - Set executable permissions on /usr/local/az/bin/az"
+          echo "   This suggests the PKG installation failed to:"
+          echo "   - Install the launcher at /usr/local/bin/az"
+          echo "   - Set executable permissions on /usr/local/bin/az"
           exit 1
         fi
         
         echo ""
-        echo "✅ Offline installation verified successfully"
+        echo "✅ Offline PKG installation successful"
+        
       displayName: 'Verify offline installation works'
     
     - bash: |
