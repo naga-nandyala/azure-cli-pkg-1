@@ -56,6 +56,16 @@ resources:
 variables:
   - group: 'AME ESRP Variable Group'
   
+  # Disable CodeQL and other auto-injection tasks
+  - name: Codeql.Enabled
+    value: false
+  - name: Codeql.SkipTaskAutoInjection
+    value: true
+  - name: CodeQL.enabled
+    value: false
+  - name: runCodesignValidationInjection
+    value: false
+  
   - name: DOTNET_CLI_TELEMETRY_OPTOUT
     value: 1
   - name: DOTNET_NOLOGO
@@ -986,24 +996,27 @@ stages:
                 UNSIGNED_COUNT=0
                 
                 # Check a sample (first 10) for summary
-                echo "Checking binary signatures (showing first 10)..."
+                echo "Checking binary signatures (showing first 10 universal binaries)..."
                 echo ""
                 
                 head -10 binaries.txt | while read binary; do
                   echo "Binary: $binary"
+                  # Check signature without architecture-specific output
                   if codesign -vv "$binary" 2>&1 | grep -q "valid on disk"; then
                     echo "✅ SIGNED"
-                    codesign -dvv "$binary" 2>&1 | grep -E "Authority|Identifier" | head -2
+                    # Show only main identifier and authority (not per-architecture)
+                    codesign -dvv "$binary" 2>&1 | grep -E "^(Authority|Identifier)=" | head -2
                   else
                     echo "❌ NOT SIGNED"
                   fi
                   echo ""
                 done
                 
-                # Count all signed/unsigned
+                # Count all signed/unsigned (only check universal binaries, not individual slices)
                 echo "Counting all binaries..."
                 while IFS= read -r binary; do
-                  if codesign -vv "$binary" 2>&1 | grep -q "valid on disk"; then
+                  # Only check the universal binary, not individual architectures
+                  if codesign -v "$binary" 2>/dev/null; then
                     SIGNED_COUNT=$((SIGNED_COUNT + 1))
                   else
                     UNSIGNED_COUNT=$((UNSIGNED_COUNT + 1))

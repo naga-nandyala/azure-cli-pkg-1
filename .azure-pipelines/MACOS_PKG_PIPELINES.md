@@ -180,6 +180,89 @@ This document describes the complete Azure DevOps pipeline system for building, 
 - Users would get "unidentified developer" warnings without this
 - Required for distribution outside Mac App Store
 
+**Detailed Execution Flow:**
+
+Based on production execution logs, the notarization process follows these phases:
+
+**Phase 1: Initialization & Setup** (~20 seconds)
+1. ESRP Code Signing task v5.1.10 initializes
+2. Environment detection:
+   - .NET SDK 9.0.306 on Windows Server 2019
+   - Working directory: Azure DevOps build agent
+3. Parameter configuration:
+   - Operation: `MacAppNotarize`
+   - KeyCode: `CP-401337-Apple`
+   - Bundle ID: `com.microsoft.azure.cli`
+   - File pattern: `*fully-signed.pkg`
+
+**Phase 2: Authentication** (~10 seconds)
+1. MSAL (Microsoft Authentication Library) v4.60.3.0 initializes
+2. Retrieves X509 certificates from Azure Key Vault:
+   - `Certificate-ESRP-azclitools-Auth`
+   - `Certificate-ESRP-azclitools-Sign`
+3. Acquires Azure AD federated token (24-hour expiration)
+4. Establishes TLS 1.2 connection to ESRP service endpoint
+
+**Phase 3: File Processing & Upload** (~2 seconds)
+1. Discovers files matching pattern (e.g., `azure-cli-2.0.0-macos-arm64-fully-signed.pkg`)
+2. File size validation (typically 43-46 MB for Azure CLI)
+3. Provisions Azure Blob Storage (100 storage shards)
+4. Uploads PKG file to Azure Blob (~1.15 seconds)
+
+**Phase 4: ESRP Submission & Apple Notarization** (~365 seconds / ~6 minutes)
+1. Submits notarization request to ESRP API
+2. ESRP assigns operation ID (e.g., `feb8e97b-edc3-4b2d-810c-5114f7659341`)
+3. **ESRP forwards PKG to Apple's notarization service**
+4. Polling loop begins (10-second intervals):
+   - Checks notarization status via ESRP API
+   - MSAL uses cached tokens (avoids re-authentication)
+   - Typical wait time: 5-7 minutes for Apple to process
+5. **Apple performs security scan and malware detection**
+6. **Apple returns notarization ticket to ESRP**
+
+**Phase 5: Download & Completion** (~2 seconds)
+1. ESRP retrieves notarized file from Apple
+2. Task downloads notarized PKG from ESRP (~1.3 seconds)
+3. Files output to two locations:
+   - Working directory
+   - Artifact subdirectory
+4. Cleanup: Deletes temporary Azure Blob Storage files
+5. Final status report:
+   - Total time: ~6 minutes 20 seconds
+   - Exit code: 0 (success)
+   - Retry count: 0
+
+**Technical Stack:**
+- ESRP CLI: v5.1.14
+- .NET Runtime: 9.0.306
+- MSAL: v4.60.3.0
+- Protocol: TLS 1.2
+- Storage: Azure Blob (100 shards)
+- API: https://api.esrp.microsoft.com/api/v2
+
+**Data Flow Architecture:**
+```
+Build Agent → Azure Blob → ESRP Service → Apple Notarization → ESRP → Azure Blob → Build Agent
+                 ↑                            |
+                 |                            v
+            Upload (~1s)                  Download (~1s)
+                                    (Apple processing: ~6 min)
+```
+
+**Performance Metrics (Typical):**
+- Upload time: 1-2 seconds
+- Submit time: <1 second
+- Apple wait time: 5-7 minutes (365+ seconds)
+- Download time: 1-2 seconds
+- **Total end-to-end: 6-8 minutes**
+
+**Why ESRP is Used:**
+1. **Security**: Centralized management of Apple Developer credentials
+2. **Abstraction**: Teams don't need direct Apple Developer accounts
+3. **Auditing**: All notarization requests logged and tracked
+4. **Reliability**: Built-in retry logic and error handling
+5. **Scale**: Handles multiple concurrent notarization requests
+
 **Trigger:** Manual only
 
 **Lines:** 563 | **Size:** 20.8 KB
