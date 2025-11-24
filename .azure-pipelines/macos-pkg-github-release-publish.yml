@@ -30,6 +30,16 @@ parameters:
     default: false
 
 variables:
+  # Disable CodeQL and other auto-injection tasks
+  - name: Codeql.Enabled
+    value: false
+  - name: Codeql.SkipTaskAutoInjection
+    value: true
+  - name: CodeQL.enabled
+    value: false
+  - name: runCodesignValidationInjection
+    value: false
+  
   - name: AzureCliVersion
     value: ${{ parameters.AzureCliVersion }}
   - name: SourceBuildId

@@ -14,7 +14,18 @@ pool:
   vmImage: 'macOS-latest'
 
 variables:
-  pkgFileName: ${{ replace(replace(parameters.pkgUrl, 'https://', ''), '/', '-') }}
+  # Disable CodeQL and other auto-injection tasks
+  - name: Codeql.Enabled
+    value: false
+  - name: Codeql.SkipTaskAutoInjection
+    value: true
+  - name: CodeQL.enabled
+    value: false
+  - name: runCodesignValidationInjection
+    value: false
+  
+  - name: pkgFileName
+    value: ${{ replace(replace(parameters.pkgUrl, 'https://', ''), '/', '-') }}
 
 stages:
   - stage: VerifyPKGSignature

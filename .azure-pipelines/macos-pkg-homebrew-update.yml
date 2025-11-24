@@ -33,6 +33,16 @@ resources:
     name: naga-nandyala/homebrew-mycli-app
 
 variables:
+  # Disable CodeQL and other auto-injection tasks
+  - name: Codeql.Enabled
+    value: false
+  - name: Codeql.SkipTaskAutoInjection
+    value: true
+  - name: CodeQL.enabled
+    value: false
+  - name: runCodesignValidationInjection
+    value: false
+  
   - name: GITHUB_TOKEN
     value: $[ resources.repositories['homebrewtap'].token ]
   - name: AzureCliVersion

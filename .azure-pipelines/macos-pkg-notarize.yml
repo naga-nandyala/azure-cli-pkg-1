@@ -29,6 +29,16 @@ variables:
   # Import ESRP signing/notarization variables from the variable group
   - group: 'AME ESRP Variable Group'
   
+  # Disable CodeQL and other auto-injection tasks
+  - name: Codeql.Enabled
+    value: false
+  - name: Codeql.SkipTaskAutoInjection
+    value: true
+  - name: CodeQL.enabled
+    value: false
+  - name: runCodesignValidationInjection
+    value: false
+  
   - name: DOTNET_CLI_TELEMETRY_OPTOUT
     value: 1
   - name: DOTNET_NOLOGO
