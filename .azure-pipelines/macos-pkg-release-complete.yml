@@ -49,8 +49,7 @@ parameters:
     default: false
 
 variables:
-  - group: 'macos-signing-credentials'
-  - group: 'github-release-credentials'
+  - group: 'AME ESRP Variable Group'
   - name: AzureCliVersion
     value: ${{ parameters.AzureCliVersion }}
   - name: GitHubRepo
