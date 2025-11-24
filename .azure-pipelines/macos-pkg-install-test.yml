@@ -66,6 +66,54 @@ stages:
     - bash: |
         set -e
         echo "======================================"
+        echo "  Remove Pre-installed Azure CLI"
+        echo "======================================"
+        echo ""
+        
+        # Check if az is already installed
+        if command -v az &> /dev/null; then
+          echo "⚠️  Azure CLI is pre-installed on this agent"
+          echo "Current version:"
+          az --version | head -5
+          echo ""
+          echo "Location: $(which az)"
+          echo ""
+          
+          # Try to uninstall via Homebrew first
+          echo "Attempting to uninstall via Homebrew..."
+          brew uninstall azure-cli 2>/dev/null || echo "Not installed via Homebrew"
+          
+          # Remove symlinks
+          echo "Removing az symlinks..."
+          sudo rm -f /usr/local/bin/az 2>/dev/null || true
+          sudo rm -f /opt/homebrew/bin/az 2>/dev/null || true
+          
+          # Remove installation directories
+          echo "Removing Azure CLI directories..."
+          sudo rm -rf /usr/local/az 2>/dev/null || true
+          sudo rm -rf /opt/az 2>/dev/null || true
+          sudo rm -rf /usr/local/Cellar/azure-cli* 2>/dev/null || true
+          sudo rm -rf /opt/homebrew/Cellar/azure-cli* 2>/dev/null || true
+          
+          # Clear PATH cache
+          hash -r
+          
+          echo ""
+          if command -v az &> /dev/null; then
+            echo "⚠️  Azure CLI still found at: $(which az)"
+            echo "This might be in a system location we can't remove"
+          else
+            echo "✅ Azure CLI successfully removed"
+          fi
+        else
+          echo "✅ No pre-installed Azure CLI found"
+        fi
+        echo ""
+      displayName: 'Remove pre-installed Azure CLI'
+    
+    - bash: |
+        set -e
+        echo "======================================"
         echo "  Add Homebrew Tap"
         echo "======================================"
         echo ""
@@ -200,6 +248,54 @@ stages:
         echo "Architecture:"
         uname -m
       displayName: 'Show system information'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Remove Pre-installed Azure CLI"
+        echo "======================================"
+        echo ""
+        
+        # Check if az is already installed
+        if command -v az &> /dev/null; then
+          echo "⚠️  Azure CLI is pre-installed on this agent"
+          echo "Current version:"
+          az --version | head -5
+          echo ""
+          echo "Location: $(which az)"
+          echo ""
+          
+          # Try to uninstall via Homebrew first
+          echo "Attempting to uninstall via Homebrew..."
+          brew uninstall azure-cli 2>/dev/null || echo "Not installed via Homebrew"
+          
+          # Remove symlinks
+          echo "Removing az symlinks..."
+          sudo rm -f /usr/local/bin/az 2>/dev/null || true
+          sudo rm -f /opt/homebrew/bin/az 2>/dev/null || true
+          
+          # Remove installation directories
+          echo "Removing Azure CLI directories..."
+          sudo rm -rf /usr/local/az 2>/dev/null || true
+          sudo rm -rf /opt/az 2>/dev/null || true
+          sudo rm -rf /usr/local/Cellar/azure-cli* 2>/dev/null || true
+          sudo rm -rf /opt/homebrew/Cellar/azure-cli* 2>/dev/null || true
+          
+          # Clear PATH cache
+          hash -r
+          
+          echo ""
+          if command -v az &> /dev/null; then
+            echo "⚠️  Azure CLI still found at: $(which az)"
+            echo "This might be in a system location we can't remove"
+          else
+            echo "✅ Azure CLI successfully removed"
+          fi
+        else
+          echo "✅ No pre-installed Azure CLI found"
+        fi
+        echo ""
+      displayName: 'Remove pre-installed Azure CLI'
     
     - bash: |
         set -e
