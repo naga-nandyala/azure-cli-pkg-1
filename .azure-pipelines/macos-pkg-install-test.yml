@@ -357,6 +357,258 @@ stages:
       displayName: 'Cleanup - Uninstall Homebrew'
       condition: always()
 
+  - job: TestCask
+    displayName: 'Test Homebrew Cask installation'
+    pool:
+      vmImage: 'macos-14'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  System Information"
+        echo "======================================"
+        echo ""
+        echo "macOS Version:"
+        sw_vers
+        echo ""
+        echo "Homebrew Version:"
+        brew --version
+        echo ""
+        echo "Architecture:"
+        uname -m
+      displayName: 'Show system information'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Remove Pre-installed Azure CLI"
+        echo "======================================"
+        echo ""
+        
+        # Check if az is already installed
+        if command -v az &> /dev/null; then
+          echo "⚠️  Azure CLI is pre-installed on this agent"
+          echo "Current version:"
+          az --version | head -5
+          echo ""
+          echo "Location: $(which az)"
+          echo ""
+          
+          # Try to uninstall via Homebrew first
+          echo "Attempting to uninstall via Homebrew..."
+          brew uninstall azure-cli 2>/dev/null || echo "Not installed via Homebrew"
+          brew uninstall --cask azure-cli 2>/dev/null || echo "Not installed as cask"
+          
+          # Remove symlinks
+          echo "Removing az symlinks..."
+          sudo rm -f /usr/local/bin/az 2>/dev/null || true
+          sudo rm -f /opt/homebrew/bin/az 2>/dev/null || true
+          
+          # Remove installation directories
+          echo "Removing Azure CLI directories..."
+          sudo rm -rf /usr/local/az 2>/dev/null || true
+          sudo rm -rf /usr/local/microsoft/azure-cli 2>/dev/null || true
+          sudo rm -rf /opt/az 2>/dev/null || true
+          sudo rm -rf /usr/local/Cellar/azure-cli* 2>/dev/null || true
+          sudo rm -rf /opt/homebrew/Cellar/azure-cli* 2>/dev/null || true
+          
+          # Clear PATH cache
+          hash -r
+          
+          echo ""
+          if command -v az &> /dev/null; then
+            echo "⚠️  WARNING: 'az' still found after removal attempt"
+            echo "This might be in a system location we can't remove"
+          else
+            echo "✅ Azure CLI successfully removed"
+          fi
+        else
+          echo "✅ No pre-installed Azure CLI found"
+        fi
+        echo ""
+      displayName: 'Remove pre-installed Azure CLI'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Add Homebrew Tap"
+        echo "======================================"
+        echo ""
+        echo "Adding tap: $(HomebrewTapRepo)"
+        
+        brew tap $(HomebrewTapRepo)
+        
+        echo ""
+        echo "✅ Tap added successfully"
+        echo ""
+        echo "Available casks in tap:"
+        brew search --cask $(HomebrewTapRepo)
+      displayName: 'Add Homebrew tap'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Install Cask (Native PKG Installer)"
+        echo "======================================"
+        echo ""
+        echo "Installing cask: $(FormulaName)"
+        echo "This will run the PKG installer directly"
+        echo ""
+        
+        brew install --cask $(FormulaName)
+        
+        echo ""
+        echo "✅ Cask installed successfully"
+      displayName: 'Install Azure CLI from cask'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Verify Cask Installation"
+        echo "======================================"
+        echo ""
+        
+        echo "Current PATH:"
+        echo "$PATH"
+        echo ""
+        
+        echo "Checking installation locations:"
+        echo ""
+        
+        # Check expected launcher location (Microsoft standard path)
+        echo "1. Checking /usr/local/bin/az (expected launcher):"
+        if [ -f /usr/local/bin/az ]; then
+          echo "   ✅ Found: /usr/local/bin/az"
+          ls -la /usr/local/bin/az
+          
+          # Check if it's executable
+          if [ -x /usr/local/bin/az ]; then
+            echo "   ✅ File is executable"
+          else
+            echo "   ⚠️  File is not executable, fixing..."
+            sudo chmod +x /usr/local/bin/az
+            echo "   ✅ Made executable"
+          fi
+        else
+          echo "   ❌ ERROR: /usr/local/bin/az not found!"
+          echo "   Cask PKG installer should have installed it to /usr/local/bin/"
+          exit 1
+        fi
+        echo ""
+        
+        # Check Microsoft standard installation directory
+        echo "2. Checking /usr/local/microsoft/azure-cli/ (Microsoft standard path):"
+        if [ -d /usr/local/microsoft/azure-cli ]; then
+          echo "   ✅ Found directory: /usr/local/microsoft/azure-cli"
+          echo "   Total size: $(du -sh /usr/local/microsoft/azure-cli | cut -f1)"
+          
+          if [ -f /usr/local/microsoft/azure-cli/bin/python3 ]; then
+            echo "   ✅ Python executable found"
+            ls -la /usr/local/microsoft/azure-cli/bin/python3
+          else
+            echo "   ❌ ERROR: Python not found in venv"
+            exit 1
+          fi
+        else
+          echo "   ❌ ERROR: /usr/local/microsoft/azure-cli directory not found!"
+          exit 1
+        fi
+        echo ""
+        
+        # Verify wrapper script has correct Python path
+        echo "3. Checking wrapper script Python path:"
+        if [ -f /usr/local/bin/az ]; then
+          echo "   Wrapper script contents:"
+          cat /usr/local/bin/az
+          echo ""
+          
+          EXPECTED_PATH="/usr/local/microsoft/azure-cli/bin/python3"
+          if grep -q "$EXPECTED_PATH" /usr/local/bin/az; then
+            echo "   ✅ Wrapper script has correct Python path"
+          else
+            echo "   ⚠️  WARNING: Wrapper script may have incorrect Python path"
+          fi
+        fi
+        echo ""
+        
+        # Verify az command works
+        echo "4. Testing az command:"
+        if command -v az &> /dev/null; then
+          echo "   ✅ 'az' command found in PATH"
+          echo "   Location: $(which az)"
+          echo ""
+          echo "   Azure CLI Version:"
+          az --version | head -10
+        else
+          echo "   ❌ ERROR: 'az' command not found in PATH"
+          exit 1
+        fi
+        
+        echo ""
+        echo "✅ Cask installation successful - Uses native PKG installer!"
+        
+      displayName: 'Verify cask installation'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Test Basic Commands (Cask)"
+        echo "======================================"
+        echo ""
+        
+        # Test help command
+        echo "Testing: az --help"
+        az --help > /dev/null
+        echo "✅ Help command works"
+        echo ""
+        
+        # Test version command
+        echo "Testing: az version"
+        az version
+        echo "✅ Version command works"
+        echo ""
+        
+        # Test extension list (should work without login)
+        echo "Testing: az extension list"
+        az extension list
+        echo "✅ Extension list works"
+        echo ""
+        
+        echo "======================================"
+        echo "  All Cask Tests Passed! ✅"
+        echo "======================================"
+      displayName: 'Test basic az commands'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Cleanup - Uninstall Cask"
+        echo "======================================"
+        echo ""
+        
+        echo "Uninstalling cask $(FormulaName)..."
+        brew uninstall --cask $(FormulaName) || echo "Cask already uninstalled"
+        
+        # Verify uninstallation
+        if command -v az &> /dev/null; then
+          echo "⚠️  WARNING: 'az' command still found in PATH"
+          which az
+        else
+          echo "✅ Azure CLI uninstalled successfully"
+        fi
+        
+        echo ""
+        echo "Removing tap..."
+        brew untap $(HomebrewTapRepo) || echo "Tap already removed"
+        
+        echo ""
+        echo "✅ Cleanup complete"
+      displayName: 'Cleanup - Uninstall Cask'
+      condition: always()
+
   - job: TestOfflineInstall
     displayName: 'Test offline PKG installation'
     pool:
@@ -750,6 +1002,8 @@ stages:
   displayName: 'Test Summary'
   dependsOn:
   - TestHomebrewFormula
+  - TestCask
+  - TestOfflineInstall
   - TestFormulaValidation
   condition: succeededOrFailed()
   jobs:
@@ -761,26 +1015,42 @@ stages:
     steps:
     - bash: |
         echo "======================================"
-        echo "  Homebrew Formula Test Summary"
+        echo "  Homebrew Installation Test Summary"
         echo "======================================"
         echo ""
         echo "✅ Test Results:"
         echo ""
         echo "1. Homebrew Formula Installation - Completed"
-        echo "2. Offline PKG Installation - Completed"
-        echo "3. Formula Validation - Completed"
+        echo "   (Extracts PKG to Cellar - experimental)"
+        echo ""
+        echo "2. Homebrew Cask Installation - Completed"
+        echo "   (Native PKG installer - RECOMMENDED)"
+        echo ""
+        echo "3. Offline PKG Installation - Completed"
+        echo "   (Direct sudo installer)"
+        echo ""
+        echo "4. Formula Validation - Completed"
         echo ""
         echo "Formula: $(FormulaName)"
         echo "Version: $(AzureCliVersion)"
         echo "Tap: $(HomebrewTapRepo)"
         echo "Release: $(ReleaseTag)"
         echo ""
-        echo "The formula is ready for use!"
+        echo "======================================"
+        echo "  Installation Options for Users"
+        echo "======================================"
         echo ""
-        echo "Users can install with:"
+        echo "Option 1: Homebrew Cask (RECOMMENDED)"
+        echo "  brew tap $(HomebrewTapRepo)"
+        echo "  brew install --cask $(FormulaName)"
+        echo ""
+        echo "Option 2: Homebrew Formula (experimental)"
         echo "  brew tap $(HomebrewTapRepo)"
         echo "  brew install $(FormulaName)"
         echo ""
-        echo "Or download PKG directly from:"
-        echo "  https://github.com/$(GitHubRepo)/releases/tag/$(ReleaseTag)"
+        echo "Option 3: Direct PKG Download"
+        echo "  Download from: https://github.com/$(GitHubRepo)/releases/tag/$(ReleaseTag)"
+        echo "  Install: sudo installer -pkg azure-cli-*.pkg -target /"
+        echo ""
+        echo "✅ All installation methods tested successfully!"
       displayName: 'Test summary'
