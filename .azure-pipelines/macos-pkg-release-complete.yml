@@ -1,0 +1,694 @@
+# Azure CLI - Complete macOS PKG Release Pipeline
+# This pipeline performs the entire release workflow in a single pipeline:
+# 1. Download unsigned PKG from build pipeline
+# 2. Sign all binaries + PKG wrapper
+# 3. Notarize with Apple
+# 4. Verify signing and notarization
+# 5. Publish to GitHub releases
+# 6. Update Homebrew formula
+# 7. Test both installation methods
+
+trigger: none # Manual trigger only
+
+parameters:
+  - name: UnsignedBuildId
+    displayName: 'Build ID of unsigned PKG (from macos-pkg-build.yml)'
+    type: string
+    default: '282071'
+  - name: UnsignedPipelineName
+    displayName: 'Unsigned PKG Pipeline Name'
+    type: string
+    default: 'naga_macos_build'
+  - name: AzureCliVersion
+    displayName: 'Azure CLI Version (e.g., 2.0.0)'
+    type: string
+    default: '2.0.0'
+  - name: GitHubRepo
+    displayName: 'GitHub Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+  - name: HomebrewTapRepo
+    displayName: 'Homebrew Tap Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/homebrew-mycli-app'
+  - name: FormulaName
+    displayName: 'Homebrew Formula Name'
+    type: string
+    default: 'azure-cli-pr'
+  - name: BundleId
+    displayName: 'Bundle ID for signing'
+    type: string
+    default: 'com.microsoft.azure.cli'
+  - name: IsPrerelease
+    displayName: 'Mark GitHub release as pre-release'
+    type: boolean
+    default: false
+  - name: SkipTests
+    displayName: 'Skip installation tests (for faster releases)'
+    type: boolean
+    default: false
+
+variables:
+  - group: 'macos-signing-credentials'
+  - group: 'github-release-credentials'
+  - name: AzureCliVersion
+    value: ${{ parameters.AzureCliVersion }}
+  - name: GitHubRepo
+    value: ${{ parameters.GitHubRepo }}
+  - name: ReleaseTag
+    value: 'v${{ parameters.AzureCliVersion }}'
+  - name: PkgFileName
+    value: 'azure-cli-${{ parameters.AzureCliVersion }}-macos-arm64-notarized.pkg'
+
+name: complete-release-$(AzureCliVersion)-$(Date:yyyyMMdd)-$(Rev:r)
+
+stages:
+# ============================================================================
+# STAGE 1: DOWNLOAD & SIGN ALL BINARIES
+# ============================================================================
+- stage: SignAllBinaries
+  displayName: '1. Download & Sign All Binaries'
+  jobs:
+  - job: SignBinaries
+    displayName: 'Sign all binaries and PKG'
+    pool:
+      vmImage: 'macos-14'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo "##[section]Pipeline Parameters"
+        echo "Unsigned Build ID: ${{ parameters.UnsignedBuildId }}"
+        echo "Unsigned Pipeline: ${{ parameters.UnsignedPipelineName }}"
+        echo "Azure CLI Version: ${{ parameters.AzureCliVersion }}"
+        echo "Bundle ID: ${{ parameters.BundleId }}"
+      displayName: 'Show parameters'
+    
+    # Download unsigned PKG from build pipeline
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download unsigned PKG'
+      inputs:
+        buildType: 'specific'
+        project: '$(System.TeamProjectId)'
+        definition: '${{ parameters.UnsignedPipelineName }}'
+        buildVersionToDownload: 'specific'
+        buildId: '${{ parameters.UnsignedBuildId }}'
+        artifactName: 'macos-pkg'
+        targetPath: '$(Pipeline.Workspace)/unsigned-pkg'
+    
+    - bash: |
+        echo "##[section]Downloaded PKG contents:"
+        ls -lh "$(Pipeline.Workspace)/unsigned-pkg"
+        
+        # Find the PKG file
+        PKG_FILE=$(find "$(Pipeline.Workspace)/unsigned-pkg" -name "*.pkg" | head -1)
+        echo "Found PKG: $PKG_FILE"
+        
+        # Set variable for downstream steps
+        echo "##vso[task.setvariable variable=UnsignedPkgPath]$PKG_FILE"
+      displayName: 'Locate unsigned PKG'
+    
+    # Extract PKG to access binaries
+    - bash: |
+        set -e
+        echo "##[section]Extracting unsigned PKG"
+        
+        WORK_DIR="$(Pipeline.Workspace)/pkg-work"
+        mkdir -p "$WORK_DIR"
+        
+        # Expand the PKG
+        pkgutil --expand "$(UnsignedPkgPath)" "$WORK_DIR/expanded"
+        
+        # Extract payload
+        cd "$WORK_DIR/expanded"
+        for payload in */Payload; do
+          echo "Extracting $payload..."
+          tar -xzf "$payload" -C "$WORK_DIR"
+        done
+        
+        echo "##[section]Extracted contents:"
+        ls -lR "$WORK_DIR"
+        
+        echo "##vso[task.setvariable variable=WorkDir]$WORK_DIR"
+      displayName: 'Extract PKG contents'
+    
+    # Install signing certificate
+    - task: InstallAppleCertificate@2
+      displayName: 'Install signing certificate'
+      inputs:
+        certSecureFile: '$(APPLE_DEVELOPER_ID_CERT_FILE)'
+        certPwd: '$(APPLE_DEVELOPER_ID_CERT_PASSWORD)'
+        keychain: 'temp'
+        deleteCert: true
+    
+    # Sign all binaries
+    - bash: |
+        set -e
+        echo "##[section]Signing all binaries"
+        
+        WORK_DIR="$(WorkDir)"
+        SIGNING_IDENTITY="$(APPLE_SIGNING_IDENTITY)"
+        
+        # Find and sign all binaries
+        find "$WORK_DIR" -type f -perm +111 | while read binary; do
+          if file "$binary" | grep -q "Mach-O"; then
+            echo "Signing: $binary"
+            codesign --force --sign "$SIGNING_IDENTITY" \
+              --timestamp \
+              --options runtime \
+              --entitlements "$(Build.SourcesDirectory)/.azure-pipelines/resources/entitlements.plist" \
+              "$binary"
+          fi
+        done
+        
+        # Sign all .dylib and .so files
+        find "$WORK_DIR" -type f \( -name "*.dylib" -o -name "*.so" \) | while read lib; do
+          echo "Signing: $lib"
+          codesign --force --sign "$SIGNING_IDENTITY" \
+            --timestamp \
+            --options runtime \
+            "$lib"
+        done
+        
+        echo "##[section]Binary signing complete"
+      displayName: 'Sign all binaries and libraries'
+    
+    # Repackage PKG
+    - bash: |
+        set -e
+        echo "##[section]Repackaging signed PKG"
+        
+        WORK_DIR="$(WorkDir)"
+        OUTPUT_DIR="$(Pipeline.Workspace)/signed-pkg"
+        mkdir -p "$OUTPUT_DIR"
+        
+        # Create component PKG
+        pkgbuild --root "$WORK_DIR" \
+          --identifier "${{ parameters.BundleId }}" \
+          --version "${{ parameters.AzureCliVersion }}" \
+          --install-location "/" \
+          "$OUTPUT_DIR/component.pkg"
+        
+        # Sign the component PKG
+        productsign --sign "$(APPLE_INSTALLER_SIGNING_IDENTITY)" \
+          "$OUTPUT_DIR/component.pkg" \
+          "$OUTPUT_DIR/azure-cli-${{ parameters.AzureCliVersion }}-macos-arm64-signed.pkg"
+        
+        # Verify signature
+        pkgutil --check-signature "$OUTPUT_DIR/azure-cli-${{ parameters.AzureCliVersion }}-macos-arm64-signed.pkg"
+        
+        echo "##vso[task.setvariable variable=SignedPkgPath;isOutput=true]$OUTPUT_DIR/azure-cli-${{ parameters.AzureCliVersion }}-macos-arm64-signed.pkg"
+      name: PackageSigned
+      displayName: 'Repackage and sign PKG'
+    
+    # Publish signed PKG as artifact
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish signed PKG'
+      inputs:
+        targetPath: '$(Pipeline.Workspace)/signed-pkg'
+        artifactName: 'signed-pkg'
+
+# ============================================================================
+# STAGE 2: NOTARIZE WITH APPLE
+# ============================================================================
+- stage: NotarizeWithApple
+  displayName: '2. Notarize with Apple'
+  dependsOn: SignAllBinaries
+  jobs:
+  - job: NotarizePkg
+    displayName: 'Submit to Apple Notary Service'
+    pool:
+      vmImage: 'macos-14'
+    
+    steps:
+    - checkout: none
+    
+    # Download signed PKG
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download signed PKG'
+      inputs:
+        artifactName: 'signed-pkg'
+        targetPath: '$(Pipeline.Workspace)/signed-pkg'
+    
+    - bash: |
+        SIGNED_PKG=$(find "$(Pipeline.Workspace)/signed-pkg" -name "*-signed.pkg" | head -1)
+        echo "Signed PKG: $SIGNED_PKG"
+        echo "##vso[task.setvariable variable=SignedPkgPath]$SIGNED_PKG"
+      displayName: 'Locate signed PKG'
+    
+    # Submit for notarization
+    - bash: |
+        set -e
+        echo "##[section]Submitting for notarization"
+        
+        xcrun notarytool submit "$(SignedPkgPath)" \
+          --apple-id "$(APPLE_ID)" \
+          --password "$(APPLE_APP_SPECIFIC_PASSWORD)" \
+          --team-id "$(APPLE_TEAM_ID)" \
+          --wait \
+          --timeout 30m \
+          --output-format json > notarization-result.json
+        
+        cat notarization-result.json
+        
+        # Extract submission ID
+        SUBMISSION_ID=$(jq -r '.id' notarization-result.json)
+        echo "Submission ID: $SUBMISSION_ID"
+        echo "##vso[task.setvariable variable=SubmissionId]$SUBMISSION_ID"
+        
+        # Check status
+        STATUS=$(jq -r '.status' notarization-result.json)
+        echo "Status: $STATUS"
+        
+        if [ "$STATUS" != "Accepted" ]; then
+          echo "##[error]Notarization failed!"
+          xcrun notarytool log "$SUBMISSION_ID" \
+            --apple-id "$(APPLE_ID)" \
+            --password "$(APPLE_APP_SPECIFIC_PASSWORD)" \
+            --team-id "$(APPLE_TEAM_ID)"
+          exit 1
+        fi
+        
+        echo "##[section]Notarization succeeded!"
+      displayName: 'Submit and wait for notarization'
+    
+    # Staple notarization ticket
+    - bash: |
+        set -e
+        echo "##[section]Stapling notarization ticket"
+        
+        OUTPUT_DIR="$(Pipeline.Workspace)/notarized-pkg"
+        mkdir -p "$OUTPUT_DIR"
+        
+        # Copy to new filename
+        cp "$(SignedPkgPath)" "$OUTPUT_DIR/$(PkgFileName)"
+        
+        # Staple the ticket
+        xcrun stapler staple "$OUTPUT_DIR/$(PkgFileName)"
+        
+        # Verify stapling
+        xcrun stapler validate "$OUTPUT_DIR/$(PkgFileName)"
+        
+        echo "##[section]Notarization ticket stapled successfully"
+      displayName: 'Staple notarization ticket'
+    
+    # Publish notarized PKG
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish notarized PKG'
+      inputs:
+        targetPath: '$(Pipeline.Workspace)/notarized-pkg'
+        artifactName: 'notarized-pkg'
+
+# ============================================================================
+# STAGE 3: VERIFY SIGNING & NOTARIZATION
+# ============================================================================
+- stage: VerifySigningAndNotarization
+  displayName: '3. Verify Signing & Notarization'
+  dependsOn: NotarizeWithApple
+  jobs:
+  - job: VerifyPkg
+    displayName: 'Verify PKG signature and notarization'
+    pool:
+      vmImage: 'macos-14'
+    
+    steps:
+    - checkout: none
+    
+    # Download notarized PKG
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download notarized PKG'
+      inputs:
+        artifactName: 'notarized-pkg'
+        targetPath: '$(Pipeline.Workspace)/notarized-pkg'
+    
+    - bash: |
+        PKG_FILE="$(Pipeline.Workspace)/notarized-pkg/$(PkgFileName)"
+        echo "PKG file: $PKG_FILE"
+        echo "##vso[task.setvariable variable=PkgPath]$PKG_FILE"
+      displayName: 'Locate notarized PKG'
+    
+    # Verify PKG signature
+    - bash: |
+        set -e
+        echo "##[section]Verifying PKG signature"
+        
+        pkgutil --check-signature "$(PkgPath)"
+        
+        # Check for Developer ID certificate
+        if pkgutil --check-signature "$(PkgPath)" | grep -q "Developer ID Installer"; then
+          echo "✅ PKG is signed with Developer ID Installer certificate"
+        else
+          echo "##[error]PKG is not signed with Developer ID Installer certificate"
+          exit 1
+        fi
+      displayName: 'Verify PKG signature'
+    
+    # Verify notarization
+    - bash: |
+        set -e
+        echo "##[section]Verifying notarization"
+        
+        # Check with spctl
+        spctl -a -vv -t install "$(PkgPath)"
+        
+        # Validate stapled ticket
+        xcrun stapler validate "$(PkgPath)"
+        
+        echo "✅ PKG is properly notarized and stapled"
+      displayName: 'Verify notarization'
+    
+    # Verify bundle ID
+    - bash: |
+        set -e
+        echo "##[section]Verifying bundle ID"
+        
+        pkgutil --expand "$(PkgPath)" "$(Pipeline.Workspace)/verify-expanded"
+        
+        # Check PackageInfo for bundle ID
+        if grep -q "${{ parameters.BundleId }}" "$(Pipeline.Workspace)/verify-expanded/"*/PackageInfo; then
+          echo "✅ Bundle ID matches: ${{ parameters.BundleId }}"
+        else
+          echo "##[error]Bundle ID mismatch"
+          exit 1
+        fi
+      displayName: 'Verify bundle ID'
+
+# ============================================================================
+# STAGE 4: PUBLISH TO GITHUB
+# ============================================================================
+- stage: PublishToGitHub
+  displayName: '4. Publish GitHub Release'
+  dependsOn: VerifySigningAndNotarization
+  jobs:
+  - job: CreateRelease
+    displayName: 'Create GitHub release and upload PKG'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: self
+      persistCredentials: true
+    
+    # Download notarized PKG
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download notarized PKG'
+      inputs:
+        artifactName: 'notarized-pkg'
+        targetPath: '$(Pipeline.Workspace)/notarized-pkg'
+    
+    # Create or update GitHub release
+    - task: GitHubRelease@1
+      displayName: 'Create GitHub release'
+      inputs:
+        gitHubConnection: 'github-release-connection'
+        repositoryName: '${{ parameters.GitHubRepo }}'
+        action: 'create'
+        target: '$(Build.SourceVersion)'
+        tagSource: 'userSpecifiedTag'
+        tag: '$(ReleaseTag)'
+        title: 'Azure CLI ${{ parameters.AzureCliVersion }} for macOS'
+        releaseNotesSource: 'inline'
+        releaseNotesInline: |
+          # Azure CLI ${{ parameters.AzureCliVersion }} for macOS (ARM64)
+          
+          This release includes the Azure CLI packaged as a macOS installer (PKG) for Apple Silicon Macs.
+          
+          ## Installation Methods
+          
+          ### Homebrew (Recommended)
+          ```bash
+          brew tap ${{ parameters.HomebrewTapRepo }}
+          brew install ${{ parameters.FormulaName }}
+          ```
+          
+          ### Direct Download (Offline Installation)
+          Download the PKG file below and run:
+          ```bash
+          sudo installer -pkg $(PkgFileName) -target /
+          ```
+          
+          ## Verification
+          This PKG is signed and notarized by Apple. You can verify:
+          ```bash
+          pkgutil --check-signature $(PkgFileName)
+          spctl -a -vv -t install $(PkgFileName)
+          stapler validate $(PkgFileName)
+          ```
+          
+          ## What's Included
+          - Azure CLI ${{ parameters.AzureCliVersion }}
+          - All binaries signed with Developer ID
+          - Notarized by Apple
+          - Compatible with macOS 11.0+ (ARM64)
+        assets: '$(Pipeline.Workspace)/notarized-pkg/$(PkgFileName)'
+        assetUploadMode: 'replace'
+        isDraft: false
+        isPreRelease: ${{ parameters.IsPrerelease }}
+        addChangeLog: false
+
+# ============================================================================
+# STAGE 5: UPDATE HOMEBREW FORMULA
+# ============================================================================
+- stage: UpdateHomebrewFormula
+  displayName: '5. Update Homebrew Formula'
+  dependsOn: PublishToGitHub
+  jobs:
+  - job: UpdateFormula
+    displayName: 'Update Homebrew tap repository'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    # Clone Homebrew tap repository
+    - bash: |
+        set -e
+        echo "##[section]Cloning Homebrew tap repository"
+        
+        git clone https://$(GITHUB_PAT)@github.com/${{ parameters.HomebrewTapRepo }}.git homebrew-tap
+        cd homebrew-tap
+        
+        git config user.name "Azure Pipelines"
+        git config user.email "azuredevops@microsoft.com"
+        
+        echo "##vso[task.setvariable variable=TapDir]$(pwd)"
+      displayName: 'Clone tap repository'
+    
+    # Download PKG to calculate SHA256
+    - bash: |
+        set -e
+        echo "##[section]Downloading PKG to calculate SHA256"
+        
+        PKG_URL="https://github.com/${{ parameters.GitHubRepo }}/releases/download/$(ReleaseTag)/$(PkgFileName)"
+        echo "PKG URL: $PKG_URL"
+        
+        curl -L -o "$(PkgFileName)" "$PKG_URL"
+        
+        # Calculate SHA256
+        SHA256=$(shasum -a 256 "$(PkgFileName)" | awk '{print $1}')
+        echo "SHA256: $SHA256"
+        echo "##vso[task.setvariable variable=PkgSha256]$SHA256"
+      displayName: 'Calculate PKG SHA256'
+    
+    # Update formula file
+    - bash: |
+        set -e
+        echo "##[section]Updating formula file"
+        
+        cd "$(TapDir)"
+        
+        FORMULA_FILE="Formula/${{ parameters.FormulaName }}.rb"
+        
+        cat > "$FORMULA_FILE" <<'EOF'
+        class AzureCliPr < Formula
+          desc "Azure CLI - Command-line tools for Azure"
+          homepage "https://docs.microsoft.com/cli/azure/overview"
+          url "https://github.com/${{ parameters.GitHubRepo }}/releases/download/$(ReleaseTag)/$(PkgFileName)"
+          sha256 "$(PkgSha256)"
+          version "${{ parameters.AzureCliVersion }}"
+          
+          def install
+            # Extract the PKG
+            system "pkgutil", "--expand", cached_download, "#{buildpath}/expanded"
+            system "tar", "-xzf", "#{buildpath}/expanded/azure-cli.pkg/Payload", "-C", prefix
+          end
+          
+          test do
+            system "#{bin}/az", "version"
+          end
+        end
+        EOF
+        
+        echo "##[section]Formula file updated"
+        cat "$FORMULA_FILE"
+      displayName: 'Update formula'
+    
+    # Commit and push
+    - bash: |
+        set -e
+        cd "$(TapDir)"
+        
+        git add .
+        git commit -m "Update ${{ parameters.FormulaName }} to ${{ parameters.AzureCliVersion }}"
+        git push origin main
+        
+        echo "##[section]Formula updated and pushed to tap repository"
+      displayName: 'Commit and push formula'
+
+# ============================================================================
+# STAGE 6: TEST INSTALLATION
+# ============================================================================
+- stage: TestInstallation
+  displayName: '6. Test Installation Methods'
+  dependsOn: UpdateHomebrewFormula
+  condition: and(succeeded(), eq(${{ parameters.SkipTests }}, false))
+  jobs:
+  - job: TestHomebrewInstall
+    displayName: 'Test Homebrew installation'
+    pool:
+      vmImage: 'macos-14'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        set -e
+        echo "##[section]Testing Homebrew installation"
+        
+        # Tap the repository
+        brew tap ${{ parameters.HomebrewTapRepo }}
+        
+        # Install the formula
+        brew install ${{ parameters.FormulaName }}
+        
+        # Verify installation
+        az version
+        
+        # Check version
+        INSTALLED_VERSION=$(az version --output json | jq -r '.["azure-cli"]')
+        echo "Installed version: $INSTALLED_VERSION"
+        
+        if [ "$INSTALLED_VERSION" = "${{ parameters.AzureCliVersion }}" ]; then
+          echo "✅ Homebrew installation successful"
+        else
+          echo "##[error]Version mismatch: expected ${{ parameters.AzureCliVersion }}, got $INSTALLED_VERSION"
+          exit 1
+        fi
+      displayName: 'Test Homebrew install'
+  
+  - job: TestOfflineInstall
+    displayName: 'Test offline PKG installation'
+    pool:
+      vmImage: 'macos-14'
+    
+    steps:
+    - checkout: none
+    
+    # Download notarized PKG
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download notarized PKG'
+      inputs:
+        artifactName: 'notarized-pkg'
+        targetPath: '$(Pipeline.Workspace)/notarized-pkg'
+    
+    - bash: |
+        set -e
+        echo "##[section]Testing offline PKG installation"
+        
+        PKG_FILE="$(Pipeline.Workspace)/notarized-pkg/$(PkgFileName)"
+        
+        # Install the PKG
+        sudo installer -pkg "$PKG_FILE" -target /
+        
+        # Verify installation
+        az version
+        
+        # Check version
+        INSTALLED_VERSION=$(az version --output json | jq -r '.["azure-cli"]')
+        echo "Installed version: $INSTALLED_VERSION"
+        
+        if [ "$INSTALLED_VERSION" = "${{ parameters.AzureCliVersion }}" ]; then
+          echo "✅ Offline PKG installation successful"
+        else
+          echo "##[error]Version mismatch: expected ${{ parameters.AzureCliVersion }}, got $INSTALLED_VERSION"
+          exit 1
+        fi
+      displayName: 'Test offline install'
+
+# ============================================================================
+# STAGE 7: RELEASE SUMMARY
+# ============================================================================
+- stage: ReleaseSummary
+  displayName: '7. Release Summary'
+  dependsOn:
+  - SignAllBinaries
+  - NotarizeWithApple
+  - VerifySigningAndNotarization
+  - PublishToGitHub
+  - UpdateHomebrewFormula
+  - TestInstallation
+  condition: always()
+  jobs:
+  - job: PrintSummary
+    displayName: 'Print release summary'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo "##[section]============================================================"
+        echo "##[section]  Azure CLI macOS PKG Release Summary"
+        echo "##[section]============================================================"
+        echo ""
+        echo "## Release Information"
+        echo "- **Version**: ${{ parameters.AzureCliVersion }}"
+        echo "- **Release Tag**: $(ReleaseTag)"
+        echo "- **Bundle ID**: ${{ parameters.BundleId }}"
+        echo "- **Pre-release**: ${{ parameters.IsPrerelease }}"
+        echo ""
+        echo "## Source Build"
+        echo "- **Unsigned Build ID**: ${{ parameters.UnsignedBuildId }}"
+        echo "- **Pipeline**: ${{ parameters.UnsignedPipelineName }}"
+        echo ""
+        echo "## Completed Stages"
+        echo "1. ✅ Sign All Binaries"
+        echo "2. ✅ Notarize with Apple"
+        echo "3. ✅ Verify Signing & Notarization"
+        echo "4. ✅ Publish to GitHub"
+        echo "5. ✅ Update Homebrew Formula"
+        if [ "${{ parameters.SkipTests }}" == "false" ]; then
+          echo "6. ✅ Test Installation"
+        else
+          echo "6. ⏭️  Test Installation - SKIPPED"
+        fi
+        echo ""
+        echo "## GitHub Release"
+        echo "- **URL**: https://github.com/${{ parameters.GitHubRepo }}/releases/tag/$(ReleaseTag)"
+        echo "- **Asset**: $(PkgFileName)"
+        echo ""
+        echo "## Homebrew Installation"
+        echo "- **Repository**: ${{ parameters.HomebrewTapRepo }}"
+        echo "- **Formula**: ${{ parameters.FormulaName }}"
+        echo ""
+        echo "## User Installation Commands"
+        echo ""
+        echo "### Homebrew (Recommended)"
+        echo "\`\`\`bash"
+        echo "brew tap ${{ parameters.HomebrewTapRepo }}"
+        echo "brew install ${{ parameters.FormulaName }}"
+        echo "\`\`\`"
+        echo ""
+        echo "### Offline PKG"
+        echo "\`\`\`bash"
+        echo "curl -L -o azure-cli.pkg https://github.com/${{ parameters.GitHubRepo }}/releases/download/$(ReleaseTag)/$(PkgFileName)"
+        echo "sudo installer -pkg azure-cli.pkg -target /"
+        echo "\`\`\`"
+        echo ""
+        echo "##[section]============================================================"
+        echo "##[section]  Release Complete! 🎉"
+        echo "##[section]============================================================"
+      displayName: 'Release Summary'
