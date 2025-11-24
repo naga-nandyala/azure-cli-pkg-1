@@ -8,11 +8,6 @@
 # 6. Update Homebrew formula
 # 7. Test Homebrew installation
 #
-# CodeQL suppressions for Azure Pipelines YAML
-# lgtm[yml/insecure-command-line]: Pipeline scripts require shell command execution for package signing and notarization
-# lgtm[yml/command-injection]: All commands are from trusted pipeline parameters and controlled sources
-# lgtm[yml/code-injection]: Pipeline parameters are validated and from controlled repository configuration
-#
 # This pipeline consolidates all individual pipelines into one complete workflow
 
 trigger: none # Manual trigger only

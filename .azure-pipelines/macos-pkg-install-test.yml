@@ -1,8 +1,3 @@
-# CodeQL suppressions for Azure Pipelines YAML
-# lgtm[yml/insecure-command-line]: Pipeline scripts require shell command execution for Azure CLI testing
-# lgtm[yml/command-injection]: All commands are from trusted pipeline parameters and controlled sources
-# lgtm[yml/code-injection]: Pipeline parameters are validated and from controlled repository configuration
-
 trigger: none
 
 pr: none
