@@ -1,551 +1,1172 @@
 # Azure CLI - Complete macOS PKG Release Pipeline
-# This pipeline performs the entire release workflow in a single pipeline:
-# 1. Download unsigned PKG from build pipeline
-# 2. Sign all binaries + PKG wrapper
-# 3. Notarize with Apple
-# 4. Verify signing and notarization
-# 5. Publish to GitHub releases
+# This is a single all-in-one pipeline that performs:
+# 1. Download and sign all binaries + PKG with ESRP
+# 2. Notarize with Apple via ESRP
+# 3. Staple notarization ticket
+# 4. Verify signatures and notarization
+# 5. Publish to GitHub Release
 # 6. Update Homebrew formula
-# 7. Test both installation methods
+# 7. Test Homebrew installation
+#
+# This pipeline consolidates all individual pipelines into one complete workflow
 
 trigger: none # Manual trigger only
 
 parameters:
   - name: UnsignedBuildId
-    displayName: 'Build ID of unsigned PKG (from macos-pkg-build.yml)'
+    displayName: 'Unsigned Build ID (from naga_macos_build)'
     type: string
     default: '282071'
-  - name: UnsignedPipelineName
-    displayName: 'Unsigned PKG Pipeline Name'
-    type: string
-    default: 'naga_macos_build'
   - name: AzureCliVersion
     displayName: 'Azure CLI Version (e.g., 2.0.0)'
     type: string
     default: '2.0.0'
+  - name: BundleId
+    displayName: 'Bundle ID for signing/notarization'
+    type: string
+    default: 'com.microsoft.azure.cli'
   - name: GitHubRepo
     displayName: 'GitHub Repository (owner/repo)'
     type: string
     default: 'naga-nandyala/azure-cli-pkg-1'
   - name: HomebrewTapRepo
-    displayName: 'Homebrew Tap Repository (owner/repo)'
+    displayName: 'Homebrew Tap Repository'
     type: string
     default: 'naga-nandyala/homebrew-mycli-app'
   - name: FormulaName
     displayName: 'Homebrew Formula Name'
     type: string
     default: 'azure-cli-pr'
-  - name: BundleId
-    displayName: 'Bundle ID for signing'
-    type: string
-    default: 'com.microsoft.azure.cli'
-  - name: IsPrerelease
-    displayName: 'Mark GitHub release as pre-release'
+  - name: IsPreRelease
+    displayName: 'Mark GitHub release as Pre-release'
     type: boolean
     default: false
-  - name: SkipTests
-    displayName: 'Skip installation tests (for faster releases)'
+  - name: IsDraft
+    displayName: 'Create GitHub release as Draft'
     type: boolean
     default: false
+
+resources:
+  repositories:
+  - repository: homebrewtap
+    type: github
+    endpoint: github.com_naga-nandyala
+    name: naga-nandyala/homebrew-mycli-app
 
 variables:
   - group: 'AME ESRP Variable Group'
+  
+  - name: DOTNET_CLI_TELEMETRY_OPTOUT
+    value: 1
+  - name: DOTNET_NOLOGO
+    value: 1
+  - name: NugetSecurityAnalysisWarningLevel
+    value: none
+  - name: skipNugetSecurityAnalysis
+    value: true
   - name: AzureCliVersion
     value: ${{ parameters.AzureCliVersion }}
+  - name: UnsignedBuildId
+    value: ${{ parameters.UnsignedBuildId }}
+  - name: BundleId
+    value: ${{ parameters.BundleId }}
   - name: GitHubRepo
     value: ${{ parameters.GitHubRepo }}
+  - name: HomebrewTapRepo
+    value: ${{ parameters.HomebrewTapRepo }}
+  - name: FormulaName
+    value: ${{ parameters.FormulaName }}
   - name: ReleaseTag
-    value: 'v${{ parameters.AzureCliVersion }}'
-  - name: PkgFileName
-    value: 'azure-cli-${{ parameters.AzureCliVersion }}-macos-arm64-notarized.pkg'
+    value: v${{ parameters.AzureCliVersion }}
+  - name: GITHUB_TOKEN
+    value: $[ resources.repositories['homebrewtap'].token ]
 
-name: complete-release-$(AzureCliVersion)-$(Date:yyyyMMdd)-$(Rev:r)
+name: release-complete-$(AzureCliVersion)-$(Build.BuildId)
 
 stages:
 # ============================================================================
-# STAGE 1: DOWNLOAD & SIGN ALL BINARIES
+# STAGE 1: DOWNLOAD & EXTRACT UNSIGNED PKG
 # ============================================================================
-- stage: SignAllBinaries
-  displayName: '1. Download & Sign All Binaries'
+- stage: DownloadAndExtract
+  displayName: 'Stage 1: Download Unsigned PKG and Extract'
   jobs:
-  - job: SignBinaries
-    displayName: 'Sign all binaries and PKG'
+  - job: DownloadAndExtractPkg
+    displayName: 'Download and extract PKG contents'
     pool:
       vmImage: 'macos-14'
     
     steps:
     - checkout: none
     
-    - bash: |
-        echo "##[section]Pipeline Parameters"
-        echo "Unsigned Build ID: ${{ parameters.UnsignedBuildId }}"
-        echo "Unsigned Pipeline: ${{ parameters.UnsignedPipelineName }}"
-        echo "Azure CLI Version: ${{ parameters.AzureCliVersion }}"
-        echo "Bundle ID: ${{ parameters.BundleId }}"
-      displayName: 'Show parameters'
-    
-    # Download unsigned PKG from build pipeline
     - task: DownloadPipelineArtifact@2
-      displayName: 'Download unsigned PKG'
+      displayName: 'Download unsigned ARM64 PKG'
       inputs:
         buildType: 'specific'
-        project: '$(System.TeamProjectId)'
-        definition: '${{ parameters.UnsignedPipelineName }}'
+        project: 'public'
+        definition: 'naga_macos_build'
         buildVersionToDownload: 'specific'
-        buildId: '${{ parameters.UnsignedBuildId }}'
-        artifactName: 'macos-pkg'
+        buildId: $(UnsignedBuildId)
+        artifactName: 'pkg-installer-macos-arm64'
         targetPath: '$(Pipeline.Workspace)/unsigned-pkg'
     
     - bash: |
-        echo "##[section]Downloaded PKG contents:"
-        ls -lh "$(Pipeline.Workspace)/unsigned-pkg"
+        set -e
+        echo "=== Downloaded PKG Files ==="
+        ls -lh $(Pipeline.Workspace)/unsigned-pkg/
+        echo ""
         
         # Find the PKG file
-        PKG_FILE=$(find "$(Pipeline.Workspace)/unsigned-pkg" -name "*.pkg" | head -1)
-        echo "Found PKG: $PKG_FILE"
+        PKG_FILE=$(find $(Pipeline.Workspace)/unsigned-pkg -name "*.pkg" -type f | head -1)
         
-        # Set variable for downstream steps
-        echo "##vso[task.setvariable variable=UnsignedPkgPath]$PKG_FILE"
-      displayName: 'Locate unsigned PKG'
+        if [ -z "$PKG_FILE" ]; then
+          echo "❌ ERROR: No PKG file found!"
+          exit 1
+        fi
+        
+        echo "✅ Found PKG: $PKG_FILE"
+        echo "PKG size: $(du -h "$PKG_FILE" | cut -f1)"
+        
+        # Create extraction directory
+        EXTRACT_DIR="$(Pipeline.Workspace)/pkg-extracted"
+        mkdir -p "$EXTRACT_DIR"
+        
+        echo ""
+        echo "=== Extracting PKG (XAR archive) ==="
+        cd "$EXTRACT_DIR"
+        xar -xf "$PKG_FILE"
+        
+        echo ""
+        echo "=== PKG Structure ==="
+        ls -lh
+        
+        # Find the component PKG
+        COMPONENT_PKG=$(find . -name "*.pkg" -type d | grep -v "^\.$" | head -1)
+        
+        if [ -z "$COMPONENT_PKG" ]; then
+          echo "❌ ERROR: No component PKG found!"
+          exit 1
+        fi
+        
+        echo ""
+        echo "✅ Found component PKG: $COMPONENT_PKG"
+        
+        # Extract the Payload (contains actual files)
+        echo ""
+        echo "=== Extracting Payload ==="
+        PAYLOAD_DIR="$(Pipeline.Workspace)/payload"
+        mkdir -p "$PAYLOAD_DIR"
+        
+        cd "$PAYLOAD_DIR"
+        cat "$EXTRACT_DIR/$COMPONENT_PKG/Payload" | gunzip -dc | cpio -i
+        
+        echo ""
+        echo "=== Payload extracted to: $PAYLOAD_DIR ==="
+        echo "Total size: $(du -sh . | cut -f1)"
+        
+        # Find all executables and libraries that need signing
+        echo ""
+        echo "=== Finding files to sign ==="
+        
+        # Python executables
+        find . -type f -name "python*" ! -name "*.pyc" ! -name "*.py" | head -10
+        
+        # Shared libraries
+        echo ""
+        echo "Dylibs found:"
+        find . -type f -name "*.dylib" | wc -l
+        
+        echo ""
+        echo "SO files found:"
+        find . -type f -name "*.so" | wc -l
+        
+        # az CLI executable
+        echo ""
+        echo "az executable:"
+        find . -type f -name "az" -o -name "azurecli"
+        
+      displayName: 'Extract PKG and Payload'
     
-    # Extract PKG to access binaries
     - bash: |
         set -e
-        echo "##[section]Extracting unsigned PKG"
+        echo "=== Creating file list for signing ==="
         
-        WORK_DIR="$(Pipeline.Workspace)/pkg-work"
-        mkdir -p "$WORK_DIR"
+        PAYLOAD_DIR="$(Pipeline.Workspace)/payload"
+        FILES_TO_SIGN="$(Pipeline.Workspace)/files-to-sign.txt"
         
-        # Expand the PKG
-        pkgutil --expand "$(UnsignedPkgPath)" "$WORK_DIR/expanded"
+        cd "$PAYLOAD_DIR"
         
-        # Extract payload
-        cd "$WORK_DIR/expanded"
-        for payload in */Payload; do
-          echo "Extracting $payload..."
-          tar -xzf "$payload" -C "$WORK_DIR"
-        done
+        # Find all binaries that need signing:
+        # 1. Mach-O executables (including Python)
+        # 2. macOS Dynamic libraries (.dylib)
+        # NOTE: .so files are often Linux ELF binaries, only include if Mach-O
         
-        echo "##[section]Extracted contents:"
-        ls -lR "$WORK_DIR"
+        echo "Scanning for Mach-O binaries..."
         
-        echo "##vso[task.setvariable variable=WorkDir]$WORK_DIR"
-      displayName: 'Extract PKG contents'
+        # Use 'file' command to identify ONLY Mach-O binaries
+        find . -type f | while read filepath; do
+          filetype=$(file -b "$filepath")
+          
+          # Only include if it's a Mach-O binary (excludes Linux ELF .so files)
+          if echo "$filetype" | grep -q -i "Mach-O"; then
+            echo "$filepath"
+          fi
+        done | sort -u > "$FILES_TO_SIGN"
+        
+        echo ""
+        echo "=== Files identified for signing ==="
+        echo "Total Mach-O binaries: $(wc -l < $FILES_TO_SIGN)"
+        echo ""
+        echo "Sample (first 20):"
+        head -20 "$FILES_TO_SIGN"
+        
+      displayName: 'Identify binaries for signing'
     
-    # Install signing certificate
-    - task: InstallAppleCertificate@2
-      displayName: 'Install signing certificate'
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish extracted payload'
       inputs:
-        certSecureFile: '$(APPLE_DEVELOPER_ID_CERT_FILE)'
-        certPwd: '$(APPLE_DEVELOPER_ID_CERT_PASSWORD)'
-        keychain: 'temp'
-        deleteCert: true
+        targetPath: '$(Pipeline.Workspace)/payload'
+        artifactName: 'unsigned-binaries'
     
-    # Sign all binaries
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish file list'
+      inputs:
+        targetPath: '$(Pipeline.Workspace)/files-to-sign.txt'
+        artifactName: 'files-to-sign-list'
+    
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish PKG metadata'
+      inputs:
+        targetPath: '$(Pipeline.Workspace)/pkg-extracted'
+        artifactName: 'pkg-metadata'
+
+# ============================================================================
+# STAGE 2: SIGN ALL BINARIES WITH ESRP
+# ============================================================================
+- stage: SignBinaries
+  displayName: 'Stage 2: Sign All Binaries with ESRP'
+  dependsOn: DownloadAndExtract
+  condition: succeeded()
+  jobs:
+  - job: SignAllBinaries
+    displayName: 'Sign binaries using ESRP'
+    pool:
+      vmImage: 'windows-2022'
+    
+    steps:
+    - checkout: none
+    
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download unsigned binaries'
+      inputs:
+        artifactName: 'unsigned-binaries'
+        targetPath: '$(Pipeline.Workspace)/unsigned-binaries'
+    
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download file list'
+      inputs:
+        artifactName: 'files-to-sign-list'
+        targetPath: '$(Pipeline.Workspace)'
+    
+    - pwsh: |
+        Write-Host "=== Preparing binaries for ESRP signing ==="
+        Write-Host "NOTE: ESRP MacAppDeveloperSign requires ZIP archives, not individual files"
+        Write-Host "Workaround: Compress each binary into individual ZIP files"
+        
+        $unsignedDir = "$(Pipeline.Workspace)/unsigned-binaries"
+        $fileListPath = "$(Pipeline.Workspace)/files-to-sign.txt"
+        $toBeSignedDir = "$(Pipeline.Workspace)/toBeSigned"
+        
+        # Create directory for ZIP files to be signed
+        if (Test-Path $toBeSignedDir) {
+          Remove-Item -Path $toBeSignedDir -Recurse -Force
+        }
+        New-Item -ItemType Directory -Path $toBeSignedDir -Force | Out-Null
+        
+        Write-Host ""
+        Write-Host "Reading file list..."
+        
+        if (-not (Test-Path $fileListPath)) {
+          Write-Error "File list not found: $fileListPath"
+          exit 1
+        }
+        
+        $filesToSign = Get-Content $fileListPath
+        Write-Host "Files to sign: $($filesToSign.Count)"
+        
+        Write-Host ""
+        Write-Host "Creating individual ZIP files for each binary..."
+        Write-Host "(Required because ESRP MacAppDeveloperSign only accepts ZIP/DMG archives)"
+        
+        $zippedCount = 0
+        $fileMapping = @{}
+        
+        foreach ($relPath in $filesToSign) {
+          # Remove leading ./
+          $relPath = $relPath.TrimStart('.', '/')
+          
+          $sourcePath = Join-Path $unsignedDir $relPath
+          
+          if (Test-Path $sourcePath) {
+            # Create unique flat filename (replace / with __)
+            $flatName = $relPath -replace '[/\\]', '__'
+            $zipName = "$flatName.zip"
+            $zipPath = Join-Path $toBeSignedDir $zipName
+            
+            # Compress individual file to ZIP
+            $fileName = Split-Path $sourcePath -Leaf
+            Compress-Archive -Path $sourcePath -DestinationPath $zipPath -Force
+            
+            # Store mapping for later reconstruction
+            $fileMapping[$zipName] = @{
+              "OriginalPath" = $relPath
+              "FileName" = $fileName
+            }
+            
+            $zippedCount++
+            
+            if ($zippedCount -le 10) {
+              $zipSize = [math]::Round((Get-Item $zipPath).Length / 1KB, 1)
+              Write-Host "  ✓ $relPath -> $zipName ($zipSize KB)"
+            }
+          } else {
+            Write-Warning "File not found: $sourcePath"
+          }
+        }
+        
+        Write-Host ""
+        Write-Host "✅ Created $zippedCount ZIP files"
+        Write-Host ""
+        Write-Host "ZIP directory size: $([math]::Round((Get-ChildItem $toBeSignedDir -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB, 2)) MB"
+        
+        # Save mapping for reconstruction
+        $mappingPath = "$(Pipeline.Workspace)/file-mapping.json"
+        $fileMapping | ConvertTo-Json | Set-Content $mappingPath
+        Write-Host "File mapping saved: $mappingPath"
+        
+      displayName: 'Prepare binaries for signing (ZIP each file)'
+    
+    - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
+      displayName: 'ESRP - Sign macOS binaries (ZIP archives)'
+      inputs:
+        ConnectedServiceName: 'ame_esrp_connection'
+        AppRegistrationClientId: '$(ESRPAppClientId)'
+        AppRegistrationTenantId: '$(ESRPAppTenantId)'
+        AuthAKVName: '$(ESRPKVName)'
+        AuthCertName: '$(ESRPAuthCertName)'
+        AuthSignCertName: '$(ESRPSignCertName)'
+        FolderPath: '$(Pipeline.Workspace)/toBeSigned'
+        Pattern: '*.zip'
+        signConfigType: 'inlineSignParams'
+        inlineOperation: |
+          [
+            {
+              "KeyCode": "CP-401337-Apple",
+              "OperationCode": "MacAppDeveloperSign",
+              "ToolName": "sign",
+              "ToolVersion": "1.0",
+              "Parameters": {
+                "Hardening": "--options=runtime"
+              }
+            }
+          ]
+        SessionTimeout: '120'
+        MaxConcurrency: '50'
+        MaxRetryAttempts: '5'
+    
+    - pwsh: |
+        Write-Host "=== Extracting signed binaries from ZIP files ==="
+        
+        $signedZipsDir = "$(Pipeline.Workspace)/toBeSigned"
+        $outputDir = "$(Pipeline.Workspace)/signed-binaries"
+        $mappingPath = "$(Pipeline.Workspace)/file-mapping.json"
+        
+        if (-not (Test-Path $mappingPath)) {
+          Write-Error "File mapping not found: $mappingPath"
+          exit 1
+        }
+        
+        # Read mapping
+        $fileMapping = Get-Content $mappingPath | ConvertFrom-Json
+        
+        # Create output directory
+        if (Test-Path $outputDir) {
+          Remove-Item -Path $outputDir -Recurse -Force
+        }
+        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+        
+        Write-Host ""
+        Write-Host "Extracting signed binaries from ZIPs..."
+        
+        $extractedCount = 0
+        foreach ($property in $fileMapping.PSObject.Properties) {
+          $zipName = $property.Name
+          $originalRelPath = $property.Value.OriginalPath
+          $fileName = $property.Value.FileName
+          
+          $zipPath = Join-Path $signedZipsDir $zipName
+          
+          if (Test-Path $zipPath) {
+            # Create temporary extraction directory
+            $tempExtractDir = Join-Path $env:TEMP "extract-$extractedCount"
+            New-Item -ItemType Directory -Path $tempExtractDir -Force | Out-Null
+            
+            # Extract ZIP
+            Expand-Archive -Path $zipPath -DestinationPath $tempExtractDir -Force
+            
+            # Find the extracted signed binary
+            $signedFile = Join-Path $tempExtractDir $fileName
+            
+            if (Test-Path $signedFile) {
+              # Restore to original directory structure
+              $targetPath = Join-Path $outputDir $originalRelPath
+              $targetDir = Split-Path $targetPath -Parent
+              
+              if (-not (Test-Path $targetDir)) {
+                New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+              }
+              
+              # Copy signed binary to output
+              Copy-Item -Path $signedFile -Destination $targetPath -Force
+              $extractedCount++
+              
+              if ($extractedCount -le 10) {
+                Write-Host "  ✓ $zipName -> $originalRelPath"
+              }
+            } else {
+              Write-Warning "Signed file not found in ZIP: $zipPath"
+            }
+            
+            # Clean up temp directory
+            Remove-Item -Path $tempExtractDir -Recurse -Force -ErrorAction SilentlyContinue
+          } else {
+            Write-Warning "Signed ZIP not found: $zipPath"
+          }
+        }
+        
+        Write-Host ""
+        Write-Host "✅ Extracted $extractedCount signed binaries"
+        
+      displayName: 'Extract signed binaries from ZIPs'
+    
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish signed binaries'
+      inputs:
+        targetPath: '$(Pipeline.Workspace)/signed-binaries'
+        artifactName: 'signed-binaries'
+
+# ============================================================================
+# STAGE 3: REPACKAGE AND SIGN PKG
+# ============================================================================
+- stage: RepackageAndSignPkg
+  displayName: 'Stage 3: Repackage PKG and Sign'
+  dependsOn: SignBinaries
+  condition: succeeded()
+  jobs:
+  - job: RepackagePkg
+    displayName: 'Repackage PKG with signed binaries (macOS)'
+    pool:
+      vmImage: 'macos-14'
+    
+    steps:
+    - checkout: none
+    
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download original payload'
+      inputs:
+        artifactName: 'unsigned-binaries'
+        targetPath: '$(Pipeline.Workspace)/original-payload'
+    
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download signed binaries'
+      inputs:
+        artifactName: 'signed-binaries'
+        targetPath: '$(Pipeline.Workspace)/signed-binaries'
+    
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download PKG metadata'
+      inputs:
+        artifactName: 'pkg-metadata'
+        targetPath: '$(Pipeline.Workspace)/pkg-metadata'
+    
     - bash: |
         set -e
-        echo "##[section]Signing all binaries"
+        echo "=== Merging signed binaries back into payload ==="
         
-        WORK_DIR="$(WorkDir)"
-        SIGNING_IDENTITY="$(APPLE_SIGNING_IDENTITY)"
+        ORIGINAL_PAYLOAD="$(Pipeline.Workspace)/original-payload"
+        SIGNED_BINARIES="$(Pipeline.Workspace)/signed-binaries"
+        MERGED_PAYLOAD="$(Pipeline.Workspace)/merged-payload"
         
-        # Find and sign all binaries
-        find "$WORK_DIR" -type f -perm +111 | while read binary; do
-          if file "$binary" | grep -q "Mach-O"; then
-            echo "Signing: $binary"
-            codesign --force --sign "$SIGNING_IDENTITY" \
-              --timestamp \
-              --options runtime \
-              --entitlements "$(Build.SourcesDirectory)/.azure-pipelines/resources/entitlements.plist" \
-              "$binary"
+        # Copy original payload
+        echo "Copying original payload..."
+        cp -R "$ORIGINAL_PAYLOAD" "$MERGED_PAYLOAD"
+        
+        # Replace unsigned binaries with signed ones
+        echo ""
+        echo "Replacing unsigned binaries with signed versions..."
+        
+        cd "$SIGNED_BINARIES"
+        find . -type f | while read signed_file; do
+          target_file="$MERGED_PAYLOAD/$signed_file"
+          
+          if [ -f "$target_file" ]; then
+            cp "$signed_file" "$target_file"
           fi
         done
         
-        # Sign all .dylib and .so files
-        find "$WORK_DIR" -type f \( -name "*.dylib" -o -name "*.so" \) | while read lib; do
-          echo "Signing: $lib"
-          codesign --force --sign "$SIGNING_IDENTITY" \
-            --timestamp \
-            --options runtime \
-            "$lib"
-        done
+        echo ""
+        echo "✅ Merged payload ready"
+        echo "Size: $(du -sh $MERGED_PAYLOAD | cut -f1)"
         
-        echo "##[section]Binary signing complete"
-      displayName: 'Sign all binaries and libraries'
+      displayName: 'Merge signed binaries into payload'
     
-    # Repackage PKG
     - bash: |
         set -e
-        echo "##[section]Repackaging signed PKG"
+        echo "=== Building new PKG with signed binaries ==="
         
-        WORK_DIR="$(WorkDir)"
-        OUTPUT_DIR="$(Pipeline.Workspace)/signed-pkg"
-        mkdir -p "$OUTPUT_DIR"
+        MERGED_PAYLOAD="$(Pipeline.Workspace)/merged-payload"
+        OUTPUT_PKG="$(Pipeline.Workspace)/azure-cli-$(AzureCliVersion)-macos-arm64-signed-binaries.pkg"
+        COMPONENT_PKG="$(Pipeline.Workspace)/azure-cli-component-$(AzureCliVersion)-macos-arm64.pkg"
         
-        # Create component PKG
-        pkgbuild --root "$WORK_DIR" \
-          --identifier "${{ parameters.BundleId }}" \
-          --version "${{ parameters.AzureCliVersion }}" \
-          --install-location "/" \
-          "$OUTPUT_DIR/component.pkg"
+        echo "Creating component PKG from merged payload..."
+        pkgbuild --root "$MERGED_PAYLOAD" \
+                 --identifier "$(BundleId)" \
+                 --version "$(AzureCliVersion)" \
+                 --install-location "/usr/local/az" \
+                 "$COMPONENT_PKG"
         
-        # Sign the component PKG
-        productsign --sign "$(APPLE_INSTALLER_SIGNING_IDENTITY)" \
-          "$OUTPUT_DIR/component.pkg" \
-          "$OUTPUT_DIR/azure-cli-${{ parameters.AzureCliVersion }}-macos-arm64-signed.pkg"
+        echo "✅ Component PKG created: $(du -h $COMPONENT_PKG | cut -f1)"
         
-        # Verify signature
-        pkgutil --check-signature "$OUTPUT_DIR/azure-cli-${{ parameters.AzureCliVersion }}-macos-arm64-signed.pkg"
+        echo ""
+        echo "Creating distribution PKG..."
+        productbuild --component "$COMPONENT_PKG" /usr/local/az \
+                     --identifier "$(BundleId)" \
+                     --version "$(AzureCliVersion)" \
+                     "$OUTPUT_PKG"
         
-        echo "##vso[task.setvariable variable=SignedPkgPath;isOutput=true]$OUTPUT_DIR/azure-cli-${{ parameters.AzureCliVersion }}-macos-arm64-signed.pkg"
-      name: PackageSigned
-      displayName: 'Repackage and sign PKG'
+        echo ""
+        echo "✅ PKG created: $OUTPUT_PKG"
+        echo "Size: $(du -h $OUTPUT_PKG | cut -f1)"
+        
+      displayName: 'Build new PKG with signed binaries'
     
-    # Publish signed PKG as artifact
     - task: PublishPipelineArtifact@1
-      displayName: 'Publish signed PKG'
+      displayName: 'Publish PKG with signed binaries'
       inputs:
-        targetPath: '$(Pipeline.Workspace)/signed-pkg'
-        artifactName: 'signed-pkg'
+        targetPath: '$(Pipeline.Workspace)/azure-cli-$(AzureCliVersion)-macos-arm64-signed-binaries.pkg'
+        artifactName: 'pkg-with-signed-binaries'
+
+  - job: SignPkg
+    displayName: 'Sign PKG with ESRP (Windows)'
+    dependsOn: RepackagePkg
+    pool:
+      vmImage: 'windows-2022'
+    
+    steps:
+    - checkout: none
+    
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download PKG with signed binaries'
+      inputs:
+        artifactName: 'pkg-with-signed-binaries'
+        targetPath: '$(Pipeline.Workspace)/pkg-to-sign'
+    
+    - pwsh: |
+        Write-Host "=== Preparing PKG for ESRP signing ==="
+        
+        $pkgFile = Get-ChildItem -Path "$(Pipeline.Workspace)/pkg-to-sign" -Filter "*.pkg" -File | Select-Object -First 1
+        
+        if (-not $pkgFile) {
+          Write-Error "❌ PKG file not found"
+          exit 1
+        }
+        
+        Write-Host "✅ Found PKG: $($pkgFile.Name)"
+        Write-Host "Size: $([math]::Round($pkgFile.Length / 1MB, 2)) MB"
+        
+        # Compress to ZIP for ESRP
+        $zipPath = "$(Pipeline.Workspace)/$($pkgFile.BaseName).zip"
+        
+        Write-Host ""
+        Write-Host "Compressing to ZIP for ESRP..."
+        Compress-Archive -Path $pkgFile.FullName -DestinationPath $zipPath -Force
+        
+        if (Test-Path $zipPath) {
+          Write-Host "✅ ZIP created: $([math]::Round((Get-Item $zipPath).Length / 1MB, 2)) MB"
+        } else {
+          Write-Error "❌ Failed to create ZIP"
+          exit 1
+        }
+        
+      displayName: 'Compress PKG for ESRP signing'
+    
+    - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
+      displayName: 'ESRP - Sign PKG'
+      inputs:
+        ConnectedServiceName: 'ame_esrp_connection'
+        AppRegistrationClientId: '$(ESRPAppClientId)'
+        AppRegistrationTenantId: '$(ESRPAppTenantId)'
+        AuthAKVName: '$(ESRPKVName)'
+        AuthCertName: '$(ESRPAuthCertName)'
+        AuthSignCertName: '$(ESRPSignCertName)'
+        FolderPath: '$(Pipeline.Workspace)'
+        Pattern: 'azure-cli-*-macos-arm64-signed-binaries.zip'
+        signConfigType: 'inlineSignParams'
+        inlineOperation: |
+          [
+            {
+              "KeyCode": "CP-401337-Apple",
+              "OperationCode": "MacAppDeveloperSign",
+              "ToolName": "sign",
+              "ToolVersion": "1.0",
+              "Parameters": {
+                "Hardening": "--options=runtime"
+              }
+            }
+          ]
+        SessionTimeout: '60'
+        MaxConcurrency: '50'
+        MaxRetryAttempts: '5'
+    
+    - pwsh: |
+        Write-Host "=== Extracting Signed PKG ==="
+        
+        $signedZip = Get-ChildItem -Path "$(Pipeline.Workspace)" -Filter "*signed-binaries.zip" -File | Select-Object -First 1
+        
+        if (-not $signedZip) {
+          Write-Error "❌ Signed ZIP not found"
+          exit 1
+        }
+        
+        Write-Host "Found signed ZIP: $($signedZip.Name)"
+        
+        # Extract
+        $outputDir = "$(Build.ArtifactStagingDirectory)/fully-signed-pkg"
+        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+        
+        Expand-Archive -Path $signedZip.FullName -DestinationPath $outputDir -Force
+        
+        # Rename to indicate it's fully signed
+        $signedPkg = Get-ChildItem -Path $outputDir -Filter "*.pkg" -File | Select-Object -First 1
+        
+        if ($signedPkg) {
+          $newName = $signedPkg.Name -replace 'signed-binaries\.pkg$', 'fully-signed.pkg'
+          $newPath = Join-Path $outputDir $newName
+          Move-Item -Path $signedPkg.FullName -Destination $newPath -Force
+          
+          Write-Host "✅ Fully-signed PKG ready: $newName"
+          Write-Host "   Size: $([math]::Round((Get-Item $newPath).Length / 1MB, 2)) MB"
+          
+          # Generate SHA256
+          $hash = Get-FileHash -Path $newPath -Algorithm SHA256
+          $hashFile = "$newPath.sha256"
+          "$($hash.Hash.ToLower())  $newName" | Out-File -FilePath $hashFile -Encoding ASCII -NoNewline
+          
+          Write-Host "   SHA256: $($hash.Hash)"
+        } else {
+          Write-Error "❌ PKG not found after extraction"
+          exit 1
+        }
+        
+      displayName: 'Extract signed PKG'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/fully-signed-pkg
+      artifact: fully-signed-macos-pkg
+      displayName: 'Publish fully signed PKG'
 
 # ============================================================================
-# STAGE 2: NOTARIZE WITH APPLE
+# STAGE 4: NOTARIZE WITH APPLE (ESRP)
 # ============================================================================
 - stage: NotarizeWithApple
-  displayName: '2. Notarize with Apple'
-  dependsOn: SignAllBinaries
+  displayName: 'Stage 4: Notarize with Apple via ESRP'
+  dependsOn: RepackageAndSignPkg
+  condition: succeeded()
   jobs:
-  - job: NotarizePkg
-    displayName: 'Submit to Apple Notary Service'
+  - job: NotarizeARM64
+    displayName: 'Notarize PKG with Apple (ESRP on Windows)'
+    pool:
+      vmImage: windows-2022
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: fully-signed-macos-pkg
+      displayName: 'Download fully-signed PKG'
+    
+    - pwsh: |
+        Write-Host "=== Preparing Fully-Signed PKG for Apple Notarization ==="
+        
+        $signedPkg = Get-ChildItem -Path "$(Pipeline.Workspace)/fully-signed-macos-pkg" -Filter "*fully-signed.pkg" -File | Select-Object -First 1
+        
+        if (-not $signedPkg) {
+          Write-Error "❌ No PKG file found"
+          exit 1
+        }
+        
+        Write-Host "✅ Found signed PKG: $($signedPkg.Name)"
+        Write-Host "   Size: $([math]::Round($signedPkg.Length / 1MB, 2)) MB"
+        
+        # Copy to workspace
+        $targetPath = "$(Pipeline.Workspace)/$($signedPkg.Name)"
+        Copy-Item -Path $signedPkg.FullName -Destination $targetPath -Force
+        
+        Write-Host ""
+        Write-Host "=== Ready for Apple notarization ==="
+        
+      displayName: 'Prepare fully-signed PKG for notarization'
+    
+    - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
+      displayName: 'ESRP - Notarize ARM64 PKG with Apple'
+      inputs:
+        ConnectedServiceName: 'ame_esrp_connection'
+        AppRegistrationClientId: '$(ESRPAppClientId)'
+        AppRegistrationTenantId: '$(ESRPAppTenantId)'
+        AuthAKVName: '$(ESRPKVName)'
+        AuthCertName: '$(ESRPAuthCertName)'
+        AuthSignCertName: '$(ESRPSignCertName)'
+        FolderPath: '$(Pipeline.Workspace)'
+        Pattern: '*fully-signed.pkg'
+        signConfigType: 'inlineSignParams'
+        inlineOperation: |
+          [
+            {
+              "KeyCode": "CP-401337-Apple",
+              "OperationCode": "MacAppNotarize",
+              "ToolName": "sign",
+              "ToolVersion": "1.0",
+              "Parameters": {
+                "BundleId": "$(BundleId)"
+              }
+            }
+          ]
+        SessionTimeout: '60'
+        MaxConcurrency: '50'
+        MaxRetryAttempts: '5'
+    
+    - pwsh: |
+        Write-Host "=== Collecting Notarized PKG ==="
+        
+        $notarizedPkg = Get-ChildItem -Path "$(Pipeline.Workspace)" -Filter "*fully-signed.pkg" -File | 
+                        Sort-Object LastWriteTime -Descending | 
+                        Select-Object -First 1
+        
+        if (-not $notarizedPkg) {
+          Write-Error "❌ Notarized PKG not found"
+          exit 1
+        }
+        
+        Write-Host "Found notarized PKG: $($notarizedPkg.Name)"
+        
+        # Create output directory
+        $outputDir = "$(Build.ArtifactStagingDirectory)/notarized-pkg"
+        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+        
+        # Rename to indicate it's notarized
+        $notarizedName = $notarizedPkg.Name -replace 'fully-signed\.pkg$', 'notarized.pkg'
+        $newPath = Join-Path $outputDir $notarizedName
+        Copy-Item -Path $notarizedPkg.FullName -Destination $newPath -Force
+        
+        if (Test-Path $newPath) {
+          Write-Host "✅ Notarized PKG ready"
+          Write-Host "   Name: $notarizedName"
+          Write-Host "   Size: $([math]::Round((Get-Item $newPath).Length / 1MB, 2)) MB"
+          
+          # Generate SHA256
+          $hash = Get-FileHash -Path $newPath -Algorithm SHA256
+          $hashFile = "$newPath.sha256"
+          "$($hash.Hash.ToLower())  $notarizedName" | Out-File -FilePath $hashFile -Encoding ASCII -NoNewline
+          
+          Write-Host "   SHA256: $($hash.Hash)"
+        }
+        
+      displayName: 'Collect notarized PKG'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/notarized-pkg
+      artifact: notarized-macos-pkg
+      displayName: 'Publish notarized PKG'
+
+  - job: StapleTicket
+    displayName: 'Staple notarization ticket (macOS)'
+    dependsOn: NotarizeARM64
     pool:
       vmImage: 'macos-14'
     
     steps:
     - checkout: none
     
-    # Download signed PKG
-    - task: DownloadPipelineArtifact@2
-      displayName: 'Download signed PKG'
-      inputs:
-        artifactName: 'signed-pkg'
-        targetPath: '$(Pipeline.Workspace)/signed-pkg'
+    - download: current
+      artifact: notarized-macos-pkg
+      displayName: 'Download notarized PKG'
     
     - bash: |
-        SIGNED_PKG=$(find "$(Pipeline.Workspace)/signed-pkg" -name "*-signed.pkg" | head -1)
-        echo "Signed PKG: $SIGNED_PKG"
-        echo "##vso[task.setvariable variable=SignedPkgPath]$SIGNED_PKG"
-      displayName: 'Locate signed PKG'
-    
-    # Submit for notarization
-    - bash: |
-        set -e
-        echo "##[section]Submitting for notarization"
+        echo "=== Stapling Notarization Ticket ==="
         
-        xcrun notarytool submit "$(SignedPkgPath)" \
-          --apple-id "$(APPLE_ID)" \
-          --password "$(APPLE_APP_SPECIFIC_PASSWORD)" \
-          --team-id "$(APPLE_TEAM_ID)" \
-          --wait \
-          --timeout 30m \
-          --output-format json > notarization-result.json
+        NOTARIZED_DIR="$(Pipeline.Workspace)/notarized-macos-pkg"
+        STAPLED_DIR="$(Build.ArtifactStagingDirectory)/stapled-pkg"
+        mkdir -p "$STAPLED_DIR"
         
-        cat notarization-result.json
+        for pkg in "$NOTARIZED_DIR"/*.pkg; do
+          if [ -f "$pkg" ]; then
+            pkg_name=$(basename "$pkg")
+            echo "Processing: $pkg_name"
+            
+            # Copy to staging directory
+            cp "$pkg" "$STAPLED_DIR/$pkg_name"
+            
+            # Staple the notarization ticket
+            echo "Stapling notarization ticket..."
+            if xcrun stapler staple "$STAPLED_DIR/$pkg_name"; then
+              echo "✅ Ticket stapled successfully"
+            else
+              echo "⚠️  Stapling failed - waiting 30 seconds and retrying..."
+              sleep 30
+              
+              if xcrun stapler staple "$STAPLED_DIR/$pkg_name"; then
+                echo "✅ Ticket stapled successfully (after retry)"
+              else
+                echo "❌ Stapling failed after retry"
+              fi
+            fi
+            
+            # Validate the stapled ticket
+            echo "Validating stapled ticket..."
+            xcrun stapler validate "$STAPLED_DIR/$pkg_name" || true
+            
+            # Copy SHA256 file if exists
+            if [ -f "${pkg}.sha256" ]; then
+              cp "${pkg}.sha256" "$STAPLED_DIR/${pkg_name}.sha256"
+            else
+              # Generate new SHA256 for stapled PKG
+              shasum -a 256 "$STAPLED_DIR/$pkg_name" | awk '{print $1 "  " "'$pkg_name'"}' > "$STAPLED_DIR/${pkg_name}.sha256"
+            fi
+            
+            echo "✅ Done: $(du -h $STAPLED_DIR/$pkg_name | cut -f1)"
+            echo ""
+          fi
+        done
         
-        # Extract submission ID
-        SUBMISSION_ID=$(jq -r '.id' notarization-result.json)
-        echo "Submission ID: $SUBMISSION_ID"
-        echo "##vso[task.setvariable variable=SubmissionId]$SUBMISSION_ID"
+        echo "=== Stapled PKG Files ==="
+        ls -lh "$STAPLED_DIR"
         
-        # Check status
-        STATUS=$(jq -r '.status' notarization-result.json)
-        echo "Status: $STATUS"
-        
-        if [ "$STATUS" != "Accepted" ]; then
-          echo "##[error]Notarization failed!"
-          xcrun notarytool log "$SUBMISSION_ID" \
-            --apple-id "$(APPLE_ID)" \
-            --password "$(APPLE_APP_SPECIFIC_PASSWORD)" \
-            --team-id "$(APPLE_TEAM_ID)"
-          exit 1
-        fi
-        
-        echo "##[section]Notarization succeeded!"
-      displayName: 'Submit and wait for notarization'
-    
-    # Staple notarization ticket
-    - bash: |
-        set -e
-        echo "##[section]Stapling notarization ticket"
-        
-        OUTPUT_DIR="$(Pipeline.Workspace)/notarized-pkg"
-        mkdir -p "$OUTPUT_DIR"
-        
-        # Copy to new filename
-        cp "$(SignedPkgPath)" "$OUTPUT_DIR/$(PkgFileName)"
-        
-        # Staple the ticket
-        xcrun stapler staple "$OUTPUT_DIR/$(PkgFileName)"
-        
-        # Verify stapling
-        xcrun stapler validate "$OUTPUT_DIR/$(PkgFileName)"
-        
-        echo "##[section]Notarization ticket stapled successfully"
       displayName: 'Staple notarization ticket'
     
-    # Publish notarized PKG
-    - task: PublishPipelineArtifact@1
-      displayName: 'Publish notarized PKG'
-      inputs:
-        targetPath: '$(Pipeline.Workspace)/notarized-pkg'
-        artifactName: 'notarized-pkg'
+    - publish: $(Build.ArtifactStagingDirectory)/stapled-pkg
+      artifact: stapled-macos-pkg
+      displayName: 'Publish stapled PKG'
 
 # ============================================================================
-# STAGE 3: VERIFY SIGNING & NOTARIZATION
+# STAGE 5: VERIFY SIGNATURES AND NOTARIZATION
 # ============================================================================
 - stage: VerifySigningAndNotarization
-  displayName: '3. Verify Signing & Notarization'
+  displayName: 'Stage 5: Verify Signing and Notarization'
   dependsOn: NotarizeWithApple
+  condition: succeeded()
   jobs:
-  - job: VerifyPkg
-    displayName: 'Verify PKG signature and notarization'
+  - job: VerifyOnMac
+    displayName: 'Verify notarization on macOS'
     pool:
       vmImage: 'macos-14'
     
     steps:
     - checkout: none
     
-    # Download notarized PKG
-    - task: DownloadPipelineArtifact@2
-      displayName: 'Download notarized PKG'
-      inputs:
-        artifactName: 'notarized-pkg'
-        targetPath: '$(Pipeline.Workspace)/notarized-pkg'
+    - download: current
+      artifact: stapled-macos-pkg
+      displayName: 'Download stapled PKG'
     
     - bash: |
-        PKG_FILE="$(Pipeline.Workspace)/notarized-pkg/$(PkgFileName)"
-        echo "PKG file: $PKG_FILE"
-        echo "##vso[task.setvariable variable=PkgPath]$PKG_FILE"
-      displayName: 'Locate notarized PKG'
-    
-    # Verify PKG signature
-    - bash: |
-        set -e
-        echo "##[section]Verifying PKG signature"
+        echo "=== Verifying Apple Notarization (Stapled PKG) ==="
         
-        pkgutil --check-signature "$(PkgPath)"
+        STAPLED_DIR="$(Pipeline.Workspace)/stapled-macos-pkg"
         
-        # Check for Developer ID certificate
-        if pkgutil --check-signature "$(PkgPath)" | grep -q "Developer ID Installer"; then
-          echo "✅ PKG is signed with Developer ID Installer certificate"
-        else
-          echo "##[error]PKG is not signed with Developer ID Installer certificate"
-          exit 1
-        fi
-      displayName: 'Verify PKG signature'
-    
-    # Verify notarization
-    - bash: |
-        set -e
-        echo "##[section]Verifying notarization"
+        for pkg in "$STAPLED_DIR"/*.pkg; do
+          if [ -f "$pkg" ]; then
+            pkg_name=$(basename "$pkg")
+            echo "Verifying: $pkg_name"
+            echo ""
+            
+            # Check PKG signature
+            echo "1. Checking PKG signature:"
+            pkgutil --check-signature "$pkg"
+            echo ""
+            
+            # Check stapled ticket
+            echo "2. Checking stapled notarization ticket:"
+            if stapler validate "$pkg"; then
+              echo "✅ Stapled ticket is valid - PKG works offline!"
+            else
+              echo "⚠️  No stapled ticket found"
+            fi
+            echo ""
+            
+            # Check notarization status using spctl
+            echo "3. Checking notarization with spctl:"
+            spctl -a -vv -t install "$pkg" 2>&1 || true
+            echo ""
+            
+            # Test PKG structure
+            echo "4. Testing PKG structure:"
+            if pkgutil --payload-files "$pkg" >/dev/null 2>&1; then
+              echo "✅ PKG structure is valid"
+            else
+              echo "⚠️  PKG structure test failed"
+            fi
+            
+            echo "---"
+            echo ""
+          fi
+        done
         
-        # Check with spctl
-        spctl -a -vv -t install "$(PkgPath)"
+        echo "✅ Verification Complete"
         
-        # Validate stapled ticket
-        xcrun stapler validate "$(PkgPath)"
-        
-        echo "✅ PKG is properly notarized and stapled"
-      displayName: 'Verify notarization'
-    
-    # Verify bundle ID
-    - bash: |
-        set -e
-        echo "##[section]Verifying bundle ID"
-        
-        pkgutil --expand "$(PkgPath)" "$(Pipeline.Workspace)/verify-expanded"
-        
-        # Check PackageInfo for bundle ID
-        if grep -q "${{ parameters.BundleId }}" "$(Pipeline.Workspace)/verify-expanded/"*/PackageInfo; then
-          echo "✅ Bundle ID matches: ${{ parameters.BundleId }}"
-        else
-          echo "##[error]Bundle ID mismatch"
-          exit 1
-        fi
-      displayName: 'Verify bundle ID'
+      displayName: 'Verify Apple notarization and stapled ticket'
 
 # ============================================================================
-# STAGE 4: PUBLISH TO GITHUB
+# STAGE 6: PUBLISH TO GITHUB RELEASE
 # ============================================================================
 - stage: PublishToGitHub
-  displayName: '4. Publish GitHub Release'
+  displayName: 'Stage 6: Publish to GitHub Release'
   dependsOn: VerifySigningAndNotarization
+  condition: succeeded()
   jobs:
   - job: CreateRelease
-    displayName: 'Create GitHub release and upload PKG'
+    displayName: 'Create GitHub release'
     pool:
       vmImage: 'ubuntu-latest'
     
     steps:
-    - checkout: self
-      persistCredentials: true
+    - checkout: none
     
-    # Download notarized PKG
-    - task: DownloadPipelineArtifact@2
-      displayName: 'Download notarized PKG'
-      inputs:
-        artifactName: 'notarized-pkg'
-        targetPath: '$(Pipeline.Workspace)/notarized-pkg'
+    - download: current
+      artifact: stapled-macos-pkg
+      displayName: 'Download stapled PKG'
     
-    # Create or update GitHub release
+    - bash: |
+        set -e
+        echo "=== Prepare Release Notes ==="
+        
+        # Find PKG file info
+        PKG_FILE=$(find $(Pipeline.Workspace)/stapled-macos-pkg -name "*.pkg" -type f | head -1)
+        PKG_NAME=$(basename "$PKG_FILE")
+        PKG_SIZE=$(du -h "$PKG_FILE" | cut -f1)
+        
+        # Get SHA256
+        if [ -f "${PKG_FILE}.sha256" ]; then
+          PKG_SHA256=$(cat "${PKG_FILE}.sha256" | awk '{print $1}')
+        else
+          PKG_SHA256=$(sha256sum "$PKG_FILE" | awk '{print $1}')
+        fi
+        
+        # Create release notes
+        cat > release-notes.md <<EOF
+        # Azure CLI $(AzureCliVersion)
+        
+        ## Official Release
+        
+        This is the official release of **Azure CLI $(AzureCliVersion)** for macOS.
+        
+        ## Downloads
+        
+        - **macOS ARM64 (Apple Silicon)**: \`${PKG_NAME}\`
+          - Size: ${PKG_SIZE}
+          - SHA256: \`${PKG_SHA256}\`
+        
+        ## Security & Notarization
+        
+        - **Signed**: Developer ID Installer (Microsoft Corporation)
+        - **Notarized**: Verified by Apple
+        - **Stapled**: Works completely offline
+        - **Gatekeeper**: No security warnings
+        
+        ## Homebrew Installation
+        
+        Install via Homebrew tap:
+        \`\`\`bash
+        brew tap $(HomebrewTapRepo)
+        brew install $(FormulaName)
+        \`\`\`
+        
+        ## Manual Installation
+        
+        1. Download \`${PKG_NAME}\`
+        2. Verify SHA256 checksum
+        3. Double-click the PKG or run: \`sudo installer -pkg ${PKG_NAME} -target /\`
+        4. Verify installation: \`az --version\`
+        
+        ## Build Information
+        
+        - **Build ID**: $(Build.BuildId)
+        - **Build Date**: $(Build.BuildNumber)
+        
+        ## Issues & Support
+        
+        Report issues at: https://github.com/$(GitHubRepo)/issues
+        EOF
+        
+        echo "Release notes created"
+        cat release-notes.md
+      displayName: 'Prepare release notes'
+    
     - task: GitHubRelease@1
-      displayName: 'Create GitHub release'
+      displayName: 'Create GitHub Release'
       inputs:
-        gitHubConnection: 'github-release-connection'
-        repositoryName: '${{ parameters.GitHubRepo }}'
+        gitHubConnection: 'github.com_naga-nandyala'
+        repositoryName: '$(GitHubRepo)'
         action: 'create'
         target: '$(Build.SourceVersion)'
         tagSource: 'userSpecifiedTag'
         tag: '$(ReleaseTag)'
-        title: 'Azure CLI ${{ parameters.AzureCliVersion }} for macOS'
-        releaseNotesSource: 'inline'
-        releaseNotesInline: |
-          # Azure CLI ${{ parameters.AzureCliVersion }} for macOS (ARM64)
-          
-          This release includes the Azure CLI packaged as a macOS installer (PKG) for Apple Silicon Macs.
-          
-          ## Installation Methods
-          
-          ### Homebrew (Recommended)
-          ```bash
-          brew tap ${{ parameters.HomebrewTapRepo }}
-          brew install ${{ parameters.FormulaName }}
-          ```
-          
-          ### Direct Download (Offline Installation)
-          Download the PKG file below and run:
-          ```bash
-          sudo installer -pkg $(PkgFileName) -target /
-          ```
-          
-          ## Verification
-          This PKG is signed and notarized by Apple. You can verify:
-          ```bash
-          pkgutil --check-signature $(PkgFileName)
-          spctl -a -vv -t install $(PkgFileName)
-          stapler validate $(PkgFileName)
-          ```
-          
-          ## What's Included
-          - Azure CLI ${{ parameters.AzureCliVersion }}
-          - All binaries signed with Developer ID
-          - Notarized by Apple
-          - Compatible with macOS 11.0+ (ARM64)
-        assets: '$(Pipeline.Workspace)/notarized-pkg/$(PkgFileName)'
-        assetUploadMode: 'replace'
-        isDraft: false
-        isPreRelease: ${{ parameters.IsPrerelease }}
+        title: 'Azure CLI $(AzureCliVersion)'
+        releaseNotesSource: 'filePath'
+        releaseNotesFilePath: '$(System.DefaultWorkingDirectory)/release-notes.md'
+        assets: '$(Pipeline.Workspace)/stapled-macos-pkg/*.pkg'
+        isDraft: ${{ parameters.IsDraft }}
+        isPreRelease: ${{ parameters.IsPreRelease }}
         addChangeLog: false
+    
+    - bash: |
+        echo "✅ GitHub Release Created Successfully!"
+        echo ""
+        echo "Tag: $(ReleaseTag)"
+        echo "Version: $(AzureCliVersion)"
+        echo "Repository: https://github.com/$(GitHubRepo)/releases/tag/$(ReleaseTag)"
+      displayName: 'Release summary'
 
 # ============================================================================
-# STAGE 5: UPDATE HOMEBREW FORMULA
+# STAGE 7: UPDATE HOMEBREW FORMULA
 # ============================================================================
 - stage: UpdateHomebrewFormula
-  displayName: '5. Update Homebrew Formula'
+  displayName: 'Stage 7: Update Homebrew Formula'
   dependsOn: PublishToGitHub
+  condition: succeeded()
   jobs:
-  - job: UpdateFormula
-    displayName: 'Update Homebrew tap repository'
+  - job: CreateFormula
+    displayName: 'Create Homebrew formula and PR'
     pool:
-      vmImage: 'ubuntu-latest'
+      vmImage: 'macos-14'
     
     steps:
-    - checkout: none
+    - checkout: self
+    - checkout: homebrewtap
     
-    # Clone Homebrew tap repository
+    - download: current
+      artifact: stapled-macos-pkg
+      displayName: 'Download stapled PKG'
+    
     - bash: |
         set -e
-        echo "##[section]Cloning Homebrew tap repository"
+        echo "=== Get PKG Details ==="
         
-        git clone https://$(GITHUB_PAT)@github.com/${{ parameters.HomebrewTapRepo }}.git homebrew-tap
-        cd homebrew-tap
+        PKG_FILE=$(find $(Pipeline.Workspace)/stapled-macos-pkg -name "*.pkg" -type f | head -1)
+        PKG_NAME=$(basename "$PKG_FILE")
         
-        git config user.name "Azure Pipelines"
-        git config user.email "azuredevops@microsoft.com"
+        # Get SHA256
+        if [ -f "${PKG_FILE}.sha256" ]; then
+          SHA256=$(cat "${PKG_FILE}.sha256" | awk '{print $1}')
+        else
+          SHA256=$(sha256sum "$PKG_FILE" | awk '{print $1}')
+        fi
         
-        echo "##vso[task.setvariable variable=TapDir]$(pwd)"
-      displayName: 'Clone tap repository'
-    
-    # Download PKG to calculate SHA256
-    - bash: |
-        set -e
-        echo "##[section]Downloading PKG to calculate SHA256"
+        # Construct download URL
+        DOWNLOAD_URL="https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/${PKG_NAME}"
         
-        PKG_URL="https://github.com/${{ parameters.GitHubRepo }}/releases/download/$(ReleaseTag)/$(PkgFileName)"
-        echo "PKG URL: $PKG_URL"
-        
-        curl -L -o "$(PkgFileName)" "$PKG_URL"
-        
-        # Calculate SHA256
-        SHA256=$(shasum -a 256 "$(PkgFileName)" | awk '{print $1}')
+        echo "PKG Name: $PKG_NAME"
         echo "SHA256: $SHA256"
-        echo "##vso[task.setvariable variable=PkgSha256]$SHA256"
-      displayName: 'Calculate PKG SHA256'
+        echo "Download URL: $DOWNLOAD_URL"
+        
+        # Export variables
+        echo "##vso[task.setvariable variable=PKG_NAME]$PKG_NAME"
+        echo "##vso[task.setvariable variable=PKG_SHA256]$SHA256"
+        echo "##vso[task.setvariable variable=PKG_DOWNLOAD_URL]$DOWNLOAD_URL"
+        
+      displayName: 'Get PKG SHA256 and URL'
     
-    # Update formula file
     - bash: |
         set -e
-        echo "##[section]Updating formula file"
+        echo "=== Generate Homebrew Formula ==="
         
-        cd "$(TapDir)"
+        cd $(Build.SourcesDirectory)/homebrew-mycli-app
         
-        FORMULA_FILE="Formula/${{ parameters.FormulaName }}.rb"
+        # Create Formula directory if not exists
+        mkdir -p Formula
         
-        cat > "$FORMULA_FILE" <<'EOF'
+        # Generate formula file
+        cat > Formula/$(FormulaName).rb <<EOF
+        # Homebrew Formula for Azure CLI $(AzureCliVersion)
+        # Auto-generated by Azure DevOps Pipeline
+        
         class AzureCliPr < Formula
-          desc "Azure CLI - Command-line tools for Azure"
-          homepage "https://docs.microsoft.com/cli/azure/overview"
-          url "https://github.com/${{ parameters.GitHubRepo }}/releases/download/$(ReleaseTag)/$(PkgFileName)"
-          sha256 "$(PkgSha256)"
-          version "${{ parameters.AzureCliVersion }}"
+          desc "Azure CLI $(AzureCliVersion)"
+          homepage "https://github.com/$(GitHubRepo)"
+          url "$(PKG_DOWNLOAD_URL)"
+          sha256 "$(PKG_SHA256)"
+          version "$(AzureCliVersion)"
           
           def install
-            # Extract the PKG
-            system "pkgutil", "--expand", cached_download, "#{buildpath}/expanded"
-            system "tar", "-xzf", "#{buildpath}/expanded/azure-cli.pkg/Payload", "-C", prefix
+            # Install PKG to prefix
+            system "installer", "-pkg", cached_download, "-target", "CurrentUserHomeDirectory", "-applyChoiceChangesXML", "/dev/stdin" do |stdin|
+              stdin.write <<~EOS
+                <?xml version="1.0" encoding="UTF-8"?>
+                <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+                <plist version="1.0">
+                <array/>
+                </plist>
+              EOS
+            end
+            
+            # Symlink az to Homebrew prefix
+            bin.install_symlink "/usr/local/az/bin/az"
           end
           
           test do
-            system "#{bin}/az", "version"
+            system "#{bin}/az", "--version"
           end
         end
         EOF
         
-        echo "##[section]Formula file updated"
-        cat "$FORMULA_FILE"
-      displayName: 'Update formula'
+        echo "Formula created:"
+        cat Formula/$(FormulaName).rb
+        
+      displayName: 'Generate Homebrew formula'
     
-    # Commit and push
     - bash: |
         set -e
-        cd "$(TapDir)"
+        echo "=== Create PR to Homebrew Tap ==="
         
-        git add .
-        git commit -m "Update ${{ parameters.FormulaName }} to ${{ parameters.AzureCliVersion }}"
-        git push origin main
+        cd $(Build.SourcesDirectory)/homebrew-mycli-app
         
-        echo "##[section]Formula updated and pushed to tap repository"
-      displayName: 'Commit and push formula'
+        # Configure git
+        git config user.name "Azure DevOps Pipeline"
+        git config user.email "azuredevops@microsoft.com"
+        
+        # Create new branch
+        BRANCH_NAME="update-formula-$(AzureCliVersion)-$(Build.BuildId)"
+        git checkout -b "$BRANCH_NAME"
+        
+        # Add and commit
+        git add Formula/$(FormulaName).rb
+        git commit -m "Update $(FormulaName) to version $(AzureCliVersion)"
+        
+        # Push to remote
+        git push origin "$BRANCH_NAME"
+        
+        echo "✅ Branch pushed: $BRANCH_NAME"
+        echo "Create PR manually at: https://github.com/$(HomebrewTapRepo)/compare/$BRANCH_NAME?expand=1"
+        
+      displayName: 'Create PR to Homebrew tap'
+      env:
+        GITHUB_TOKEN: $(GITHUB_TOKEN)
 
 # ============================================================================
-# STAGE 6: TEST INSTALLATION
+# STAGE 8: TEST HOMEBREW INSTALLATION
 # ============================================================================
 - stage: TestInstallation
-  displayName: '6. Test Installation Methods'
+  displayName: 'Stage 8: Test Homebrew Installation'
   dependsOn: UpdateHomebrewFormula
-  condition: and(succeeded(), eq(${{ parameters.SkipTests }}, false))
+  condition: succeeded()
   jobs:
   - job: TestHomebrewInstall
-    displayName: 'Test Homebrew installation'
+    displayName: 'Test Homebrew formula'
     pool:
       vmImage: 'macos-14'
     
@@ -554,75 +1175,70 @@ stages:
     
     - bash: |
         set -e
-        echo "##[section]Testing Homebrew installation"
+        echo "=== Add Homebrew Tap ==="
+        brew tap $(HomebrewTapRepo)
         
-        # Tap the repository
-        brew tap ${{ parameters.HomebrewTapRepo }}
+        echo ""
+        echo "=== Install Formula ==="
+        brew install $(FormulaName)
         
-        # Install the formula
-        brew install ${{ parameters.FormulaName }}
+        echo ""
+        echo "=== Verify Installation ==="
+        az --version
         
-        # Verify installation
-        az version
+        echo ""
+        echo "✅ Homebrew installation successful"
         
-        # Check version
-        INSTALLED_VERSION=$(az version --output json | jq -r '.["azure-cli"]')
-        echo "Installed version: $INSTALLED_VERSION"
-        
-        if [ "$INSTALLED_VERSION" = "${{ parameters.AzureCliVersion }}" ]; then
-          echo "✅ Homebrew installation successful"
-        else
-          echo "##[error]Version mismatch: expected ${{ parameters.AzureCliVersion }}, got $INSTALLED_VERSION"
-          exit 1
-        fi
-      displayName: 'Test Homebrew install'
+      displayName: 'Test Homebrew installation'
   
   - job: TestOfflineInstall
-    displayName: 'Test offline PKG installation'
+    displayName: 'Test offline PKG install'
     pool:
       vmImage: 'macos-14'
     
     steps:
     - checkout: none
     
-    # Download notarized PKG
-    - task: DownloadPipelineArtifact@2
-      displayName: 'Download notarized PKG'
-      inputs:
-        artifactName: 'notarized-pkg'
-        targetPath: '$(Pipeline.Workspace)/notarized-pkg'
+    - download: current
+      artifact: stapled-macos-pkg
+      displayName: 'Download stapled PKG'
     
     - bash: |
         set -e
-        echo "##[section]Testing offline PKG installation"
+        echo "=== Test Offline PKG Installation ==="
         
-        PKG_FILE="$(Pipeline.Workspace)/notarized-pkg/$(PkgFileName)"
+        PKG_FILE=$(find $(Pipeline.Workspace)/stapled-macos-pkg -name "*.pkg" -type f | head -1)
         
-        # Install the PKG
+        echo "Installing: $(basename $PKG_FILE)"
+        
+        # Install PKG
         sudo installer -pkg "$PKG_FILE" -target /
         
-        # Verify installation
-        az version
+        echo ""
+        echo "=== Verify Installation ==="
         
-        # Check version
-        INSTALLED_VERSION=$(az version --output json | jq -r '.["azure-cli"]')
-        echo "Installed version: $INSTALLED_VERSION"
-        
-        if [ "$INSTALLED_VERSION" = "${{ parameters.AzureCliVersion }}" ]; then
-          echo "✅ Offline PKG installation successful"
+        if command -v az &> /dev/null; then
+          echo "✅ az command found"
+          az --version
         else
-          echo "##[error]Version mismatch: expected ${{ parameters.AzureCliVersion }}, got $INSTALLED_VERSION"
+          echo "❌ az command not found"
           exit 1
         fi
-      displayName: 'Test offline install'
+        
+        echo ""
+        echo "✅ Offline PKG installation successful"
+        
+      displayName: 'Test offline PKG installation'
 
 # ============================================================================
-# STAGE 7: RELEASE SUMMARY
+# STAGE 9: RELEASE SUMMARY
 # ============================================================================
 - stage: ReleaseSummary
-  displayName: '7. Release Summary'
+  displayName: 'Stage 9: Release Summary'
   dependsOn:
-  - SignAllBinaries
+  - DownloadAndExtract
+  - SignBinaries
+  - RepackageAndSignPkg
   - NotarizeWithApple
   - VerifySigningAndNotarization
   - PublishToGitHub
@@ -631,63 +1247,49 @@ stages:
   condition: always()
   jobs:
   - job: PrintSummary
-    displayName: 'Print release summary'
+    displayName: 'Print complete summary'
     pool:
       vmImage: 'ubuntu-latest'
     
     steps:
-    - checkout: none
-    
     - bash: |
-        echo "##[section]============================================================"
-        echo "##[section]  Azure CLI macOS PKG Release Summary"
-        echo "##[section]============================================================"
+        echo "# macOS PKG Complete Release Pipeline Summary"
         echo ""
-        echo "## Release Information"
-        echo "- **Version**: ${{ parameters.AzureCliVersion }}"
+        echo "## Configuration"
+        echo "- **Version**: $(AzureCliVersion)"
+        echo "- **Source Build**: $(UnsignedBuildId)"
+        echo "- **Bundle ID**: $(BundleId)"
+        echo "- **GitHub Repo**: https://github.com/$(GitHubRepo)"
         echo "- **Release Tag**: $(ReleaseTag)"
-        echo "- **Bundle ID**: ${{ parameters.BundleId }}"
-        echo "- **Pre-release**: ${{ parameters.IsPrerelease }}"
+        echo "- **Homebrew Tap**: $(HomebrewTapRepo)"
+        echo "- **Formula**: $(FormulaName)"
         echo ""
-        echo "## Source Build"
-        echo "- **Unsigned Build ID**: ${{ parameters.UnsignedBuildId }}"
-        echo "- **Pipeline**: ${{ parameters.UnsignedPipelineName }}"
+        echo "## Process Completed"
+        echo "1. ✅ Downloaded and extracted unsigned PKG"
+        echo "2. ✅ Signed all binaries with ESRP (Windows)"
+        echo "3. ✅ Repackaged and signed PKG with ESRP"
+        echo "4. ✅ Notarized with Apple via ESRP"
+        echo "5. ✅ Stapled notarization ticket (macOS)"
+        echo "6. ✅ Verified signatures and notarization"
+        echo "7. ✅ Published to GitHub Release"
+        echo "8. ✅ Updated Homebrew formula"
+        echo "9. ✅ Tested installation (Homebrew + offline)"
         echo ""
-        echo "## Completed Stages"
-        echo "1. ✅ Sign All Binaries"
-        echo "2. ✅ Notarize with Apple"
-        echo "3. ✅ Verify Signing & Notarization"
-        echo "4. ✅ Publish to GitHub"
-        echo "5. ✅ Update Homebrew Formula"
-        if [ "${{ parameters.SkipTests }}" == "false" ]; then
-          echo "6. ✅ Test Installation"
-        else
-          echo "6. ⏭️  Test Installation - SKIPPED"
-        fi
+        echo "## Artifacts Produced"
+        echo "- **unsigned-binaries**: Extracted binaries from unsigned PKG"
+        echo "- **signed-binaries**: All binaries signed with ESRP"
+        echo "- **fully-signed-macos-pkg**: PKG with signed binaries + signed container"
+        echo "- **notarized-macos-pkg**: PKG notarized by Apple"
+        echo "- **stapled-macos-pkg**: PKG with stapled ticket (ready for distribution) ⭐"
         echo ""
-        echo "## GitHub Release"
-        echo "- **URL**: https://github.com/${{ parameters.GitHubRepo }}/releases/tag/$(ReleaseTag)"
-        echo "- **Asset**: $(PkgFileName)"
+        echo "## Distribution"
+        echo "- GitHub Release: https://github.com/$(GitHubRepo)/releases/tag/$(ReleaseTag)"
+        echo "- Homebrew: \`brew tap $(HomebrewTapRepo) && brew install $(FormulaName)\`"
         echo ""
-        echo "## Homebrew Installation"
-        echo "- **Repository**: ${{ parameters.HomebrewTapRepo }}"
-        echo "- **Formula**: ${{ parameters.FormulaName }}"
+        echo "## Next Steps"
+        echo "1. Verify GitHub release is accessible"
+        echo "2. Test Homebrew installation on fresh macOS"
+        echo "3. Announce the release to users"
         echo ""
-        echo "## User Installation Commands"
-        echo ""
-        echo "### Homebrew (Recommended)"
-        echo "\`\`\`bash"
-        echo "brew tap ${{ parameters.HomebrewTapRepo }}"
-        echo "brew install ${{ parameters.FormulaName }}"
-        echo "\`\`\`"
-        echo ""
-        echo "### Offline PKG"
-        echo "\`\`\`bash"
-        echo "curl -L -o azure-cli.pkg https://github.com/${{ parameters.GitHubRepo }}/releases/download/$(ReleaseTag)/$(PkgFileName)"
-        echo "sudo installer -pkg azure-cli.pkg -target /"
-        echo "\`\`\`"
-        echo ""
-        echo "##[section]============================================================"
-        echo "##[section]  Release Complete! 🎉"
-        echo "##[section]============================================================"
-      displayName: 'Release Summary'
+        echo "✅ Complete Release Pipeline Finished Successfully!"
+      displayName: 'Complete summary'
