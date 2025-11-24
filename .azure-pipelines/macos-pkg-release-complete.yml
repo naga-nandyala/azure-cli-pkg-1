@@ -909,7 +909,10 @@ stages:
       displayName: 'Download stapled PKG'
     
     - bash: |
-        echo "=== Verifying Apple Notarization (Stapled PKG) ==="
+        echo "================================================"
+        echo "  COMPREHENSIVE PKG VERIFICATION (3 LEVELS)"
+        echo "================================================"
+        echo ""
         
         STAPLED_DIR="$(Pipeline.Workspace)/stapled-macos-pkg"
         
@@ -919,41 +922,161 @@ stages:
             echo "Verifying: $pkg_name"
             echo ""
             
-            # Check PKG signature
-            echo "1. Checking PKG signature:"
+            # ========================================
+            # LEVEL 1: PKG Container Signature
+            # ========================================
+            echo "================================================"
+            echo "  LEVEL 1: PKG Container Signature"
+            echo "================================================"
             pkgutil --check-signature "$pkg"
-            echo ""
             
-            # Check stapled ticket
-            echo "2. Checking stapled notarization ticket:"
-            if stapler validate "$pkg"; then
-              echo "✅ Stapled ticket is valid - PKG works offline!"
+            if pkgutil --check-signature "$pkg" 2>&1 | grep -q "signed"; then
+              echo ""
+              echo "✅ LEVEL 1: PKG Container IS SIGNED"
             else
-              echo "⚠️  No stapled ticket found"
+              echo ""
+              echo "❌ LEVEL 1: PKG Container NOT SIGNED"
             fi
             echo ""
             
-            # Check notarization status using spctl
-            echo "3. Checking notarization with spctl:"
-            spctl -a -vv -t install "$pkg" 2>&1 || true
+            # ========================================
+            # LEVEL 2: Binary Signatures
+            # ========================================
+            echo "================================================"
+            echo "  LEVEL 2: Binary Signature Verification"
+            echo "================================================"
+            
+            # Extract PKG to verify binary signatures
+            VERIFY_DIR="$(Pipeline.Workspace)/verify-extract-$$"
+            mkdir -p "$VERIFY_DIR"
+            cd "$VERIFY_DIR"
+            
+            # Extract PKG using xar
+            xar -xf "$pkg"
+            
+            # Find component PKG or Payload
+            PAYLOAD=$(find . -name "Payload" -o -name "Payload~" | head -1)
+            
+            if [ ! -z "$PAYLOAD" ]; then
+              # Extract payload
+              mkdir -p payload_files
+              cd payload_files
+              
+              if [[ "$PAYLOAD" == *"~" ]]; then
+                cat "../$PAYLOAD" | cpio -id 2>/dev/null
+              else
+                cat "../$PAYLOAD" | gunzip -dc | cpio -id 2>/dev/null
+              fi
+              
+              cd "$VERIFY_DIR"
+              
+              # Find all Mach-O binaries
+              echo "Finding Mach-O binaries..."
+              find payload_files -type f -exec file {} \; 2>/dev/null | \
+                grep -i "mach-o" | \
+                cut -d: -f1 | \
+                sort -u > binaries.txt
+              
+              BINARY_COUNT=$(wc -l < binaries.txt)
+              echo "Found $BINARY_COUNT Mach-O binaries"
+              echo ""
+              
+              if [ $BINARY_COUNT -gt 0 ]; then
+                SIGNED_COUNT=0
+                UNSIGNED_COUNT=0
+                
+                # Check a sample (first 10) for summary
+                echo "Checking binary signatures (showing first 10)..."
+                echo ""
+                
+                head -10 binaries.txt | while read binary; do
+                  echo "Binary: $binary"
+                  if codesign -vv "$binary" 2>&1 | grep -q "valid on disk"; then
+                    echo "✅ SIGNED"
+                    codesign -dvv "$binary" 2>&1 | grep -E "Authority|Identifier" | head -2
+                  else
+                    echo "❌ NOT SIGNED"
+                  fi
+                  echo ""
+                done
+                
+                # Count all signed/unsigned
+                echo "Counting all binaries..."
+                while IFS= read -r binary; do
+                  if codesign -vv "$binary" 2>&1 | grep -q "valid on disk"; then
+                    SIGNED_COUNT=$((SIGNED_COUNT + 1))
+                  else
+                    UNSIGNED_COUNT=$((UNSIGNED_COUNT + 1))
+                  fi
+                done < binaries.txt
+                
+                echo "Binary Signature Summary:"
+                echo "  Total binaries: $BINARY_COUNT"
+                echo "  Signed: $SIGNED_COUNT"
+                echo "  Unsigned: $UNSIGNED_COUNT"
+                echo ""
+                
+                if [ $UNSIGNED_COUNT -eq 0 ]; then
+                  echo "✅ LEVEL 2: ALL BINARIES ARE SIGNED ($SIGNED_COUNT/$BINARY_COUNT)"
+                else
+                  echo "❌ LEVEL 2: SOME BINARIES NOT SIGNED ($UNSIGNED_COUNT unsigned)"
+                fi
+              else
+                echo "⚠️  No Mach-O binaries found"
+              fi
+            else
+              echo "⚠️  Could not extract payload for binary verification"
+            fi
+            
+            # Cleanup
+            cd "$STAPLED_DIR"
+            rm -rf "$VERIFY_DIR"
+            echo ""
+            
+            # ========================================
+            # LEVEL 3: Notarization
+            # ========================================
+            echo "================================================"
+            echo "  LEVEL 3: Notarization Verification"
+            echo "================================================"
+            
+            # Check stapled ticket
+            echo "Checking stapled notarization ticket:"
+            if stapler validate "$pkg" 2>&1 | grep -q "validate action worked"; then
+              echo "✅ LEVEL 3: PKG IS NOTARIZED (Stapled ticket valid)"
+              stapler validate "$pkg"
+            else
+              echo "⚠️  No stapled ticket found"
+              stapler validate "$pkg" 2>&1 || true
+            fi
+            echo ""
+            
+            # Check with spctl
+            echo "Checking notarization with spctl:"
+            if spctl -a -vv -t install "$pkg" 2>&1; then
+              echo "✅ spctl accepts this PKG"
+            else
+              echo "⚠️  spctl check failed (may require notarization)"
+            fi
             echo ""
             
             # Test PKG structure
-            echo "4. Testing PKG structure:"
+            echo "Testing PKG structure:"
             if pkgutil --payload-files "$pkg" >/dev/null 2>&1; then
               echo "✅ PKG structure is valid"
             else
               echo "⚠️  PKG structure test failed"
             fi
             
-            echo "---"
+            echo ""
+            echo "================================================"
+            echo "  ✅ VERIFICATION COMPLETE: $pkg_name"
+            echo "================================================"
             echo ""
           fi
         done
         
-        echo "✅ Verification Complete"
-        
-      displayName: 'Verify Apple notarization and stapled ticket'
+      displayName: 'Comprehensive verification (3 levels: PKG, Binaries, Notarization)'
 
 # ============================================================================
 # STAGE 6: PUBLISH TO GITHUB RELEASE
