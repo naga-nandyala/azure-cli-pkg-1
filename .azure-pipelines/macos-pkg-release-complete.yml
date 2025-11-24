@@ -563,7 +563,7 @@ stages:
         pkgbuild --root "$MERGED_PAYLOAD" \
                  --identifier "$(BundleId)" \
                  --version "$(AzureCliVersion)" \
-                 --install-location "/usr/local/az" \
+                 --install-location "/usr/local" \
                  "$COMPONENT_PKG"
         
         echo "✅ Component PKG created: $(du -h $COMPONENT_PKG | cut -f1)"

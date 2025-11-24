@@ -470,8 +470,32 @@ stages:
         fi
         echo ""
         
+        # Check and fix the az wrapper script
+        echo "4. Checking az wrapper script:"
+        if [ -f /usr/local/az/bin/az ]; then
+          echo "   Contents of /usr/local/az/bin/az:"
+          cat /usr/local/az/bin/az
+          echo ""
+          
+          # Check if it has hardcoded path issue
+          if grep -q "/usr/local/microsoft/azure-cli" /usr/local/az/bin/az; then
+            echo "   ⚠️  Found hardcoded path: /usr/local/microsoft/azure-cli"
+            echo "   Actual location: /usr/local/az/microsoft/azure-cli"
+            echo "   Fixing wrapper script..."
+            
+            sudo sed -i '' 's|/usr/local/microsoft/azure-cli|/usr/local/az/microsoft/azure-cli|g' /usr/local/az/bin/az
+            echo "   ✅ Wrapper script fixed"
+            echo ""
+            echo "   Updated contents:"
+            cat /usr/local/az/bin/az
+          else
+            echo "   ✅ Wrapper script looks correct"
+          fi
+        fi
+        echo ""
+        
         # Verify az command works
-        echo "4. Testing az command:"
+        echo "5. Testing az command:"
         if command -v az &> /dev/null; then
           echo "   ✅ 'az' command found in PATH"
           echo "   Location: $(which az)"
