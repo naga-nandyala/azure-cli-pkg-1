@@ -1689,6 +1689,10 @@ stages:
       artifact: homebrew-formula
       displayName: 'Download formula'
     
+    - download: current
+      artifact: homebrew-cask
+      displayName: 'Download cask'
+    
     - bash: |
         set -e
         echo "======================================"
@@ -1722,12 +1726,14 @@ stages:
         # Checkout main branch (we're in detached HEAD state)
         git checkout -B main origin/main
         
-        # Copy formula
+        # Copy formula and cask
         mkdir -p Formula
+        mkdir -p Casks
         cp $(Pipeline.Workspace)/homebrew-formula/$(FormulaName).rb Formula/
+        cp $(Pipeline.Workspace)/homebrew-cask/azure-cli-pr.rb Casks/
         
         # Add and commit directly to main
-        git add Formula/$(FormulaName).rb
+        git add Formula/$(FormulaName).rb Casks/azure-cli-pr.rb
         git commit -m "Update Azure CLI to version $(AzureCliVersion)
 
         - Update to version $(AzureCliVersion)
@@ -1735,6 +1741,7 @@ stages:
         - SHA256: $(PKG_SHA256)
         - Fully signed and notarized by Apple
         - Stapled for offline installation
+        - Updated both Formula and Cask variants
         
         Build: $(Build.BuildId)
         Pipeline: $(Build.BuildNumber)"
@@ -1754,14 +1761,20 @@ stages:
         echo "  Update Summary"
         echo "======================================"
         echo ""
-        echo "✅ Formula Updated on Main Branch!"
+        echo "✅ Formula and Cask Updated on Main Branch!"
         echo ""
         echo "Repository: https://github.com/$(HomebrewTapRepo)"
         echo "Version: $(AzureCliVersion)"
         echo ""
-        echo "Users can now install with:"
+        echo "Users can now install with either:"
+        echo ""
+        echo "Option 1 - Using Formula (extracts PKG to Cellar):"
         echo "  brew tap $(HomebrewTapRepo)"
         echo "  brew install $(FormulaName)"
+        echo ""
+        echo "Option 2 - Using Cask (installs PKG natively):"
+        echo "  brew tap $(HomebrewTapRepo)"
+        echo "  brew install --cask azure-cli-pr"
       displayName: 'Print summary'
 
 # ============================================================================
