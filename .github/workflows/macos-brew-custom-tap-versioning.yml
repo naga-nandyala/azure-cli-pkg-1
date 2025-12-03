@@ -84,7 +84,7 @@ jobs:
                   echo "Installing Azure CLI 2.80 (building from source, this may take 15-20 minutes)..."
                   echo "Note: Using --build-from-source to avoid bottle download issues"
                   echo ""
-                  
+
                   brew install --build-from-source naga-nandyala/mycli-app/azure-cli@2.80
 
                   echo ""
