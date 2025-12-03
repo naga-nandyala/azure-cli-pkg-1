@@ -1,28 +1,36 @@
-# Azure DevOps Setup Guide for Azure CLI macOS PKG Signing
+# Azure DevOps Setup Guide for Azure CLI macOS PKG Pipelines
+
+> **Note**: This guide covers initial Azure DevOps setup. For detailed pipeline documentation, see [MACOS_PKG_PIPELINES.md](../MACOS_PKG_PIPELINES.md)
 
 ## Overview
 
-This guide will help you set up Azure DevOps to sign macOS PKG files that were built by GitHub Actions. This is a **hybrid approach** that allows you to:
+This guide will help you set up Azure DevOps for the Azure CLI macOS PKG distribution pipeline system. The current implementation uses **Azure DevOps for the complete workflow**:
 
-1. ✅ Build PKGs in GitHub Actions (existing workflow)
-2. ✅ Sign PKGs using Azure DevOps with OneBranch/ESRP
-3. ✅ Optionally upload signed PKGs back to GitHub releases
+1. ✅ Build PKGs in Azure DevOps (`macos-pkg-build.yml`)
+2. ✅ Sign all binaries + PKG using ESRP (`macos-pkg-sign-all.yml`)
+3. ✅ Notarize with Apple via ESRP (`macos-pkg-notarize.yml`)
+4. ✅ Publish to GitHub releases (`macos-pkg-github-release-publish.yml`)
+5. ✅ Update Homebrew tap (`macos-pkg-homebrew-update.yml`)
+6. ✅ Run installation tests (`macos-pkg-install-test.yml`, `macos-pkg-gatekeeper-test.yml`)
 
 ## Prerequisites
 
 ### 1. Azure DevOps Organization
 - [ ] Access to an Azure DevOps organization
 - [ ] Permissions to create pipelines and variable groups
-- [ ] OneBranch access (Microsoft internal requirement)
+- [ ] ESRP signing access (Microsoft internal requirement)
 
 ### 2. GitHub Integration
 - [ ] GitHub Personal Access Token (PAT) with `repo` scope
 - [ ] Access to your GitHub repository releases
 
-### 3. Signing Certificates
+### 3. Signing & Notarization Credentials
 - [ ] Access to Microsoft ESRP signing service
-- [ ] `KeyCode` for macOS package signing (MacAppDeveloperSign)
-- [ ] Variable group: `mscodehub-macos-package-signing`
+- [ ] Variable group: `AME ESRP Variable Group` with ESRP credentials
+  - `ESRPAppClientId`
+  - `ESRPAppTenantId`
+  - `ESRPKVName`
+  - `ESRPSignCertName`
 
 ## Setup Steps
 
@@ -48,138 +56,107 @@ This should already exist in your organization if you have OneBranch access:
 
 If it doesn't exist, contact your OneBranch/ESRP administrator.
 
-### Step 2: Configure OneBranch Repository Reference
+### Step 2: Configure Repository Access
 
-The pipeline uses OneBranch templates. Ensure you have access:
+The pipelines require access to:
 
-```yaml
-resources:
-  repositories:
-  - repository: onebranchTemplates
-    type: git
-    name: OneBranch.Pipelines/GovernedTemplates
-    ref: refs/heads/main
-```
+1. **Main repository**: Your Azure CLI fork (e.g., `naga-nandyala/azure-cli-pkg-1`)
+2. **Homebrew tap repository**: For formula/cask updates (e.g., `naga-nandyala/homebrew-mycli-app`)
 
-If you don't have access, contact your Azure DevOps administrator.
+Ensure you have appropriate permissions to both repositories.
 
-### Step 3: Create the Pipeline
+### Step 3: Create the Pipelines
+
+**Recommended: Start with the All-in-One Pipeline**
 
 1. Go to Azure DevOps → Pipelines
 2. Click "New pipeline"
-3. Choose "Azure Repos Git" (or your source)
+3. Choose "GitHub" (or your source)
 4. Select your repository
 5. Choose "Existing Azure Pipelines YAML file"
-6. Path: `/.azure-pipelines/azure-cli-macos-pkg-signing.yml`
-7. Click "Continue" and "Run"
+6. **For complete workflow**: Path: `/.azure-pipelines/macos-pkg-release-complete.yml`
+7. Click "Continue" and "Save" (don't run yet)
+
+**Alternative: Create Individual Pipelines**
+
+For modular control, create separate pipelines for:
+- `macos-pkg-build.yml` - Build unsigned PKGs
+- `macos-pkg-sign-all.yml` - Sign all binaries + PKG
+- `macos-pkg-notarize.yml` - Notarize with Apple
+- `macos-pkg-github-release-publish.yml` - Publish to GitHub
+- `macos-pkg-homebrew-update.yml` - Update Homebrew tap
+- `macos-pkg-install-test.yml` - Test installations
+- `macos-pkg-gatekeeper-test.yml` - Security validation
+
+See [MACOS_PKG_PIPELINES.md](../MACOS_PKG_PIPELINES.md) for detailed documentation on each pipeline.
 
 ### Step 4: Configure Pipeline Parameters
 
-When running the pipeline, you'll be prompted for:
+**For macos-pkg-release-complete.yml (Recommended):**
 
 | Parameter | Example | Description |
 |-----------|---------|-------------|
-| `GitHubReleaseTag` | `azure-cli-pkg-v2.76.0` | The GitHub release tag containing unsigned PKGs |
-| `GitHubRepo` | `naga-nandyala/azure-cli-pkg-1` | Your GitHub repository (owner/repo) |
-| `AzureCliVersion` | `2.76.0` | Version number for file naming |
-| `OfficialBuild` | `true` | Enable OneBranch signing (required) |
-| `UploadToGitHub` | `true` | Upload signed PKGs back to GitHub release |
+| `UnsignedBuildId` | `282071` | Build ID from macos-pkg-build (if using separate build) |
+| `AzureCliVersion` | `2.0.0` | Version number |
+| `BundleId` | `com.microsoft.azure.cli` | Bundle ID for signing/notarization |
+| `GitHubRepo` | `naga-nandyala/azure-cli-pkg-1` | GitHub repository (owner/repo) |
+| `HomebrewTapRepo` | `naga-nandyala/homebrew-mycli-app` | Homebrew tap repository |
+| `OfficialBuild` | `true` | Enable ESRP signing (required) |
+| `IsPreRelease` | `false` | Mark GitHub release as pre-release |
+
+See individual pipeline files for specific parameters.
 
 ## Usage Workflow
 
 ### Complete End-to-End Process
 
 ```mermaid
-graph LR
-    A[GitHub Actions] -->|Build unsigned PKG| B[GitHub Release]
-    B -->|Download| C[Azure DevOps Pipeline]
-    C -->|Sign with OneBranch| D[Signed PKG]
-    D -->|Upload| E[GitHub Release]
-    D -->|Publish| F[Azure DevOps Artifacts]
+graph TB
+    A[macos-pkg-build] -->|Unsigned PKG| B[macos-pkg-sign-all]
+    B -->|Signed PKG| C[macos-pkg-notarize]
+    C -->|Notarized PKG| D[macos-pkg-github-release-publish]
+    D -->|GitHub Release| E[macos-pkg-homebrew-update]
+    E -->|Formula/Cask PR| F[Homebrew Tap]
+    D -->|PKG Available| G[macos-pkg-install-test]
+    D -->|PKG Available| H[macos-pkg-gatekeeper-test]
+```
+
+**Or use the all-in-one pipeline:**
+```
+macos-pkg-release-complete.yml
+  ├─ Build unsigned PKG
+  ├─ Sign all binaries + PKG (ESRP)
+  ├─ Notarize with Apple (ESRP)
+  ├─ Publish to GitHub
+  └─ Update Homebrew tap
 ```
 
 ### Step-by-Step Usage
 
-1. **Trigger GitHub Actions Build**
-   ```bash
-   # Go to GitHub → Actions → (macospkg) Build and Release
-   # Click "Run workflow"
-   # Set version: 2.76.0
-   # Create release: true
-   ```
-
-2. **Wait for GitHub Build to Complete**
-   - This creates unsigned PKG files
-   - Published to GitHub release: `azure-cli-pkg-v2.76.0`
-
-3. **Trigger Azure DevOps Signing Pipeline**
-   ```bash
-   # Go to Azure DevOps → Pipelines → azure-cli-macos-pkg-signing
-   # Click "Run pipeline"
-   # Parameters:
-   #   - GitHubReleaseTag: azure-cli-pkg-v2.76.0
-   #   - GitHubRepo: naga-nandyala/azure-cli-pkg-1
-   #   - AzureCliVersion: 2.76.0
-   #   - OfficialBuild: true
-   #   - UploadToGitHub: true
-   ```
-
-4. **Pipeline Executes**
-   - **Stage 1**: Download unsigned PKGs from GitHub
-   - **Stage 2**: Sign PKGs using OneBranch MacAppDeveloperSign
-   - **Stage 3**: Upload signed PKGs back to GitHub (optional)
-
-5. **Verify Signed PKGs**
-   ```bash
-   # Download signed PKG from GitHub release
-   # On macOS:
-   pkgutil --check-signature azure-cli-2.76.0-macos-arm64-signed.pkg
-   spctl --assess --type install azure-cli-2.76.0-macos-arm64-signed.pkg
-   stapler validate azure-cli-2.76.0-macos-arm64-signed.pkg
-   ```
+See [MACOS_PKG_PIPELINES.md](../MACOS_PKG_PIPELINES.md) for detailed usage instructions for each pipeline.
 
 ## Pipeline Architecture
 
-### Stage 1: Download Unsigned PKG
-- **Pool**: Windows (for PowerShell/REST API access)
-- **Tasks**:
-  - Fetch GitHub release metadata via API
-  - Download unsigned PKG files (ARM64 + x86_64)
-  - Verify downloads
-  - Publish as pipeline artifact
+See [MACOS_PKG_PIPELINES.md](../MACOS_PKG_PIPELINES.md) for detailed pipeline architecture and flow documentation.
 
-### Stage 2: Sign macOS PKG
-- **Pool**: Windows (OneBranch signing requirement)
-- **Tasks**: (runs in parallel for each architecture)
-  - Download unsigned PKG artifact
-  - Compress PKG to ZIP (OneBranch requirement)
-  - Sign using `onebranch.pipeline.signing@1`
-    - `OperationCode: MacAppDeveloperSign`
-    - `Hardening: Enable`
-  - Extract signed PKG from ZIP
-  - Generate SHA256 checksums
-  - Create signing report
-  - Publish signed artifacts
-
-### Stage 3: Publish Signed PKG
-- **Pool**: Windows
-- **Tasks**:
-  - Collect signed PKGs from both architectures
-  - Generate final checksums
-  - (Optional) Upload to GitHub release
-  - Publish to Azure DevOps artifacts
-
-## Files Created by This Setup
+## Pipeline Files
 
 ```
 .azure-pipelines/
-├── azure-cli-macos-pkg-signing.yml      # Main pipeline
-├── templates/
-│   └── sign-macos-pkg.yml               # Signing template for each arch
+├── macos-pkg-build.yml                    # Build pipeline
+├── macos-pkg-sign-all.yml                 # Complete signing
+├── macos-pkg-notarize.yml                 # Apple notarization
+├── macos-pkg-github-release-publish.yml   # GitHub publishing
+├── macos-pkg-homebrew-update.yml          # Homebrew tap updates
+├── macos-pkg-install-test.yml             # Installation testing
+├── macos-pkg-gatekeeper-test.yml          # Security validation
+├── macos-pkg-release-complete.yml         # All-in-one pipeline
+├── macos-pkg-sig-verify.yml               # Signature verification
+├── macos-pkg-notarize-verify.yml          # Notarization verification
+├── MACOS_PKG_PIPELINES.md                 # Complete documentation
 └── docs/
-    ├── AZURE-DEVOPS-SETUP.md            # This file
-    ├── SIGNING-PROCESS.md               # Detailed signing process
-    └── TROUBLESHOOTING.md               # Common issues
+    ├── AZURE-DEVOPS-SETUP.md              # This file
+    └── SIGNING-PROCESS.md                 # Technical signing details
 ```
 
 ## Security Considerations
@@ -264,17 +241,17 @@ Same as above, uploaded to the original GitHub release.
 
 ### Common Issues
 
-#### Issue: "KeyCode variable not found"
-**Solution**: Ensure variable group `mscodehub-macos-package-signing` is linked to pipeline.
+#### Issue: "ESRP credentials not found"
+**Solution**: Ensure variable group `AME ESRP Variable Group` is linked to pipeline and contains required ESRP credentials.
 
 #### Issue: "GitHub API rate limit exceeded"
 **Solution**: Add GITHUB_PAT to `github-integration` variable group.
 
-#### Issue: "OneBranch templates not found"
-**Solution**: Request access to OneBranch.Pipelines/GovernedTemplates repository.
+#### Issue: "ESRP signing task fails"
+**Solution**: Verify ESRP credentials in `AME ESRP Variable Group` and ensure KeyCode `CP-401337-Apple` is valid.
 
 #### Issue: "Signed PKG still shows as unsigned on macOS"
-**Solution**: MacAppDeveloperSign includes notarization. Wait 5-10 minutes for Apple's notarization to complete.
+**Solution**: Ensure the notarization pipeline (`macos-pkg-notarize.yml`) completed successfully. Check that the PKG is stapled using `stapler validate`.
 
 ## Next Steps
 
@@ -300,3 +277,4 @@ Same as above, uploaded to the original GitHub release.
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2025-01-11 | Initial setup for macOS PKG signing |
+| 2.0 | 2025-12-04 | Updated for current ESRP-based pipeline architecture |

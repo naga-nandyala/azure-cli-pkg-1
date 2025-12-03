@@ -1,0 +1,733 @@
+name: macOS Homebrew Core Installation Tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Run daily at 10 AM UTC
+    - cron: "0 10 * * *"
+  pull_request:
+    paths:
+      - '.github/workflows/macos-brew-related.yml'
+
+jobs:
+  test-homebrew-core-arm64:
+    name: Test Homebrew Core Installation (ARM64)
+    runs-on: macos-14 # ARM64 (Apple Silicon)
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: System Information
+        run: |
+          echo "================================================"
+          echo "SYSTEM INFORMATION"
+          echo "================================================"
+          sw_vers
+          uname -a
+          echo "Architecture: $(arch)"
+          echo "Homebrew Version: $(brew --version | head -1)"
+          echo "Homebrew Prefix: $(brew --prefix)"
+          echo "Homebrew Cellar: $(brew --cellar)"
+          echo ""
+
+      - name: Pre-Install State
+        run: |
+          echo "================================================"
+          echo "PRE-INSTALL STATE"
+          echo "================================================"
+          echo ""
+          echo "--- Checking for existing 'az' command ---"
+          which az || echo "✓ 'az' not found (expected)"
+          echo ""
+          echo "--- Homebrew installed packages ---"
+          brew list --formula | head -20 || echo "No formulae installed"
+          echo ""
+
+      - name: Clean Previous Installations
+        run: |
+          echo "================================================"
+          echo "CLEANING PREVIOUS INSTALLATIONS"
+          echo "================================================"
+          
+          # Remove any existing Homebrew installations
+          brew uninstall --force azure-cli 2>/dev/null || true
+          
+          # Verify cleanup
+          if command -v az >/dev/null 2>&1; then
+            echo "❌ Failed to clean up existing installations"
+            which az
+            exit 1
+          else
+            echo "✅ No existing Azure CLI installations found"
+          fi
+          echo ""
+
+      - name: Install Azure CLI from Homebrew Core
+        run: |
+          echo "================================================"
+          echo "INSTALLING AZURE CLI FROM HOMEBREW CORE"
+          echo "================================================"
+          
+          # Update homebrew to get latest formula
+          echo "Updating Homebrew..."
+          brew update
+          
+          # Install azure-cli from homebrew-core
+          echo ""
+          echo "Installing: brew install azure-cli"
+          brew install azure-cli
+          
+          echo ""
+          echo "✅ Installation completed"
+          echo ""
+
+      - name: Post-Install - Command Location
+        run: |
+          echo "================================================"
+          echo "COMMAND LOCATION VERIFICATION"
+          echo "================================================"
+          echo ""
+          echo "--- which az ---"
+          which az
+          echo ""
+          echo "--- az command details ---"
+          ls -lh $(which az)
+          echo ""
+          echo "--- Resolve symlinks ---"
+          if [ -L "$(which az)" ]; then
+            RESOLVED=$(readlink $(which az))
+            echo "First level: $RESOLVED"
+            if [ -L "$RESOLVED" ]; then
+              echo "Second level: $(readlink $RESOLVED)"
+            fi
+          else
+            echo "Not a symlink - actual binary"
+          fi
+          echo ""
+
+      - name: Post-Install - Binary Analysis
+        run: |
+          echo "================================================"
+          echo "BINARY ANALYSIS"
+          echo "================================================"
+          echo ""
+          AZ_PATH=$(which az)
+          echo "Analyzing: $AZ_PATH"
+          echo ""
+          
+          echo "--- File type ---"
+          file "$AZ_PATH"
+          echo ""
+          
+          echo "--- File permissions ---"
+          ls -lh "$AZ_PATH"
+          echo ""
+          
+          echo "--- Extended attributes (quarantine check) ---"
+          xattr "$AZ_PATH" || echo "No extended attributes"
+          echo ""
+          
+          echo "--- Code signature ---"
+          codesign -dv "$AZ_PATH" 2>&1 || echo "Not code signed"
+          echo ""
+
+      - name: Post-Install - Python Binary Analysis
+        run: |
+          echo "================================================"
+          echo "PYTHON BINARY ANALYSIS"
+          echo "================================================"
+          echo ""
+          
+          # Find Python executable
+          INSTALL_PREFIX=$(brew --prefix azure-cli)
+          PYTHON_BINARIES=$(find "$INSTALL_PREFIX" -name "python*" -type f -perm +111 2>/dev/null | head -5)
+          
+          if [ -n "$PYTHON_BINARIES" ]; then
+            echo "Found Python binaries:"
+            echo "$PYTHON_BINARIES"
+            echo ""
+            
+            for PYTHON_BIN in $PYTHON_BINARIES; do
+              echo "--- Analyzing: $PYTHON_BIN ---"
+              file "$PYTHON_BIN"
+              
+              # Check if it's a Mach-O binary
+              if file "$PYTHON_BIN" | grep -q "Mach-O"; then
+                echo "✓ Mach-O binary detected"
+                
+                # Check code signature
+                echo "Code signature:"
+                codesign -dv "$PYTHON_BIN" 2>&1 || echo "Not code signed"
+                
+                # Verify signature
+                echo "Signature verification:"
+                codesign --verify --verbose "$PYTHON_BIN" 2>&1 && echo "✓ Signature valid" || echo "✗ Signature invalid or not signed"
+              fi
+              echo ""
+            done
+          else
+            echo "No Python binaries found"
+          fi
+          echo ""
+
+      - name: Post-Install - Gatekeeper Assessment
+        run: |
+          echo "================================================"
+          echo "GATEKEEPER ASSESSMENT"
+          echo "================================================"
+          echo ""
+          
+          AZ_PATH=$(which az)
+          
+          echo "Test 1: Check quarantine attribute"
+          echo "-----------------------------------"
+          if xattr "$AZ_PATH" | grep -q "com.apple.quarantine"; then
+            echo "⚠️  Quarantine attribute present"
+            xattr -l "$AZ_PATH" | grep quarantine
+          else
+            echo "✓ No quarantine attribute (expected for Homebrew)"
+          fi
+          echo ""
+          
+          echo "Test 2: spctl assessment"
+          echo "------------------------"
+          spctl --assess --type execute "$AZ_PATH" 2>&1 || echo "Assessment result: Not applicable for Homebrew binaries"
+          echo ""
+          
+          echo "Test 3: Gatekeeper status"
+          echo "-------------------------"
+          spctl --status
+          echo ""
+
+      - name: Post-Install - Notarization Check
+        run: |
+          echo "================================================"
+          echo "NOTARIZATION CHECK"
+          echo "================================================"
+          echo ""
+          
+          AZ_PATH=$(which az)
+          
+          echo "Checking stapled notarization ticket..."
+          stapler validate "$AZ_PATH" 2>&1 || echo "Note: Homebrew binaries typically don't have stapled tickets"
+          echo ""
+          
+          echo "Checking code signature details..."
+          codesign -dvvv "$AZ_PATH" 2>&1 | grep -E "(Authority|TeamIdentifier|Signature)" || echo "No signature information"
+          echo ""
+
+      - name: Post-Install - Security Verification
+        run: |
+          echo "================================================"
+          echo "SECURITY VERIFICATION"
+          echo="================================================"
+          echo ""
+          
+          INSTALL_PREFIX=$(brew --prefix azure-cli)
+          
+          echo "Test 1: Check for executable files"
+          echo "-----------------------------------"
+          echo "Finding all executable files..."
+          EXECUTABLES=$(find "$INSTALL_PREFIX" -type f -perm +111 2>/dev/null)
+          EXEC_COUNT=$(echo "$EXECUTABLES" | wc -l | xargs)
+          echo "Found $EXEC_COUNT executable files"
+          echo ""
+          
+          echo "Test 2: Identify Mach-O binaries"
+          echo "---------------------------------"
+          echo "Checking for Mach-O binaries..."
+          MACHO_COUNT=0
+          for exec_file in $EXECUTABLES; do
+            if file "$exec_file" | grep -q "Mach-O"; then
+              echo "  Mach-O: $exec_file"
+              MACHO_COUNT=$((MACHO_COUNT + 1))
+            fi
+          done
+          echo "Total Mach-O binaries: $MACHO_COUNT"
+          echo ""
+          
+          echo "Test 3: Code signature verification"
+          echo "------------------------------------"
+          SIGNED_COUNT=0
+          UNSIGNED_COUNT=0
+          for exec_file in $EXECUTABLES; do
+            if file "$exec_file" | grep -q "Mach-O"; then
+              if codesign --verify "$exec_file" 2>/dev/null; then
+                SIGNED_COUNT=$((SIGNED_COUNT + 1))
+              else
+                UNSIGNED_COUNT=$((UNSIGNED_COUNT + 1))
+                echo "  Unsigned: $exec_file"
+              fi
+            fi
+          done
+          echo "Signed binaries: $SIGNED_COUNT"
+          echo "Unsigned binaries: $UNSIGNED_COUNT"
+          echo ""
+          
+          echo "Test 4: File ownership"
+          echo "----------------------"
+          ls -lh "$INSTALL_PREFIX" | head -10
+          echo ""
+
+      - name: Post-Install - Installation Integrity
+        run: |
+          echo "================================================"
+          echo "INSTALLATION INTEGRITY"
+          echo "================================================"
+          echo ""
+          
+          echo "Test 1: Homebrew formula info"
+          echo "------------------------------"
+          brew info azure-cli
+          echo ""
+          
+          echo "Test 2: Installed files count"
+          echo "------------------------------"
+          FILE_COUNT=$(brew list azure-cli | wc -l | xargs)
+          echo "Total files installed: $FILE_COUNT"
+          echo ""
+          
+          echo "Test 3: Dependencies"
+          echo "--------------------"
+          brew deps azure-cli
+          echo ""
+          
+          echo "Test 4: Installation prefix"
+          echo "----------------------------"
+          INSTALL_PREFIX=$(brew --prefix azure-cli)
+          echo "Installation prefix: $INSTALL_PREFIX"
+          du -sh "$INSTALL_PREFIX"
+          echo ""
+
+      - name: Post-Install - Execution Test
+        run: |
+          echo "================================================"
+          echo "BASIC EXECUTION TEST"
+          echo "================================================"
+          echo ""
+          
+          echo "Test 1: Command executes without errors"
+          echo "----------------------------------------"
+          if az --version >/dev/null 2>&1; then
+            echo "✅ Command executes successfully"
+          else
+            echo "❌ Command execution failed"
+            exit 1
+          fi
+          echo ""
+          
+          echo "Test 2: Verify Python location"
+          echo "-------------------------------"
+          PYTHON_PATH=$(az --version 2>/dev/null | grep "Python location" | awk -F"'" '{print $2}')
+          if [ -f "$PYTHON_PATH" ]; then
+            echo "✅ Python executable exists: $PYTHON_PATH"
+          else
+            echo "❌ Python executable not found: $PYTHON_PATH"
+            exit 1
+          fi
+          echo ""
+
+      - name: Generate Security Report
+        if: always()
+        run: |
+          echo "================================================"
+          echo "SECURITY & INSTALLATION SUMMARY"
+          echo "================================================"
+          echo ""
+          
+          INSTALL_PREFIX=$(brew --prefix azure-cli)
+          VERSION=$(brew list --versions azure-cli | awk '{print $2}')
+          
+          echo "Test Date:            $(date)"
+          echo "Azure CLI Version:    $VERSION"
+          echo "Installation Prefix:  $INSTALL_PREFIX"
+          echo "Architecture:         $(arch)"
+          echo "macOS Version:        $(sw_vers -productVersion)"
+          echo "Homebrew Version:     $(brew --version | head -1)"
+          echo ""
+          
+          echo "Installation Method:  Homebrew Core (official)"
+          echo "Formula Repository:   homebrew/homebrew-core"
+          echo ""
+          
+          echo "Security Notes:"
+          echo "- Homebrew installations typically don't require code signing"
+          echo "- No quarantine attributes expected (local installation)"
+          echo "- Gatekeeper assessment not applicable for Homebrew"
+          echo ""
+
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "================================================"
+          echo "CLEANUP"
+          echo "================================================"
+          
+          echo "Uninstalling Azure CLI..."
+          brew uninstall azure-cli 2>/dev/null || true
+          
+          echo "✅ Cleanup completed"
+          echo ""
+
+  test-homebrew-core-x86-64:
+    name: Test Homebrew Core Installation (x86_64)
+    runs-on: macos-13 # x86_64 (Intel)
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: System Information
+        run: |
+          echo "================================================"
+          echo "SYSTEM INFORMATION"
+          echo "================================================"
+          sw_vers
+          uname -a
+          echo "Architecture: $(arch)"
+          echo "Homebrew Version: $(brew --version | head -1)"
+          echo "Homebrew Prefix: $(brew --prefix)"
+          echo "Homebrew Cellar: $(brew --cellar)"
+          echo ""
+
+      - name: Pre-Install State
+        run: |
+          echo "================================================"
+          echo "PRE-INSTALL STATE"
+          echo "================================================"
+          echo ""
+          echo "--- Checking for existing 'az' command ---"
+          which az || echo "✓ 'az' not found (expected)"
+          echo ""
+          echo "--- Homebrew installed packages ---"
+          brew list --formula | head -20 || echo "No formulae installed"
+          echo ""
+
+      - name: Clean Previous Installations
+        run: |
+          echo "================================================"
+          echo "CLEANING PREVIOUS INSTALLATIONS"
+          echo "================================================"
+          
+          # Remove any existing Homebrew installations
+          brew uninstall --force azure-cli 2>/dev/null || true
+          
+          # Verify cleanup
+          if command -v az >/dev/null 2>&1; then
+            echo "❌ Failed to clean up existing installations"
+            which az
+            exit 1
+          else
+            echo "✅ No existing Azure CLI installations found"
+          fi
+          echo ""
+
+      - name: Install Azure CLI from Homebrew Core
+        run: |
+          echo "================================================"
+          echo "INSTALLING AZURE CLI FROM HOMEBREW CORE"
+          echo "================================================"
+          
+          # Update homebrew to get latest formula
+          echo "Updating Homebrew..."
+          brew update
+          
+          # Install azure-cli from homebrew-core
+          echo ""
+          echo "Installing: brew install azure-cli"
+          brew install azure-cli
+          
+          echo ""
+          echo "✅ Installation completed"
+          echo ""
+
+      - name: Post-Install - Command Location
+        run: |
+          echo "================================================"
+          echo "COMMAND LOCATION VERIFICATION"
+          echo "================================================"
+          echo ""
+          echo "--- which az ---"
+          which az
+          echo ""
+          echo "--- az command details ---"
+          ls -lh $(which az)
+          echo ""
+          echo "--- Resolve symlinks ---"
+          if [ -L "$(which az)" ]; then
+            RESOLVED=$(readlink $(which az))
+            echo "First level: $RESOLVED"
+            if [ -L "$RESOLVED" ]; then
+              echo "Second level: $(readlink $RESOLVED)"
+            fi
+          else
+            echo "Not a symlink - actual binary"
+          fi
+          echo ""
+
+      - name: Post-Install - Binary Analysis
+        run: |
+          echo "================================================"
+          echo "BINARY ANALYSIS"
+          echo "================================================"
+          echo ""
+          AZ_PATH=$(which az)
+          echo "Analyzing: $AZ_PATH"
+          echo ""
+          
+          echo "--- File type ---"
+          file "$AZ_PATH"
+          echo ""
+          
+          echo "--- File permissions ---"
+          ls -lh "$AZ_PATH"
+          echo ""
+          
+          echo "--- Extended attributes (quarantine check) ---"
+          xattr "$AZ_PATH" || echo "No extended attributes"
+          echo ""
+          
+          echo "--- Code signature ---"
+          codesign -dv "$AZ_PATH" 2>&1 || echo "Not code signed"
+          echo ""
+
+      - name: Post-Install - Python Binary Analysis
+        run: |
+          echo "================================================"
+          echo "PYTHON BINARY ANALYSIS"
+          echo "================================================"
+          echo ""
+          
+          # Find Python executable
+          INSTALL_PREFIX=$(brew --prefix azure-cli)
+          PYTHON_BINARIES=$(find "$INSTALL_PREFIX" -name "python*" -type f -perm +111 2>/dev/null | head -5)
+          
+          if [ -n "$PYTHON_BINARIES" ]; then
+            echo "Found Python binaries:"
+            echo "$PYTHON_BINARIES"
+            echo ""
+            
+            for PYTHON_BIN in $PYTHON_BINARIES; do
+              echo "--- Analyzing: $PYTHON_BIN ---"
+              file "$PYTHON_BIN"
+              
+              # Check if it's a Mach-O binary
+              if file "$PYTHON_BIN" | grep -q "Mach-O"; then
+                echo "✓ Mach-O binary detected"
+                
+                # Check code signature
+                echo "Code signature:"
+                codesign -dv "$PYTHON_BIN" 2>&1 || echo "Not code signed"
+                
+                # Verify signature
+                echo "Signature verification:"
+                codesign --verify --verbose "$PYTHON_BIN" 2>&1 && echo "✓ Signature valid" || echo "✗ Signature invalid or not signed"
+              fi
+              echo ""
+            done
+          else
+            echo "No Python binaries found"
+          fi
+          echo ""
+
+      - name: Post-Install - Gatekeeper Assessment
+        run: |
+          echo "================================================"
+          echo "GATEKEEPER ASSESSMENT"
+          echo "================================================"
+          echo ""
+          
+          AZ_PATH=$(which az)
+          
+          echo "Test 1: Check quarantine attribute"
+          echo "-----------------------------------"
+          if xattr "$AZ_PATH" | grep -q "com.apple.quarantine"; then
+            echo "⚠️  Quarantine attribute present"
+            xattr -l "$AZ_PATH" | grep quarantine
+          else
+            echo "✓ No quarantine attribute (expected for Homebrew)"
+          fi
+          echo ""
+          
+          echo "Test 2: spctl assessment"
+          echo "------------------------"
+          spctl --assess --type execute "$AZ_PATH" 2>&1 || echo "Assessment result: Not applicable for Homebrew binaries"
+          echo ""
+          
+          echo "Test 3: Gatekeeper status"
+          echo "-------------------------"
+          spctl --status
+          echo ""
+
+      - name: Post-Install - Notarization Check
+        run: |
+          echo "================================================"
+          echo "NOTARIZATION CHECK"
+          echo "================================================"
+          echo ""
+          
+          AZ_PATH=$(which az)
+          
+          echo "Checking stapled notarization ticket..."
+          stapler validate "$AZ_PATH" 2>&1 || echo "Note: Homebrew binaries typically don't have stapled tickets"
+          echo ""
+          
+          echo "Checking code signature details..."
+          codesign -dvvv "$AZ_PATH" 2>&1 | grep -E "(Authority|TeamIdentifier|Signature)" || echo "No signature information"
+          echo ""
+
+      - name: Post-Install - Security Verification
+        run: |
+          echo "================================================"
+          echo "SECURITY VERIFICATION"
+          echo "================================================"
+          echo ""
+          
+          INSTALL_PREFIX=$(brew --prefix azure-cli)
+          
+          echo "Test 1: Check for executable files"
+          echo "-----------------------------------"
+          echo "Finding all executable files..."
+          EXECUTABLES=$(find "$INSTALL_PREFIX" -type f -perm +111 2>/dev/null)
+          EXEC_COUNT=$(echo "$EXECUTABLES" | wc -l | xargs)
+          echo "Found $EXEC_COUNT executable files"
+          echo ""
+          
+          echo "Test 2: Identify Mach-O binaries"
+          echo "---------------------------------"
+          echo "Checking for Mach-O binaries..."
+          MACHO_COUNT=0
+          for exec_file in $EXECUTABLES; do
+            if file "$exec_file" | grep -q "Mach-O"; then
+              echo "  Mach-O: $exec_file"
+              MACHO_COUNT=$((MACHO_COUNT + 1))
+            fi
+          done
+          echo "Total Mach-O binaries: $MACHO_COUNT"
+          echo ""
+          
+          echo "Test 3: Code signature verification"
+          echo "------------------------------------"
+          SIGNED_COUNT=0
+          UNSIGNED_COUNT=0
+          for exec_file in $EXECUTABLES; do
+            if file "$exec_file" | grep -q "Mach-O"; then
+              if codesign --verify "$exec_file" 2>/dev/null; then
+                SIGNED_COUNT=$((SIGNED_COUNT + 1))
+              else
+                UNSIGNED_COUNT=$((UNSIGNED_COUNT + 1))
+                echo "  Unsigned: $exec_file"
+              fi
+            fi
+          done
+          echo "Signed binaries: $SIGNED_COUNT"
+          echo "Unsigned binaries: $UNSIGNED_COUNT"
+          echo ""
+          
+          echo "Test 4: File ownership"
+          echo "----------------------"
+          ls -lh "$INSTALL_PREFIX" | head -10
+          echo ""
+
+      - name: Post-Install - Installation Integrity
+        run: |
+          echo "================================================"
+          echo "INSTALLATION INTEGRITY"
+          echo "================================================"
+          echo ""
+          
+          echo "Test 1: Homebrew formula info"
+          echo "------------------------------"
+          brew info azure-cli
+          echo ""
+          
+          echo "Test 2: Installed files count"
+          echo "------------------------------"
+          FILE_COUNT=$(brew list azure-cli | wc -l | xargs)
+          echo "Total files installed: $FILE_COUNT"
+          echo ""
+          
+          echo "Test 3: Dependencies"
+          echo "--------------------"
+          brew deps azure-cli
+          echo ""
+          
+          echo "Test 4: Installation prefix"
+          echo "----------------------------"
+          INSTALL_PREFIX=$(brew --prefix azure-cli)
+          echo "Installation prefix: $INSTALL_PREFIX"
+          du -sh "$INSTALL_PREFIX"
+          echo ""
+
+      - name: Post-Install - Execution Test
+        run: |
+          echo "================================================"
+          echo "BASIC EXECUTION TEST"
+          echo "================================================"
+          echo ""
+          
+          echo "Test 1: Command executes without errors"
+          echo "----------------------------------------"
+          if az --version >/dev/null 2>&1; then
+            echo "✅ Command executes successfully"
+          else
+            echo "❌ Command execution failed"
+            exit 1
+          fi
+          echo ""
+          
+          echo "Test 2: Verify Python location"
+          echo "-------------------------------"
+          PYTHON_PATH=$(az --version 2>/dev/null | grep "Python location" | awk -F"'" '{print $2}')
+          if [ -f "$PYTHON_PATH" ]; then
+            echo "✅ Python executable exists: $PYTHON_PATH"
+          else
+            echo "❌ Python executable not found: $PYTHON_PATH"
+            exit 1
+          fi
+          echo ""
+
+      - name: Generate Security Report
+        if: always()
+        run: |
+          echo "================================================"
+          echo "SECURITY & INSTALLATION SUMMARY"
+          echo "================================================"
+          echo ""
+          
+          INSTALL_PREFIX=$(brew --prefix azure-cli)
+          VERSION=$(brew list --versions azure-cli | awk '{print $2}')
+          
+          echo "Test Date:            $(date)"
+          echo "Azure CLI Version:    $VERSION"
+          echo "Installation Prefix:  $INSTALL_PREFIX"
+          echo "Architecture:         $(arch)"
+          echo "macOS Version:        $(sw_vers -productVersion)"
+          echo "Homebrew Version:     $(brew --version | head -1)"
+          echo ""
+          
+          echo "Installation Method:  Homebrew Core (official)"
+          echo "Formula Repository:   homebrew/homebrew-core"
+          echo ""
+          
+          echo "Security Notes:"
+          echo "- Homebrew installations typically don't require code signing"
+          echo "- No quarantine attributes expected (local installation)"
+          echo "- Gatekeeper assessment not applicable for Homebrew"
+          echo ""
+
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "================================================"
+          echo "CLEANUP"
+          echo "================================================"
+          
+          echo "Uninstalling Azure CLI..."
+          brew uninstall azure-cli 2>/dev/null || true
+          
+          echo "✅ Cleanup completed"
+          echo ""
