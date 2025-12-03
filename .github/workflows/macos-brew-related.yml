@@ -1,4 +1,4 @@
-name: macos-brew-related
+name: (homebrew) homebrew-core-related
 
 on:
     workflow_dispatch:

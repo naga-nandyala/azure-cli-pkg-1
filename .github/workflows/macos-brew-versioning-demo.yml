@@ -1,0 +1,451 @@
+name: (homebrew) homebrew-core-versioning-demo
+
+on:
+    workflow_dispatch:
+    pull_request:
+        paths:
+            - ".github/workflows/macos-brew-versioning-demo.yml"
+
+jobs:
+    test-homebrew-versioning:
+        name: Demonstrate Homebrew Cellar Versioning
+        runs-on: macos-14 # ARM64 (Apple Silicon)
+        timeout-minutes: 45
+
+        steps:
+            - name: Checkout Repository
+              uses: actions/checkout@v4
+
+            - name: System Information
+              run: |
+                  echo "================================================"
+                  echo "SYSTEM INFORMATION"
+                  echo "================================================"
+                  sw_vers
+                  uname -a
+                  echo "Architecture: $(arch)"
+                  echo "Homebrew Version: $(brew --version | head -1)"
+                  echo "Homebrew Prefix: $(brew --prefix)"
+                  echo "Homebrew Cellar: $(brew --cellar)"
+                  echo ""
+
+            - name: Clean Previous Installations
+              run: |
+                  echo "================================================"
+                  echo "CLEANING PREVIOUS INSTALLATIONS"
+                  echo "================================================"
+
+                  brew uninstall --force azure-cli 2>/dev/null || true
+
+                  if command -v az >/dev/null 2>&1; then
+                    echo "❌ Failed to clean up existing installations"
+                    which az
+                    exit 1
+                  else
+                    echo "✅ No existing Azure CLI installations found"
+                  fi
+                  echo ""
+
+            - name: Install Older Version of Azure CLI
+              run: |
+                  echo "================================================"
+                  echo "INSTALLING OLDER VERSION OF AZURE CLI"
+                  echo "================================================"
+                  echo ""
+                  echo "Strategy: Install a specific older version using formula@version syntax"
+                  echo ""
+
+                  # Update brew to get latest formula metadata
+                  brew update
+
+                  # Check available versions in homebrew-core history
+                  echo "Checking Azure CLI versions available in Homebrew..."
+                  brew info azure-cli
+                  echo ""
+
+                  # Try to install a specific older version
+                  # Note: Homebrew may not have old versions readily available
+                  # We'll use brew extract to get an older formula
+
+                  echo "Attempting to install older version..."
+                  echo "Method: Using brew extract to get historical formula"
+                  echo ""
+
+                  # Create a custom tap for old version
+                  brew tap-new local/old-versions
+
+                  # Extract an old version (e.g., 2 versions back from current)
+                  # This requires knowing a specific version - let's try a recent one
+                  brew extract --version=2.64.0 azure-cli local/old-versions 2>/dev/null || \
+                  brew extract --version=2.63.0 azure-cli local/old-versions 2>/dev/null || \
+                  brew extract --version=2.62.0 azure-cli local/old-versions 2>/dev/null || \
+                  brew extract --version=2.61.0 azure-cli local/old-versions 2>/dev/null || \
+                  brew extract --version=2.60.0 azure-cli local/old-versions 2>/dev/null || \
+                  echo "Could not extract specific old version, will install current then demonstrate with manual version change"
+
+                  # Install the old version if extraction worked
+                  if brew list --formula local/old-versions 2>/dev/null | grep -q azure-cli; then
+                    echo "✅ Successfully extracted old version"
+                    brew install local/old-versions/azure-cli
+                  else
+                    echo "⚠️  Could not extract old version via brew extract"
+                    echo "Installing current version first, will demonstrate versioning differently"
+                    brew install azure-cli
+                  fi
+
+                  echo ""
+                  echo "✅ Initial installation completed"
+                  echo ""
+
+            - name: Examine Initial Installation Structure
+              run: |
+                  echo "================================================"
+                  echo "INITIAL INSTALLATION STRUCTURE"
+                  echo "================================================"
+                  echo ""
+
+                  # Get installation info
+                  echo "--- Homebrew Info ---"
+                  brew info azure-cli
+                  echo ""
+
+                  # Check which version is installed
+                  echo "--- Current Version ---"
+                  az --version | head -1
+                  echo ""
+
+                  # Explore Cellar structure
+                  CELLAR_BASE="/opt/homebrew/Cellar/azure-cli"
+
+                  echo "--- Cellar Directory Structure ---"
+                  echo "Cellar location: $CELLAR_BASE"
+                  echo ""
+
+                  if [ -d "$CELLAR_BASE" ]; then
+                    echo "Installed versions:"
+                    ls -la "$CELLAR_BASE/"
+                    echo ""
+                    
+                    # Show structure of first version
+                    FIRST_VERSION=$(ls "$CELLAR_BASE" | head -1)
+                    echo "Structure of version $FIRST_VERSION:"
+                    tree -L 3 "$CELLAR_BASE/$FIRST_VERSION" 2>/dev/null || \
+                    find "$CELLAR_BASE/$FIRST_VERSION" -maxdepth 3 -type d | head -20
+                    echo ""
+                  fi
+
+                  # Check symlink
+                  echo "--- Symlink Analysis ---"
+                  echo "Command location: $(which az)"
+                  echo "Symlink details:"
+                  ls -la $(which az)
+                  echo ""
+                  echo "Symlink target:"
+                  readlink $(which az)
+                  echo ""
+                  echo "Full resolved path:"
+                  realpath $(which az) 2>/dev/null || echo "realpath not available"
+                  echo ""
+
+            - name: Upgrade to Latest Version
+              run: |
+                  echo "================================================"
+                  echo "UPGRADING TO LATEST VERSION"
+                  echo "================================================"
+                  echo ""
+
+                  echo "Current version before upgrade:"
+                  az --version | head -1
+                  echo ""
+
+                  echo "Running: brew upgrade azure-cli"
+                  brew upgrade azure-cli || echo "Already at latest version or upgrade not needed"
+
+                  echo ""
+                  echo "Version after upgrade:"
+                  az --version | head -1
+                  echo ""
+                  echo "✅ Upgrade completed"
+                  echo ""
+
+            - name: Examine Post-Upgrade Structure
+              run: |
+                  echo "================================================"
+                  echo "POST-UPGRADE INSTALLATION STRUCTURE"
+                  echo "================================================"
+                  echo ""
+
+                  CELLAR_BASE="/opt/homebrew/Cellar/azure-cli"
+
+                  echo "--- Cellar Directory After Upgrade ---"
+                  echo "Cellar location: $CELLAR_BASE"
+                  echo ""
+
+                  if [ -d "$CELLAR_BASE" ]; then
+                    echo "All installed versions in Cellar:"
+                    ls -la "$CELLAR_BASE/"
+                    echo ""
+                    
+                    VERSION_COUNT=$(ls "$CELLAR_BASE" | wc -l | xargs)
+                    echo "Total versions in Cellar: $VERSION_COUNT"
+                    echo ""
+                    
+                    # Show details of each version
+                    for VERSION_DIR in "$CELLAR_BASE"/*; do
+                      VERSION_NAME=$(basename "$VERSION_DIR")
+                      echo "=== Version: $VERSION_NAME ==="
+                      echo "Path: $VERSION_DIR"
+                      echo "Size: $(du -sh "$VERSION_DIR" | cut -f1)"
+                      echo "Files: $(find "$VERSION_DIR" -type f | wc -l | xargs) files"
+                      echo ""
+                    done
+                  fi
+
+                  # Check updated symlink
+                  echo "--- Updated Symlink Analysis ---"
+                  echo "Command location: $(which az)"
+                  echo "Symlink details:"
+                  ls -la $(which az)
+                  echo ""
+                  echo "Symlink now points to:"
+                  readlink $(which az)
+                  echo ""
+
+                  # Verify which version is active
+                  echo "--- Active Version Verification ---"
+                  ACTIVE_VERSION=$(az --version | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+                  echo "Active CLI version: $ACTIVE_VERSION"
+                  echo ""
+
+                  SYMLINK_TARGET=$(readlink $(which az))
+                  echo "Symlink target version: $SYMLINK_TARGET"
+                  echo ""
+
+                  if echo "$SYMLINK_TARGET" | grep -q "$ACTIVE_VERSION"; then
+                    echo "✅ Symlink correctly points to active version"
+                  else
+                    echo "⚠️  Symlink might not match active version"
+                  fi
+                  echo ""
+
+            - name: Demonstrate Version Switching
+              run: |
+                  echo "================================================"
+                  echo "DEMONSTRATE VERSION SWITCHING"
+                  echo "================================================"
+                  echo ""
+
+                  CELLAR_BASE="/opt/homebrew/Cellar/azure-cli"
+
+                  # Check if multiple versions exist
+                  VERSION_COUNT=$(ls "$CELLAR_BASE" 2>/dev/null | wc -l | xargs)
+
+                  if [ "$VERSION_COUNT" -gt 1 ]; then
+                    echo "Multiple versions detected: $VERSION_COUNT versions"
+                    echo ""
+                    
+                    # List all versions
+                    echo "Available versions:"
+                    ls "$CELLAR_BASE"
+                    echo ""
+                    
+                    # Get first (older) version
+                    OLD_VERSION=$(ls "$CELLAR_BASE" | head -1)
+                    NEW_VERSION=$(ls "$CELLAR_BASE" | tail -1)
+                    
+                    echo "Older version: $OLD_VERSION"
+                    echo "Newer version: $NEW_VERSION"
+                    echo ""
+                    
+                    # Show current active version
+                    echo "Current active version:"
+                    az --version | head -1
+                    echo ""
+                    
+                    # Switch to older version
+                    echo "Switching to older version: $OLD_VERSION"
+                    brew unlink azure-cli
+                    brew link azure-cli@$OLD_VERSION 2>/dev/null || \
+                    brew link --overwrite --force "$CELLAR_BASE/$OLD_VERSION" 2>/dev/null || \
+                    echo "Note: brew switch command may not be available in newer Homebrew"
+                    
+                    echo ""
+                    echo "After switch attempt:"
+                    which az
+                    az --version | head -1 2>/dev/null || echo "Command may not work if switch failed"
+                    echo ""
+                    
+                    # Explain the versioning mechanism
+                    echo "=== Homebrew Versioning Explanation ==="
+                    echo ""
+                    echo "1. Each version is stored in separate directory:"
+                    echo "   $CELLAR_BASE/<version>/"
+                    echo ""
+                    echo "2. Homebrew creates symlinks from /opt/homebrew/bin/ to active version"
+                    echo ""
+                    echo "3. During upgrade:"
+                    echo "   - New version is installed to new directory"
+                    echo "   - Symlinks are updated to point to new version"
+                    echo "   - Old version may remain in Cellar (until cleaned)"
+                    echo ""
+                    echo "4. Users can switch versions using:"
+                    echo "   - brew unlink azure-cli"
+                    echo "   - brew link azure-cli@<version>"
+                    echo ""
+                  else
+                    echo "Only one version installed: $VERSION_COUNT"
+                    echo ""
+                    echo "=== Homebrew Versioning Explanation ==="
+                    echo ""
+                    echo "Even with single version, Homebrew uses versioned paths:"
+                    echo ""
+                    ls -la "$CELLAR_BASE/"
+                    echo ""
+                    echo "Structure: /opt/homebrew/Cellar/azure-cli/<version>/"
+                    echo "This allows future side-by-side installations"
+                    echo ""
+                  fi
+
+            - name: Show Cleanup Behavior
+              run: |
+                  echo "================================================"
+                  echo "HOMEBREW CLEANUP BEHAVIOR"
+                  echo "================================================"
+                  echo ""
+
+                  CELLAR_BASE="/opt/homebrew/Cellar/azure-cli"
+
+                  echo "Before cleanup:"
+                  echo "Versions in Cellar:"
+                  ls -la "$CELLAR_BASE/" 2>/dev/null
+                  echo ""
+
+                  VERSION_COUNT_BEFORE=$(ls "$CELLAR_BASE" 2>/dev/null | wc -l | xargs)
+                  echo "Total versions: $VERSION_COUNT_BEFORE"
+                  echo ""
+
+                  echo "Running: brew cleanup azure-cli"
+                  brew cleanup azure-cli
+                  echo ""
+
+                  echo "After cleanup:"
+                  echo "Versions in Cellar:"
+                  ls -la "$CELLAR_BASE/" 2>/dev/null
+                  echo ""
+
+                  VERSION_COUNT_AFTER=$(ls "$CELLAR_BASE" 2>/dev/null | wc -l | xargs)
+                  echo "Total versions: $VERSION_COUNT_AFTER"
+                  echo ""
+
+                  echo "Cleanup removes old versions but keeps the active one"
+                  echo ""
+
+            - name: Compare with Microsoft Standard Path
+              run: |
+                  echo "================================================"
+                  echo "COMPARISON: HOMEBREW VS MICROSOFT STANDARD PATH"
+                  echo "================================================"
+                  echo ""
+
+                  echo "=== Homebrew Core Approach (Current) ==="
+                  echo "Path structure:"
+                  echo "  /opt/homebrew/Cellar/azure-cli/2.81.0/bin/az"
+                  echo "  /opt/homebrew/Cellar/azure-cli/2.82.0/bin/az"
+                  echo ""
+                  echo "Symlink:"
+                  echo "  /opt/homebrew/bin/az -> ../Cellar/azure-cli/2.82.0/bin/az"
+                  echo ""
+                  echo "Pros:"
+                  echo "  ✅ Side-by-side versions"
+                  echo "  ✅ Easy rollback"
+                  echo "  ✅ Atomic upgrades"
+                  echo "  ✅ Version switching via 'brew switch'"
+                  echo ""
+                  echo "Cons:"
+                  echo "  ❌ More disk space"
+                  echo "  ❌ More complex cleanup"
+                  echo ""
+
+                  echo "=== Microsoft Standard Path (Your New Approach) ==="
+                  echo "Path structure:"
+                  echo "  /usr/local/microsoft/azure-cli/bin/python3"
+                  echo ""
+                  echo "Launcher:"
+                  echo "  /usr/local/bin/az (shell script)"
+                  echo ""
+                  echo "Pros:"
+                  echo "  ✅ Simple, predictable path"
+                  echo "  ✅ Matches official Microsoft PKG"
+                  echo "  ✅ Less disk space"
+                  echo "  ✅ Automatic cleanup on upgrade"
+                  echo ""
+                  echo "Cons:"
+                  echo "  ❌ No side-by-side versions"
+                  echo "  ❌ Harder to rollback"
+                  echo ""
+
+                  echo "=== Recommended: Versioned Microsoft Path ==="
+                  echo "Path structure:"
+                  echo "  /usr/local/microsoft/azure-cli/2.81.0/bin/python3"
+                  echo "  /usr/local/microsoft/azure-cli/2.82.0/bin/python3"
+                  echo ""
+                  echo "Launcher:"
+                  echo "  /usr/local/bin/az (points to current version)"
+                  echo ""
+                  echo "Pros:"
+                  echo "  ✅ Side-by-side versions (like Homebrew)"
+                  echo "  ✅ Easy rollback"
+                  echo "  ✅ Microsoft standard base path"
+                  echo "  ✅ Flexible upgrade strategy"
+                  echo ""
+
+            - name: Generate Versioning Report
+              if: always()
+              run: |
+                  echo "================================================"
+                  echo "HOMEBREW VERSIONING DEMONSTRATION SUMMARY"
+                  echo "================================================"
+                  echo ""
+
+                  echo "Test Date: $(date)"
+                  echo "macOS: $(sw_vers -productVersion)"
+                  echo "Architecture: $(arch)"
+                  echo "Homebrew: $(brew --version | head -1)"
+                  echo ""
+
+                  CELLAR_BASE="/opt/homebrew/Cellar/azure-cli"
+
+                  if [ -d "$CELLAR_BASE" ]; then
+                    echo "Installed Versions:"
+                    for VERSION_DIR in "$CELLAR_BASE"/*; do
+                      VERSION=$(basename "$VERSION_DIR")
+                      SIZE=$(du -sh "$VERSION_DIR" | cut -f1)
+                      echo "  - $VERSION ($SIZE)"
+                    done
+                  else
+                    echo "No versions found in Cellar"
+                  fi
+                  echo ""
+
+                  echo "Active Version: $(az --version 2>/dev/null | head -1 || echo 'Not available')"
+                  echo "Command Path: $(which az 2>/dev/null || echo 'Not found')"
+                  echo ""
+
+                  echo "Key Takeaway:"
+                  echo "Homebrew's Cellar design allows multiple versions to coexist,"
+                  echo "enabling safe upgrades and easy rollbacks. Consider implementing"
+                  echo "similar versioning in your Microsoft standard path approach."
+                  echo ""
+
+            - name: Cleanup
+              if: always()
+              run: |
+                  echo "================================================"
+                  echo "CLEANUP"
+                  echo "================================================"
+
+                  brew uninstall azure-cli 2>/dev/null || true
+                  brew untap local/old-versions 2>/dev/null || true
+
+                  echo "✅ Cleanup completed"
+                  echo ""
