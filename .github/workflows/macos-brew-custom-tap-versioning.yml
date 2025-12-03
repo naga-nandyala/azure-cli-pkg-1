@@ -80,9 +80,12 @@ jobs:
                   brew search naga-nandyala/mycli-app/azure-cli
                   echo ""
 
-                  # Install version 2.80 from custom tap
-                  echo "Installing Azure CLI 2.80..."
-                  brew install naga-nandyala/mycli-app/azure-cli@2.80
+                  # Install version 2.80 from custom tap (build from source, skip bottles)
+                  echo "Installing Azure CLI 2.80 (building from source, this may take 15-20 minutes)..."
+                  echo "Note: Using --build-from-source to avoid bottle download issues"
+                  echo ""
+                  
+                  brew install --build-from-source naga-nandyala/mycli-app/azure-cli@2.80
 
                   echo ""
                   echo "✅ Installation completed"
