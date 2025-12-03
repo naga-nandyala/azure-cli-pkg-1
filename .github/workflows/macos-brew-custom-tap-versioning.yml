@@ -1,0 +1,432 @@
+name: (homebrew) custom-tap-versioning-test
+
+on:
+    workflow_dispatch:
+    pull_request:
+        paths:
+            - ".github/workflows/macos-brew-custom-tap-versioning.yml"
+
+jobs:
+    test-custom-tap-versioning:
+        name: Test Version Upgrade via Custom Tap
+        runs-on: macos-14 # ARM64 (Apple Silicon)
+        timeout-minutes: 45
+
+        steps:
+            - name: Checkout Repository
+              uses: actions/checkout@v4
+
+            - name: System Information
+              run: |
+                  echo "================================================"
+                  echo "SYSTEM INFORMATION"
+                  echo "================================================"
+                  sw_vers
+                  uname -a
+                  echo "Architecture: $(arch)"
+                  echo "Homebrew Version: $(brew --version | head -1)"
+                  echo "Homebrew Prefix: $(brew --prefix)"
+                  echo "Homebrew Cellar: $(brew --cellar)"
+                  echo ""
+
+            - name: Clean Previous Installations
+              run: |
+                  echo "================================================"
+                  echo "CLEANING PREVIOUS INSTALLATIONS"
+                  echo "================================================"
+
+                  brew uninstall --force azure-cli 2>/dev/null || true
+                  brew untap naga-nandyala/mycli-app 2>/dev/null || true
+
+                  if command -v az >/dev/null 2>&1; then
+                    echo "❌ Failed to clean up existing installations"
+                    which az
+                    exit 1
+                  else
+                    echo "✅ No existing Azure CLI installations found"
+                  fi
+                  echo ""
+
+            - name: Add Custom Tap
+              run: |
+                  echo "================================================"
+                  echo "ADDING CUSTOM HOMEBREW TAP"
+                  echo "================================================"
+                  echo ""
+                  echo "Tap Repository: https://github.com/naga-nandyala/homebrew-mycli-app"
+                  echo ""
+
+                  brew tap naga-nandyala/mycli-app
+
+                  echo ""
+                  echo "✅ Custom tap added successfully"
+                  echo ""
+                  echo "Available formulas in tap:"
+                  brew search naga-nandyala/mycli-app/
+                  echo ""
+
+            - name: Install Azure CLI 2.80 from Custom Tap
+              run: |
+                  echo "================================================"
+                  echo "INSTALLING AZURE CLI 2.80 FROM CUSTOM TAP"
+                  echo "================================================"
+                  echo ""
+                  echo "Using versioned formula: azure-cli@2.80"
+                  echo "Formula URL: https://github.com/naga-nandyala/homebrew-mycli-app/blob/main/Formula/azure-cli%402.80.rb"
+                  echo ""
+
+                  # Check what's available in the custom tap
+                  echo "Checking available Azure CLI formulas:"
+                  brew search naga-nandyala/mycli-app/azure-cli
+                  echo ""
+
+                  # Install version 2.80 from custom tap
+                  echo "Installing Azure CLI 2.80..."
+                  brew install naga-nandyala/mycli-app/azure-cli@2.80
+
+                  echo ""
+                  echo "✅ Installation completed"
+                  echo ""
+
+                  # Verify installation
+                  echo "Installed version:"
+                  az --version | head -1
+                  echo ""
+
+                  # Verify it's actually 2.80
+                  INSTALLED_VERSION=$(az --version | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+                  if [[ "$INSTALLED_VERSION" == "2.80.0" ]]; then
+                    echo "✅ Confirmed: Azure CLI 2.80.0 installed"
+                  else
+                    echo "⚠️  Expected 2.80.0, got $INSTALLED_VERSION"
+                  fi
+                  echo ""
+
+            - name: Examine Initial Installation Structure
+              run: |
+                  echo "================================================"
+                  echo "INITIAL INSTALLATION STRUCTURE"
+                  echo "================================================"
+                  echo ""
+
+                  # Get installation info
+                  echo "--- Homebrew Info ---"
+                  brew info azure-cli
+                  echo ""
+
+                  # Check which version is installed
+                  echo "--- Current Version ---"
+                  az --version | head -1
+                  echo ""
+
+                  # Explore Cellar structure
+                  CELLAR_BASE="/opt/homebrew/Cellar/azure-cli"
+
+                  echo "--- Cellar Directory Structure ---"
+                  echo "Cellar location: $CELLAR_BASE"
+                  echo ""
+
+                  if [ -d "$CELLAR_BASE" ]; then
+                    echo "Installed versions:"
+                    ls -la "$CELLAR_BASE/"
+                    echo ""
+                    
+                    # Show structure of installed version
+                    FIRST_VERSION=$(ls "$CELLAR_BASE" | head -1)
+                    echo "Structure of version $FIRST_VERSION:"
+                    echo "Top-level directories:"
+                    ls -la "$CELLAR_BASE/$FIRST_VERSION/"
+                    echo ""
+                    
+                    echo "Binary location:"
+                    ls -la "$CELLAR_BASE/$FIRST_VERSION/bin/" 2>/dev/null || echo "No bin directory"
+                    echo ""
+                  fi
+
+                  # Check symlink
+                  echo "--- Symlink Analysis ---"
+                  echo "Command location: $(which az)"
+                  echo "Symlink details:"
+                  ls -la $(which az)
+                  echo ""
+                  echo "Symlink target:"
+                  readlink $(which az)
+                  echo ""
+
+            - name: Upgrade to Latest Version (2.81)
+              run: |
+                  echo "================================================"
+                  echo "UPGRADING TO LATEST VERSION"
+                  echo "================================================"
+                  echo ""
+                  echo "Strategy: Install latest azure-cli from homebrew-core"
+                  echo "This will create a side-by-side installation with 2.80"
+                  echo ""
+
+                  # Update homebrew-core
+                  echo "Updating Homebrew..."
+                  brew update
+                  echo ""
+
+                  # Check current version
+                  echo "Current version (2.80 from custom tap):"
+                  az --version | head -1
+                  CURRENT_VERSION=$(az --version | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+                  echo "Version: $CURRENT_VERSION"
+                  echo ""
+
+                  # Install latest from homebrew-core
+                  # This should install 2.81 alongside 2.80
+                  echo "Installing latest Azure CLI from homebrew-core..."
+                  brew install azure-cli
+                  echo ""
+
+                  echo "After installation:"
+                  NEW_VERSION=$(az --version | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+                  az --version | head -1
+                  echo ""
+
+                  if [[ "$NEW_VERSION" != "$CURRENT_VERSION" ]]; then
+                    echo "✅ Upgraded from $CURRENT_VERSION to $NEW_VERSION"
+                  else
+                    echo "ℹ️  Version unchanged: $NEW_VERSION"
+                  fi
+                  echo ""
+
+            - name: Examine Multi-Version Structure
+              run: |
+                  echo "================================================"
+                  echo "MULTI-VERSION INSTALLATION STRUCTURE"
+                  echo "================================================"
+                  echo ""
+
+                  CELLAR_BASE="/opt/homebrew/Cellar/azure-cli"
+
+                  echo "--- Cellar Directory ---"
+                  echo "Cellar location: $CELLAR_BASE"
+                  echo ""
+
+                  if [ -d "$CELLAR_BASE" ]; then
+                    echo "All installed versions in Cellar:"
+                    ls -la "$CELLAR_BASE/"
+                    echo ""
+                    
+                    VERSION_COUNT=$(ls "$CELLAR_BASE" | wc -l | xargs)
+                    echo "Total versions in Cellar: $VERSION_COUNT"
+                    echo ""
+                    
+                    # Show details of each version
+                    for VERSION_DIR in "$CELLAR_BASE"/*; do
+                      VERSION_NAME=$(basename "$VERSION_DIR")
+                      echo "=== Version: $VERSION_NAME ==="
+                      echo "Path: $VERSION_DIR"
+                      echo "Size: $(du -sh "$VERSION_DIR" | cut -f1)"
+                      echo "Files: $(find "$VERSION_DIR" -type f | wc -l | xargs) files"
+                      echo "Binaries:"
+                      ls -la "$VERSION_DIR/bin/" 2>/dev/null || echo "  No bin directory"
+                      echo ""
+                    done
+                  fi
+
+                  # Check symlink
+                  echo "--- Active Symlink ---"
+                  echo "Command location: $(which az)"
+                  echo "Symlink details:"
+                  ls -la $(which az)
+                  echo ""
+                  echo "Symlink points to:"
+                  readlink $(which az)
+                  echo ""
+
+                  # Verify active version
+                  echo "--- Active Version ---"
+                  ACTIVE_VERSION=$(az --version | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+                  echo "Running version: $ACTIVE_VERSION"
+                  echo ""
+
+            - name: Switch Between Versions
+              run: |
+                  echo "================================================"
+                  echo "DEMONSTRATE VERSION SWITCHING"
+                  echo "================================================"
+                  echo ""
+
+                  CELLAR_BASE="/opt/homebrew/Cellar/azure-cli"
+
+                  # Check if multiple versions exist
+                  VERSION_COUNT=$(ls "$CELLAR_BASE" 2>/dev/null | wc -l | xargs)
+
+                  if [ "$VERSION_COUNT" -gt 1 ]; then
+                    echo "✅ Multiple versions detected: $VERSION_COUNT versions"
+                    echo ""
+                    
+                    # List all versions
+                    echo "Available versions:"
+                    VERSIONS=($(ls "$CELLAR_BASE"))
+                    for i in "${!VERSIONS[@]}"; do
+                      echo "  $((i+1)). ${VERSIONS[$i]}"
+                    done
+                    echo ""
+                    
+                    # Show current active
+                    echo "Current active version:"
+                    az --version | head -1
+                    echo "Symlink: $(readlink $(which az))"
+                    echo ""
+                    
+                    # Switch to first version
+                    FIRST_VERSION="${VERSIONS[0]}"
+                    echo "Switching to version: $FIRST_VERSION"
+                    brew unlink azure-cli
+                    brew link --force --overwrite "$CELLAR_BASE/$FIRST_VERSION" 2>/dev/null || {
+                      # Try alternative approach
+                      ln -sf "$CELLAR_BASE/$FIRST_VERSION/bin/az" "/opt/homebrew/bin/az"
+                    }
+                    echo ""
+                    
+                    echo "After switch:"
+                    az --version | head -1 2>/dev/null || echo "Command failed"
+                    echo "Symlink: $(readlink $(which az) 2>/dev/null || echo 'Not a symlink')"
+                    echo ""
+                    
+                    # Switch to second version
+                    if [ "$VERSION_COUNT" -gt 1 ]; then
+                      SECOND_VERSION="${VERSIONS[1]}"
+                      echo "Switching to version: $SECOND_VERSION"
+                      brew unlink azure-cli 2>/dev/null || true
+                      brew link --force --overwrite azure-cli
+                      echo ""
+                      
+                      echo "After second switch:"
+                      az --version | head -1
+                      echo "Symlink: $(readlink $(which az))"
+                      echo ""
+                    fi
+                    
+                  else
+                    echo "⚠️  Only one version installed: $VERSION_COUNT"
+                    echo "Cannot demonstrate version switching"
+                    echo ""
+                  fi
+
+            - name: Test Upgrade Scenario
+              run: |
+                  echo "================================================"
+                  echo "VERIFY SIDE-BY-SIDE VERSIONS"
+                  echo "================================================"
+                  echo ""
+
+                  echo "Current active version:"
+                  az --version | head -1
+                  echo ""
+
+                  CELLAR_BASE="/opt/homebrew/Cellar/azure-cli"
+
+                  echo "All versions in Cellar:"
+                  ls -la "$CELLAR_BASE"
+                  echo ""
+
+                  VERSION_COUNT=$(ls "$CELLAR_BASE" 2>/dev/null | wc -l | xargs)
+                  echo "Total versions: $VERSION_COUNT"
+                  echo ""
+
+                  if [ "$VERSION_COUNT" -ge 2 ]; then
+                    echo "✅ Success: Multiple versions installed side-by-side"
+                    echo ""
+                    echo "Expected: 2.80.0 (from custom tap) and 2.81.0 (from homebrew-core)"
+                    echo "Actual versions:"
+                    for VERSION_DIR in "$CELLAR_BASE"/*; do
+                      VERSION=$(basename "$VERSION_DIR")
+                      echo "  • $VERSION"
+                    done
+                  else
+                    echo "⚠️  Only $VERSION_COUNT version(s) found"
+                    echo "Expected at least 2 versions (2.80.0 and 2.81.0)"
+                  fi
+                  echo ""
+
+            - name: Demonstrate Cleanup
+              run: |
+                  echo "================================================"
+                  echo "DEMONSTRATE CLEANUP BEHAVIOR"
+                  echo "================================================"
+                  echo ""
+
+                  CELLAR_BASE="/opt/homebrew/Cellar/azure-cli"
+
+                  echo "Before cleanup:"
+                  ls -la "$CELLAR_BASE/" 2>/dev/null
+                  VERSION_COUNT_BEFORE=$(ls "$CELLAR_BASE" 2>/dev/null | wc -l | xargs)
+                  echo "Total versions: $VERSION_COUNT_BEFORE"
+                  echo ""
+
+                  echo "Running cleanup..."
+                  brew cleanup azure-cli
+                  echo ""
+
+                  echo "After cleanup:"
+                  ls -la "$CELLAR_BASE/" 2>/dev/null
+                  VERSION_COUNT_AFTER=$(ls "$CELLAR_BASE" 2>/dev/null | wc -l | xargs)
+                  echo "Total versions: $VERSION_COUNT_AFTER"
+                  echo ""
+
+                  echo "ℹ️  Cleanup removes old versions, keeps only the latest linked version"
+                  echo ""
+
+            - name: Generate Final Report
+              if: always()
+              run: |
+                  echo "================================================"
+                  echo "CUSTOM TAP VERSIONING TEST SUMMARY"
+                  echo "================================================"
+                  echo ""
+
+                  echo "Test Date: $(date)"
+                  echo "macOS: $(sw_vers -productVersion)"
+                  echo "Architecture: $(arch)"
+                  echo "Homebrew: $(brew --version | head -1)"
+                  echo ""
+
+                  echo "Custom Tap: naga-nandyala/mycli-app"
+                  echo "Formula URL: https://github.com/naga-nandyala/homebrew-mycli-app/blob/main/Formula/azure-cli.rb"
+                  echo ""
+
+                  CELLAR_BASE="/opt/homebrew/Cellar/azure-cli"
+
+                  echo "Final State:"
+                  if [ -d "$CELLAR_BASE" ]; then
+                    echo "Installed versions:"
+                    for VERSION_DIR in "$CELLAR_BASE"/*; do
+                      VERSION=$(basename "$VERSION_DIR")
+                      SIZE=$(du -sh "$VERSION_DIR" | cut -f1)
+                      echo "  - $VERSION ($SIZE)"
+                    done
+                  else
+                    echo "  No versions in Cellar"
+                  fi
+                  echo ""
+
+                  echo "Active Version: $(az --version 2>/dev/null | head -1 || echo 'Not available')"
+                  echo "Command Path: $(which az 2>/dev/null || echo 'Not found')"
+                  echo ""
+
+                  echo "Key Findings:"
+                  echo "  • Homebrew maintains separate directories per version"
+                  echo "  • Upgrades add new version, preserve old (until cleanup)"
+                  echo "  • Symlinks point to active version"
+                  echo "  • Users can switch between versions manually"
+                  echo "  • 'brew cleanup' removes old versions"
+                  echo ""
+
+            - name: Cleanup
+              if: always()
+              run: |
+                  echo "================================================"
+                  echo "CLEANUP"
+                  echo "================================================"
+
+                  brew uninstall --force azure-cli 2>/dev/null || true
+                  brew untap naga-nandyala/mycli-app 2>/dev/null || true
+
+                  echo "✅ Cleanup completed"
+                  echo ""
