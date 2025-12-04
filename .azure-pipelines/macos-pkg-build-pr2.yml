@@ -114,49 +114,103 @@ stages:
           # Wait for installation to complete
           until command -v pkgbuild >/dev/null 2>&1; do
             echo "Waiting for pkgbuild..."
-            sleep 5
+            sleep 10
           done
         fi
-        
-        # Verify tools are available
-        echo "Verifying packaging tools..."
-        pkgbuild --version
-        productbuild --version
-      displayName: 'Check packaging tools'
+        echo "pkgbuild found: $(which pkgbuild)"
+        echo "productbuild found: $(which productbuild)"
+        pkgbuild 2>&1 | head -5 || true
+      displayName: 'Install Xcode Command Line Tools (if needed)'
+    
+    - bash: python -m pip install --upgrade pip setuptools wheel
+      displayName: 'Upgrade pip'
+    
+    - bash: mkdir -p dist/macos_pkg_pr2
+      displayName: 'Create dist directory'
     
     - bash: |
-        set -e
-        echo "========================================"
-        echo "Building Azure CLI PKG (PR2 - Versioned)"
-        echo "========================================"
-        echo "Version: $(Version)"
-        echo "Platform: $(PLATFORM_TAG)"
-        echo "Architecture: $(ARCH)"
-        echo "Versioned Install: $(VersionedInstall)"
-        echo "========================================"
+        echo "=== Build Environment Check ==="
+        pwd
+        ls -la scripts/release/macos/
+        python --version
+        uname -m
         
-        # Run the build script with versioned mode
+        echo "=== Azure CLI Version Check ==="
+        if [ -n "$(Version)" ]; then
+          echo "Using provided version: $(Version)"
+          CLI_VERSION="$(Version)"
+        else
+          echo "Attempting to detect version from azure-cli-core..."
+          CLI_VERSION=$(python -c "import re; content = open('src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\''\"'](.+?)['\''\"']', content); print(m.group(1) if m else 'ERROR')")
+          echo "Detected version: $CLI_VERSION"
+        fi
+        echo "##vso[task.setvariable variable=CLI_VERSION]$CLI_VERSION"
+        
+        echo "=== Build Tools Check ==="
+        which pkgbuild || (echo "❌ pkgbuild not found"; exit 1)
+        which productbuild || (echo "❌ productbuild not found"; exit 1)
+        
+        echo "=== Starting PKG Build (PR2 - Versioned) ==="
+        echo "Building Azure CLI PKG installer for $(PLATFORM_TAG)"
+        echo "Using productbuild (enhanced distribution package with versioned installation)"
+        
+        # Run the build script
         python scripts/release/macos/build_pkg_installer_pr2.py \
-          --version "$(Version)" \
-          --platform "$(PLATFORM_TAG)" \
-          --output-dir "$(Build.ArtifactStagingDirectory)"
-      displayName: 'Build versioned PKG installer'
-      env:
-        PYTHONUNBUFFERED: '1'
+          --platform-tag $(PLATFORM_TAG)
+      displayName: 'Build PKG installer'
     
     - bash: |
-        echo "========================================"
-        echo "Build artifacts:"
-        ls -lh "$(Build.ArtifactStagingDirectory)"
-        echo "========================================"
-      displayName: 'List build artifacts'
+        echo "=== Post-Build Diagnostics ==="
+        echo "Checking dist/macos_pkg_pr2 directory:"
+        ls -la dist/macos_pkg_pr2/
+        
+        echo "Finding all PKG files:"
+        find dist/ -name "*.pkg" -exec ls -lh {} \;
+      displayName: 'Debug PKG contents'
     
-    - task: PublishBuildArtifacts@1
-      displayName: 'Publish ARM64 PKG artifact'
+    - bash: |
+        cd dist/macos_pkg_pr2
+        
+        # Get version
+        if [ -n "$(Version)" ]; then
+          VERSION="$(Version)"
+        else
+          VERSION=$(python -c "import re; content = open('../../src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\''\"'](.+?)['\''\"']', content); print(m.group(1) if m else 'ERROR')")
+        fi
+        
+        PKG_FILE="azure-cli-${VERSION}-$(PLATFORM_TAG).pkg"
+        SHA_FILE="${PKG_FILE}.sha256"
+        
+        echo "=== PKG Build Verification ==="
+        echo "Looking for: $PKG_FILE"
+        echo "Available files:"
+        ls -la
+        
+        if [ -f "$PKG_FILE" ]; then
+          echo "✅ PKG file created: $PKG_FILE"
+          echo "📦 Size: $(du -h "$PKG_FILE" | cut -f1)"
+        else
+          echo "❌ PKG file missing: $PKG_FILE"
+          echo "Let's check what files were actually created:"
+          find . -name "*.pkg" -o -name "*.sha256"
+          exit 1
+        fi
+        
+        if [ -f "$SHA_FILE" ]; then
+          echo "✅ SHA256 file created: $SHA_FILE"
+          echo "🔍 Checksum: $(cat "$SHA_FILE")"
+        else
+          echo "❌ SHA256 file missing: $SHA_FILE"
+          exit 1
+        fi
+      displayName: 'Verify .pkg creation'
+    
+    - task: PublishPipelineArtifact@1
+      displayName: 'Upload PKG artifacts (ARM64)'
       inputs:
-        pathToPublish: '$(Build.ArtifactStagingDirectory)'
-        artifactName: 'macos-pkg-arm64-pr2'
-        publishLocation: 'Container'
+        targetPath: 'dist/macos_pkg_pr2'
+        artifact: 'pkg-installer-macos-arm64'
+        publishLocation: 'pipeline'
   
   # Build x86_64 PKG
   - job: BuildPkgx86_64
@@ -203,49 +257,103 @@ stages:
           # Wait for installation to complete
           until command -v pkgbuild >/dev/null 2>&1; do
             echo "Waiting for pkgbuild..."
-            sleep 5
+            sleep 10
           done
         fi
-        
-        # Verify tools are available
-        echo "Verifying packaging tools..."
-        pkgbuild --version
-        productbuild --version
-      displayName: 'Check packaging tools'
+        echo "pkgbuild found: $(which pkgbuild)"
+        echo "productbuild found: $(which productbuild)"
+        pkgbuild 2>&1 | head -5 || true
+      displayName: 'Install Xcode Command Line Tools (if needed)'
+    
+    - bash: python -m pip install --upgrade pip setuptools wheel
+      displayName: 'Upgrade pip'
+    
+    - bash: mkdir -p dist/macos_pkg_pr2
+      displayName: 'Create dist directory'
     
     - bash: |
-        set -e
-        echo "========================================"
-        echo "Building Azure CLI PKG (PR2 - Versioned)"
-        echo "========================================"
-        echo "Version: $(Version)"
-        echo "Platform: $(PLATFORM_TAG)"
-        echo "Architecture: $(ARCH)"
-        echo "Versioned Install: $(VersionedInstall)"
-        echo "========================================"
+        echo "=== Build Environment Check ==="
+        pwd
+        ls -la scripts/release/macos/
+        python --version
+        uname -m
         
-        # Run the build script with versioned mode
+        echo "=== Azure CLI Version Check ==="
+        if [ -n "$(Version)" ]; then
+          echo "Using provided version: $(Version)"
+          CLI_VERSION="$(Version)"
+        else
+          echo "Attempting to detect version from azure-cli-core..."
+          CLI_VERSION=$(python -c "import re; content = open('src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\''\"'](.+?)['\''\"']', content); print(m.group(1) if m else 'ERROR')")
+          echo "Detected version: $CLI_VERSION"
+        fi
+        echo "##vso[task.setvariable variable=CLI_VERSION]$CLI_VERSION"
+        
+        echo "=== Build Tools Check ==="
+        which pkgbuild || (echo "❌ pkgbuild not found"; exit 1)
+        which productbuild || (echo "❌ productbuild not found"; exit 1)
+        
+        echo "=== Starting PKG Build (PR2 - Versioned) ==="
+        echo "Building Azure CLI PKG installer for $(PLATFORM_TAG)"
+        echo "Using productbuild (enhanced distribution package with versioned installation)"
+        
+        # Run the build script
         python scripts/release/macos/build_pkg_installer_pr2.py \
-          --version "$(Version)" \
-          --platform "$(PLATFORM_TAG)" \
-          --output-dir "$(Build.ArtifactStagingDirectory)"
-      displayName: 'Build versioned PKG installer'
-      env:
-        PYTHONUNBUFFERED: '1'
+          --platform-tag $(PLATFORM_TAG)
+      displayName: 'Build PKG installer'
     
     - bash: |
-        echo "========================================"
-        echo "Build artifacts:"
-        ls -lh "$(Build.ArtifactStagingDirectory)"
-        echo "========================================"
-      displayName: 'List build artifacts'
+        echo "=== Post-Build Diagnostics ==="
+        echo "Checking dist/macos_pkg_pr2 directory:"
+        ls -la dist/macos_pkg_pr2/
+        
+        echo "Finding all PKG files:"
+        find dist/ -name "*.pkg" -exec ls -lh {} \;
+      displayName: 'Debug PKG contents'
     
-    - task: PublishBuildArtifacts@1
-      displayName: 'Publish x86_64 PKG artifact'
+    - bash: |
+        cd dist/macos_pkg_pr2
+        
+        # Get version
+        if [ -n "$(Version)" ]; then
+          VERSION="$(Version)"
+        else
+          VERSION=$(python -c "import re; content = open('../../src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\''\"'](.+?)['\''\"']', content); print(m.group(1) if m else 'ERROR')")
+        fi
+        
+        PKG_FILE="azure-cli-${VERSION}-$(PLATFORM_TAG).pkg"
+        SHA_FILE="${PKG_FILE}.sha256"
+        
+        echo "=== PKG Build Verification ==="
+        echo "Looking for: $PKG_FILE"
+        echo "Available files:"
+        ls -la
+        
+        if [ -f "$PKG_FILE" ]; then
+          echo "✅ PKG file created: $PKG_FILE"
+          echo "📦 Size: $(du -h "$PKG_FILE" | cut -f1)"
+        else
+          echo "❌ PKG file missing: $PKG_FILE"
+          echo "Let's check what files were actually created:"
+          find . -name "*.pkg" -o -name "*.sha256"
+          exit 1
+        fi
+        
+        if [ -f "$SHA_FILE" ]; then
+          echo "✅ SHA256 file created: $SHA_FILE"
+          echo "🔍 Checksum: $(cat "$SHA_FILE")"
+        else
+          echo "❌ SHA256 file missing: $SHA_FILE"
+          exit 1
+        fi
+      displayName: 'Verify .pkg creation'
+    
+    - task: PublishPipelineArtifact@1
+      displayName: 'Upload PKG artifacts (x86_64)'
       inputs:
-        pathToPublish: '$(Build.ArtifactStagingDirectory)'
-        artifactName: 'macos-pkg-x86_64-pr2'
-        publishLocation: 'Container'
+        targetPath: 'dist/macos_pkg_pr2'
+        artifact: 'pkg-installer-macos-x86_64'
+        publishLocation: 'pipeline'
 
 # Optional: Create GitHub Release with both PKG files
 - stage: GitHubRelease
