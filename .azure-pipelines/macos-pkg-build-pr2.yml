@@ -1,0 +1,367 @@
+# Azure CLI - macOS PKG Build Pipeline (PR2 - Versioned Installation)
+# This parallel pipeline implements Homebrew-style versioned installations
+# Using Cask name: azure-cli-pr2
+# Installation path: /usr/local/microsoft/azure-cli/{version}/
+# Active version managed via 'current' symlink
+#
+# Key differences from original pipeline:
+# - Uses versioned installation paths (/usr/local/microsoft/azure-cli/2.81.0/)
+# - Includes pre/post install scripts for version management
+# - Creates 'current' symlink for active version
+# - Launcher script uses 'current' symlink
+# - Supports side-by-side installation of multiple versions
+
+trigger: none # Manual trigger only
+
+parameters:
+  - name: Version
+    displayName: 'Azure CLI Version (e.g., 2.81.0)'
+    type: string
+    default: '3.0.0'
+  - name: CreateGitHubRelease
+    displayName: 'Create GitHub Release with artifacts'
+    type: boolean
+    default: false
+  - name: Prerelease
+    displayName: 'Mark as pre-release'
+    type: boolean
+    default: false
+  - name: GitHubRepo
+    displayName: 'GitHub Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+  - name: VersionedInstall
+    displayName: 'Use versioned installation paths (PR2 mode)'
+    type: boolean
+    default: true
+
+variables:
+  # Disable CodeQL and other auto-injection tasks
+  - name: Codeql.Enabled
+    value: false
+  - name: Codeql.SkipTaskAutoInjection
+    value: true
+  - name: CodeQL.enabled
+    value: false
+  - name: runCodesignValidationInjection
+    value: false
+  
+  - name: PYTHON_VERSION
+    value: '3.12'
+  - name: DOTNET_CLI_TELEMETRY_OPTOUT
+    value: 1
+  - name: DOTNET_NOLOGO
+    value: 1
+  - name: Version
+    value: ${{ parameters.Version }}
+  - name: GitHubRepo
+    value: ${{ parameters.GitHubRepo }}
+  - name: VersionedInstall
+    value: ${{ parameters.VersionedInstall }}
+  # Variable groups (optional - only needed for GitHub releases)
+  # Uncomment the line below after creating the variable group in Azure DevOps Library
+  # - group: github-integration  # Contains GITHUB_PAT for GitHub releases
+
+name: build-macos-pkg-pr2-$(Date:yyyyMMdd)-$(Rev:r)
+
+stages:
+- stage: BuildPkg
+  displayName: 'Build macOS PKG Installers (PR2 - Versioned)'
+  jobs:
+  
+  # Build ARM64 PKG
+  - job: BuildPkgARM64
+    displayName: 'Build PKG (macOS ARM64) - Versioned'
+    pool:
+      vmImage: 'macos-14'  # Apple Silicon
+    
+    variables:
+      PLATFORM_TAG: 'macos-arm64'
+      ARCH: 'arm64'
+    
+    steps:
+    - checkout: self
+      clean: true
+    
+    - task: UsePythonVersion@0
+      displayName: 'Set up Python $(PYTHON_VERSION)'
+      inputs:
+        versionSpec: '$(PYTHON_VERSION)'
+        addToPath: true
+    
+    - bash: |
+        if [ -n "$(Version)" ]; then
+          echo "VERSION=$(Version)" >> $AZURE_PIPELINES_ENV
+          echo "Using provided version: $(Version)"
+        else
+          # Extract version from azure-cli-core/__init__.py
+          VERSION=$(python -c "import re; content = open('src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\''\"'](.+?)['\''\"']', content); print(m.group(1) if m else 'ERROR')")
+          if [ "$VERSION" = "ERROR" ]; then
+            echo "❌ Failed to detect version from azure-cli-core"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> $AZURE_PIPELINES_ENV
+          echo "Using version from azure-cli-core: $VERSION"
+        fi
+      displayName: 'Set VERSION environment variable'
+      name: SetVersion
+    
+    - bash: |
+        # Check if pkgbuild is available
+        if ! command -v pkgbuild >/dev/null 2>&1; then
+          echo "Installing Xcode Command Line Tools..."
+          xcode-select --install || true
+          # Wait for installation to complete
+          until command -v pkgbuild >/dev/null 2>&1; do
+            echo "Waiting for pkgbuild..."
+            sleep 5
+          done
+        fi
+        
+        # Verify tools are available
+        echo "Verifying packaging tools..."
+        pkgbuild --version
+        productbuild --version
+      displayName: 'Check packaging tools'
+    
+    - bash: |
+        set -e
+        echo "========================================"
+        echo "Building Azure CLI PKG (PR2 - Versioned)"
+        echo "========================================"
+        echo "Version: $(Version)"
+        echo "Platform: $(PLATFORM_TAG)"
+        echo "Architecture: $(ARCH)"
+        echo "Versioned Install: $(VersionedInstall)"
+        echo "========================================"
+        
+        # Run the build script with versioned mode
+        python scripts/release/macos/build_pkg_installer_pr2.py \
+          --version "$(Version)" \
+          --platform "$(PLATFORM_TAG)" \
+          --output-dir "$(Build.ArtifactStagingDirectory)"
+      displayName: 'Build versioned PKG installer'
+      env:
+        PYTHONUNBUFFERED: '1'
+    
+    - bash: |
+        echo "========================================"
+        echo "Build artifacts:"
+        ls -lh "$(Build.ArtifactStagingDirectory)"
+        echo "========================================"
+      displayName: 'List build artifacts'
+    
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish ARM64 PKG artifact'
+      inputs:
+        pathToPublish: '$(Build.ArtifactStagingDirectory)'
+        artifactName: 'macos-pkg-arm64-pr2'
+        publishLocation: 'Container'
+  
+  # Build x86_64 PKG
+  - job: BuildPkgx86_64
+    displayName: 'Build PKG (macOS x86_64) - Versioned'
+    pool:
+      vmImage: 'macos-13'  # Intel
+    
+    variables:
+      PLATFORM_TAG: 'macos-x86_64'
+      ARCH: 'x86_64'
+    
+    steps:
+    - checkout: self
+      clean: true
+    
+    - task: UsePythonVersion@0
+      displayName: 'Set up Python $(PYTHON_VERSION)'
+      inputs:
+        versionSpec: '$(PYTHON_VERSION)'
+        addToPath: true
+    
+    - bash: |
+        if [ -n "$(Version)" ]; then
+          echo "VERSION=$(Version)" >> $AZURE_PIPELINES_ENV
+          echo "Using provided version: $(Version)"
+        else
+          # Extract version from azure-cli-core/__init__.py
+          VERSION=$(python -c "import re; content = open('src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\''\"'](.+?)['\''\"']', content); print(m.group(1) if m else 'ERROR')")
+          if [ "$VERSION" = "ERROR" ]; then
+            echo "❌ Failed to detect version from azure-cli-core"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> $AZURE_PIPELINES_ENV
+          echo "Using version from azure-cli-core: $VERSION"
+        fi
+      displayName: 'Set VERSION environment variable'
+      name: SetVersion
+    
+    - bash: |
+        # Check if pkgbuild is available
+        if ! command -v pkgbuild >/dev/null 2>&1; then
+          echo "Installing Xcode Command Line Tools..."
+          xcode-select --install || true
+          # Wait for installation to complete
+          until command -v pkgbuild >/dev/null 2>&1; do
+            echo "Waiting for pkgbuild..."
+            sleep 5
+          done
+        fi
+        
+        # Verify tools are available
+        echo "Verifying packaging tools..."
+        pkgbuild --version
+        productbuild --version
+      displayName: 'Check packaging tools'
+    
+    - bash: |
+        set -e
+        echo "========================================"
+        echo "Building Azure CLI PKG (PR2 - Versioned)"
+        echo "========================================"
+        echo "Version: $(Version)"
+        echo "Platform: $(PLATFORM_TAG)"
+        echo "Architecture: $(ARCH)"
+        echo "Versioned Install: $(VersionedInstall)"
+        echo "========================================"
+        
+        # Run the build script with versioned mode
+        python scripts/release/macos/build_pkg_installer_pr2.py \
+          --version "$(Version)" \
+          --platform "$(PLATFORM_TAG)" \
+          --output-dir "$(Build.ArtifactStagingDirectory)"
+      displayName: 'Build versioned PKG installer'
+      env:
+        PYTHONUNBUFFERED: '1'
+    
+    - bash: |
+        echo "========================================"
+        echo "Build artifacts:"
+        ls -lh "$(Build.ArtifactStagingDirectory)"
+        echo "========================================"
+      displayName: 'List build artifacts'
+    
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish x86_64 PKG artifact'
+      inputs:
+        pathToPublish: '$(Build.ArtifactStagingDirectory)'
+        artifactName: 'macos-pkg-x86_64-pr2'
+        publishLocation: 'Container'
+
+# Optional: Create GitHub Release with both PKG files
+- stage: GitHubRelease
+  displayName: 'Create GitHub Release (Optional)'
+  condition: and(succeeded(), eq(variables['CreateGitHubRelease'], 'true'))
+  dependsOn: BuildPkg
+  jobs:
+  - job: CreateRelease
+    displayName: 'Create GitHub Release'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - task: DownloadBuildArtifacts@0
+      displayName: 'Download ARM64 PKG'
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: 'macos-pkg-arm64-pr2'
+        downloadPath: '$(System.ArtifactsDirectory)'
+    
+    - task: DownloadBuildArtifacts@0
+      displayName: 'Download x86_64 PKG'
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: 'macos-pkg-x86_64-pr2'
+        downloadPath: '$(System.ArtifactsDirectory)'
+    
+    - bash: |
+        echo "========================================"
+        echo "Downloaded artifacts:"
+        find "$(System.ArtifactsDirectory)" -type f
+        echo "========================================"
+      displayName: 'List downloaded artifacts'
+    
+    - task: GitHubRelease@1
+      displayName: 'Create GitHub Release'
+      inputs:
+        gitHubConnection: 'github.com_naga-nandyala'
+        repositoryName: '$(GitHubRepo)'
+        action: 'create'
+        target: '$(Build.SourceVersion)'
+        tagSource: 'userSpecifiedTag'
+        tag: 'v$(Version)-pr2'
+        title: 'Azure CLI $(Version) (PR2 - Versioned Installation)'
+        releaseNotesSource: 'inline'
+        releaseNotesInline: |
+          # Azure CLI $(Version) - PR2 (Versioned Installation)
+          
+          **This is a parallel release with Homebrew-style versioned installation support.**
+          
+          ## What's New in PR2
+          
+          - ✅ **Versioned Installation Paths**: `/usr/local/microsoft/azure-cli/$(Version)/`
+          - ✅ **Active Version Symlink**: `current` symlink points to active version
+          - ✅ **Side-by-Side Versions**: Multiple versions can coexist
+          - ✅ **Upgrade Management**: Automatic version switching during upgrades
+          - ✅ **Cleanup Utility**: Remove old versions when needed
+          
+          ## Installation
+          
+          ### Homebrew Cask (Recommended)
+          ```bash
+          brew install --cask azure-cli-pr2
+          ```
+          
+          ### Direct PKG Installation
+          Download the appropriate PKG for your architecture:
+          - **Apple Silicon (M1/M2/M3)**: `azure-cli-$(Version)-pr2-macos-arm64.pkg`
+          - **Intel**: `azure-cli-$(Version)-pr2-macos-x86_64.pkg`
+          
+          Double-click to install or use:
+          ```bash
+          sudo installer -pkg azure-cli-$(Version)-pr2-macos-arm64.pkg -target /
+          ```
+          
+          ## Verification
+          ```bash
+          az version
+          ```
+          
+          ## Installation Structure
+          ```
+          /usr/local/microsoft/azure-cli/
+          ├── $(Version)/           # This version
+          ├── current -> $(Version)/ # Symlink to active version
+          /usr/local/bin/
+          └── az                    # Launcher script
+          ```
+          
+          ## Upgrading
+          The installer automatically:
+          - Installs new version to `/usr/local/microsoft/azure-cli/$(Version)/`
+          - Updates `current` symlink to point to new version
+          - Preserves old versions for rollback
+          
+          ## Removing Old Versions
+          ```bash
+          # List installed versions
+          ls -l /usr/local/microsoft/azure-cli/
+          
+          # Remove specific version
+          sudo rm -rf /usr/local/microsoft/azure-cli/2.80.0
+          ```
+          
+          ---
+          
+          **Note**: This is an experimental parallel release. For production use, please use the standard Azure CLI release.
+        assets: |
+          $(System.ArtifactsDirectory)/macos-pkg-arm64-pr2/*.pkg
+          $(System.ArtifactsDirectory)/macos-pkg-arm64-pr2/*.sha256
+          $(System.ArtifactsDirectory)/macos-pkg-x86_64-pr2/*.pkg
+          $(System.ArtifactsDirectory)/macos-pkg-x86_64-pr2/*.sha256
+        isDraft: ${{ parameters.Prerelease }}
+        isPreRelease: ${{ parameters.Prerelease }}
+        addChangeLog: false
