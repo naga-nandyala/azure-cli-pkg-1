@@ -529,6 +529,12 @@ LAUNCHER="/usr/local/bin/{CLI_EXECUTABLE_NAME}"
 echo "Azure CLI {version} - Postinstall"
 echo "================================="
 
+# Ensure base directory exists
+if [[ ! -d "${{BASE_DIR}}" ]]; then
+    echo "Creating base directory: ${{BASE_DIR}}"
+    mkdir -p "${{BASE_DIR}}"
+fi
+
 # Verify version directory was installed
 if [[ ! -d "${{VERSION_DIR}}" ]]; then
     echo "Error: Version directory not found: ${{VERSION_DIR}}" >&2
@@ -541,9 +547,15 @@ if [[ ! -x "${{PYTHON_EXEC}}" ]]; then
     exit 1
 fi
 
+# Remove old 'current' symlink if it exists
+if [[ -L "${{CURRENT_LINK}}" ]] || [[ -e "${{CURRENT_LINK}}" ]]; then
+    echo "Removing existing 'current' symlink"
+    rm -f "${{CURRENT_LINK}}"
+fi
+
 # Create 'current' symlink (relative path)
 echo "Creating 'current' symlink: ${{CURRENT_LINK}} -> ${{NEW_VERSION}}"
-ln -sf "${{NEW_VERSION}}" "${{CURRENT_LINK}}"
+cd "${{BASE_DIR}}" && ln -sf "${{NEW_VERSION}}" current
 
 # Verify symlink
 if [[ ! -L "${{CURRENT_LINK}}" ]]; then
