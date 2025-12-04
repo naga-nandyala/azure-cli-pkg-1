@@ -124,11 +124,11 @@ stages:
       displayName: 'Download unsigned ARM64 PKG'
       inputs:
         buildType: 'specific'
-        project: '$(System.TeamProjectId)'
-        definition: '$(System.DefinitionId)'
+        project: 'public'
+        definition: 'naga_macos_build_pr2'
         buildVersionToDownload: 'specific'
-        buildId: '$(UnsignedBuildId)'
-        artifactName: 'unsigned-pkg'
+        buildId: $(UnsignedBuildId)
+        artifactName: 'pkg-installer-macos-arm64'
         targetPath: '$(Pipeline.Workspace)/unsigned-pkg'
     
     - bash: |
