@@ -178,6 +178,11 @@ jobs:
                   echo "Version: $CURRENT_VERSION"
                   echo ""
 
+                  # Unlink the versioned formula to avoid symlink conflicts
+                  echo "Unlinking azure-cli@2.80 to allow azure-cli installation..."
+                  brew unlink azure-cli@2.80
+                  echo ""
+
                   # Install latest from homebrew-core
                   # This should install 2.81 alongside 2.80
                   echo "Installing latest Azure CLI from homebrew-core..."
