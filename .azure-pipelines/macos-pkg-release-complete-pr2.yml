@@ -1053,7 +1053,7 @@ stages:
     - checkout: none
     
     - download: current
-      artifact: stapled-pkg
+      artifact: stapled-macos-pkg
       displayName: 'Download stapled PKG'
     
     - bash: |
@@ -1066,7 +1066,7 @@ stages:
         echo ""
         
         # Find the stapled PKG
-        PKG_FILE=$(find $(Pipeline.Workspace)/stapled-pkg -name "*.pkg" -type f | head -1)
+        PKG_FILE=$(find $(Pipeline.Workspace)/stapled-macos-pkg -name "*.pkg" -type f | head -1)
         
         if [ -z "$PKG_FILE" ]; then
           echo "❌ ERROR: No PKG file found"
@@ -1184,7 +1184,7 @@ stages:
         tag: '$(ReleaseTag)'
         title: 'Azure CLI $(AzureCliVersion) - PR2'
         releaseNotesFilePath: '$(Build.ArtifactStagingDirectory)/release-notes.md'
-        assets: '$(Pipeline.Workspace)/stapled-pkg/*.pkg'
+        assets: '$(Pipeline.Workspace)/stapled-macos-pkg/*.pkg'
         isPreRelease: ${{ parameters.IsPreRelease }}
         isDraft: ${{ parameters.IsDraft }}
         addChangeLog: false
@@ -1213,14 +1213,14 @@ stages:
     - checkout: none
     
     - download: current
-      artifact: stapled-pkg
+      artifact: stapled-macos-pkg
       displayName: 'Download stapled PKG'
     
     - bash: |
         set -e
         echo "=== Calculating PKG SHA256 for Cask ==="
         
-        PKG_FILE=$(find $(Pipeline.Workspace)/stapled-pkg -name "*.pkg" -type f | head -1)
+        PKG_FILE=$(find $(Pipeline.Workspace)/stapled-macos-pkg -name "*.pkg" -type f | head -1)
         
         if [ -z "$PKG_FILE" ]; then
           echo "❌ ERROR: No PKG file found"
