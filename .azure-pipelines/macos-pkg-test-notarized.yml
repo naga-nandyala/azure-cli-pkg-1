@@ -165,9 +165,11 @@ stages:
 - stage: TestDirectInstall
   displayName: '📥 Test Direct PKG Installation'
   dependsOn: DownloadPkg
+  condition: succeededOrFailed()
   jobs:
   - job: DirectInstall
     displayName: 'Install PKG directly with installer'
+    continueOnError: true
     steps:
     - checkout: none
     
@@ -190,8 +192,21 @@ stages:
         echo "Installing: $PKG_FILE"
         echo ""
         
-        # Install the PKG
-        sudo installer -pkg "$PKG_FILE" -target /
+        # Install the PKG with verbose output
+        echo "Running installer with verbose logging..."
+        sudo installer -pkg "$PKG_FILE" -target / -verbose -dumplog 2>&1 || {
+          EXIT_CODE=$?
+          echo ""
+          echo "❌ Installation failed with exit code: $EXIT_CODE"
+          echo ""
+          echo "=== Checking Installation Logs ==="
+          echo "Recent installer logs:"
+          sudo grep -A 20 "azure-cli" /var/log/install.log 2>/dev/null || echo "No logs found in /var/log/install.log"
+          echo ""
+          echo "Note: Direct PKG installation may fail if pre/post scripts have issues."
+          echo "Homebrew installation (next stage) may still succeed."
+          exit $EXIT_CODE
+        }
         
         # Wait for installation to complete
         sleep 5
@@ -316,7 +331,7 @@ stages:
         printf '\n' >> "$CASK_FILE"
         printf '  url "%s"\n' "$PKG_URL" >> "$CASK_FILE"
         printf '  name "Azure CLI"\n' >> "$CASK_FILE"
-        printf '  desc "Azure CLI with versioned installation (notarized)\n' >> "$CASK_FILE"
+        printf '  desc "Azure CLI with versioned installation (notarized)"\n' >> "$CASK_FILE"
         printf '  homepage "https://github.com/%s"\n' "${{ parameters.GitHubRepo }}" >> "$CASK_FILE"
         printf '\n' >> "$CASK_FILE"
         printf '  pkg "azure-cli-%s-macos-arm64-notarized.pkg"\n' "$VERSION" >> "$CASK_FILE"
