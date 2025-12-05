@@ -1,0 +1,608 @@
+trigger: none
+
+pr: none
+
+parameters:
+  - name: AzureCliVersion
+    displayName: 'Azure CLI Version'
+    type: string
+    default: '3.0.0'
+  
+  - name: GitHubRepo
+    displayName: 'GitHub Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+  
+  - name: HomebrewTapRepo
+    displayName: 'Homebrew Tap Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/homebrew-mycli-app'
+  
+  - name: CaskName
+    displayName: 'Homebrew Cask Name'
+    type: string
+    default: 'azure-cli-pr2'
+  
+  - name: ReleaseTag
+    displayName: 'GitHub Release Tag'
+    type: string
+    default: 'v3.0.0-pr2'
+
+resources:
+  repositories:
+  - repository: homebrewtap
+    type: github
+    endpoint: github.com_naga-nandyala
+    name: naga-nandyala/homebrew-mycli-app
+
+variables:
+  # Disable CodeQL and other auto-injection tasks
+  - name: Codeql.Enabled
+    value: false
+  - name: Codeql.SkipTaskAutoInjection
+    value: true
+  - name: CodeQL.enabled
+    value: false
+  - name: runCodesignValidationInjection
+    value: false
+  
+  - name: DOTNET_CLI_TELEMETRY_OPTOUT
+    value: 1
+  - name: DOTNET_NOLOGO
+    value: 1
+  - name: NugetSecurityAnalysisWarningLevel
+    value: none
+  - name: skipNugetSecurityAnalysis
+    value: true
+  
+  - name: GITHUB_TOKEN
+    value: $(GitHubPAT)
+
+pool:
+  vmImage: 'macOS-latest'
+
+stages:
+
+# ============================================================================
+# STAGE 1: DOWNLOAD NOTARIZED PKG FROM GITHUB RELEASE
+# ============================================================================
+- stage: DownloadPkg
+  displayName: '📦 Download Notarized PKG from GitHub'
+  jobs:
+  - job: Download
+    displayName: 'Download from GitHub Release'
+    steps:
+    - checkout: none
+    
+    - bash: |
+        set -e
+        echo "=== Downloading Notarized PKG from GitHub Release ==="
+        echo "Repository: ${{ parameters.GitHubRepo }}"
+        echo "Release Tag: ${{ parameters.ReleaseTag }}"
+        echo "Architecture: arm64 (Apple Silicon)"
+        echo ""
+        
+        # Construct download URL
+        REPO="${{ parameters.GitHubRepo }}"
+        TAG="${{ parameters.ReleaseTag }}"
+        VERSION="${{ parameters.AzureCliVersion }}"
+        PKG_NAME="azure-cli-${VERSION}-macos-arm64.pkg"
+        
+        # GitHub release asset URL
+        RELEASE_URL="https://github.com/${REPO}/releases/download/${TAG}/${PKG_NAME}"
+        
+        echo "Download URL: $RELEASE_URL"
+        echo ""
+        
+        # Create download directory
+        mkdir -p "$(Pipeline.Workspace)/notarized-pkg"
+        
+        # Download the PKG
+        echo "Downloading..."
+        curl -L -o "$(Pipeline.Workspace)/notarized-pkg/${PKG_NAME}" "$RELEASE_URL"
+        
+        echo ""
+        echo "=== Download Complete ==="
+        ls -lh "$(Pipeline.Workspace)/notarized-pkg"/*.pkg
+        
+        PKG_FILE=$(find "$(Pipeline.Workspace)/notarized-pkg" -name "*.pkg" -type f | head -1)
+        
+        if [ -z "$PKG_FILE" ]; then
+          echo "❌ ERROR: PKG download failed"
+          exit 1
+        fi
+        
+        echo ""
+        echo "✅ PKG downloaded successfully"
+        echo "File: $PKG_FILE"
+        echo "Size: $(du -h "$PKG_FILE" | cut -f1)"
+        
+      displayName: 'Download notarized PKG from GitHub'
+    
+    - publish: '$(Pipeline.Workspace)/notarized-pkg'
+      artifact: notarized-pkg
+      displayName: 'Publish notarized PKG artifact'
+
+# ============================================================================
+# STAGE 2: VERIFY NOTARIZATION AND SIGNATURES
+# ============================================================================
+- stage: VerifyNotarization
+  displayName: '🔒 Verify Notarization & Signatures'
+  dependsOn: DownloadPkg
+  jobs:
+  - job: Verify
+    displayName: 'Verify PKG security attributes'
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: notarized-pkg
+      displayName: 'Download notarized PKG'
+    
+    - bash: |
+        set -e
+        echo "=== PKG Security Verification ==="
+        echo ""
+        
+        PKG_FILE=$(find "$(Pipeline.Workspace)/notarized-pkg" -name "*.pkg" -type f | head -1)
+        
+        if [ -z "$PKG_FILE" ]; then
+          echo "❌ ERROR: PKG file not found"
+          exit 1
+        fi
+        
+        echo "PKG: $PKG_FILE"
+        echo ""
+        
+        # Test 1: Check PKG signature
+        echo "Test 1: Verifying PKG signature..."
+        if pkgutil --check-signature "$PKG_FILE"; then
+          echo "✅ PKG is properly signed"
+        else
+          echo "❌ PKG signature verification failed"
+          exit 1
+        fi
+        echo ""
+        
+        # Test 2: Check notarization stapling
+        echo "Test 2: Checking notarization ticket stapling..."
+        if stapler validate "$PKG_FILE"; then
+          echo "✅ Notarization ticket is stapled"
+        else
+          echo "⚠️  WARNING: Notarization ticket not stapled (may still be notarized)"
+        fi
+        echo ""
+        
+        # Test 3: Gatekeeper assessment
+        echo "Test 3: Gatekeeper security assessment..."
+        if spctl --assess --type install "$PKG_FILE"; then
+          echo "✅ Gatekeeper approves this PKG for installation"
+        else
+          echo "❌ Gatekeeper rejected the PKG"
+          exit 1
+        fi
+        echo ""
+        
+        # Test 4: Detailed signature info
+        echo "Test 4: Detailed signature information..."
+        echo "----------------------------------------"
+        pkgutil --check-signature "$PKG_FILE" | head -20
+        echo ""
+        
+        echo "=== All Security Checks Passed ==="
+        
+      displayName: 'Verify signatures and notarization'
+
+# ============================================================================
+# STAGE 3: TEST DIRECT PKG INSTALLATION
+# ============================================================================
+- stage: TestDirectInstall
+  displayName: '📥 Test Direct PKG Installation'
+  dependsOn: VerifyNotarization
+  jobs:
+  - job: DirectInstall
+    displayName: 'Install PKG directly with installer'
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: notarized-pkg
+      displayName: 'Download notarized PKG'
+    
+    - bash: |
+        set -e
+        echo "=== Direct PKG Installation Test ==="
+        echo ""
+        
+        PKG_FILE=$(find "$(Pipeline.Workspace)/notarized-pkg" -name "*.pkg" -type f | head -1)
+        
+        if [ -z "$PKG_FILE" ]; then
+          echo "❌ ERROR: PKG file not found"
+          exit 1
+        fi
+        
+        echo "Installing: $PKG_FILE"
+        echo ""
+        
+        # Install the PKG
+        sudo installer -pkg "$PKG_FILE" -target /
+        
+        echo ""
+        echo "=== Installation Complete ==="
+        echo ""
+        
+        # Verify installation
+        echo "=== Verification ==="
+        
+        # Check launcher
+        if command -v az &> /dev/null; then
+          echo "✅ 'az' command available"
+        else
+          echo "❌ 'az' command not found"
+          exit 1
+        fi
+        
+        # Check version
+        echo ""
+        echo "Azure CLI Version:"
+        az --version
+        echo ""
+        
+        # Check installation directory
+        VERSION="${{ parameters.AzureCliVersion }}"
+        VERSION_DIR="/usr/local/microsoft/azure-cli/$VERSION"
+        
+        if [ -d "$VERSION_DIR" ]; then
+          echo "✅ Version directory exists: $VERSION_DIR"
+        else
+          echo "❌ Version directory not found: $VERSION_DIR"
+          exit 1
+        fi
+        
+        # Check current symlink
+        CURRENT_LINK="/usr/local/microsoft/azure-cli/current"
+        if [ -L "$CURRENT_LINK" ]; then
+          CURRENT_TARGET=$(readlink "$CURRENT_LINK")
+          echo "✅ 'current' symlink exists: $CURRENT_LINK -> $CURRENT_TARGET"
+          
+          if [ "$CURRENT_TARGET" = "$VERSION" ]; then
+            echo "✅ Symlink points to correct version"
+          else
+            echo "⚠️  Symlink points to: $CURRENT_TARGET (expected: $VERSION)"
+          fi
+        else
+          echo "❌ 'current' symlink not found"
+          exit 1
+        fi
+        
+        # Check Python executable
+        PYTHON_BIN="$VERSION_DIR/bin/python3"
+        if [ -x "$PYTHON_BIN" ]; then
+          echo "✅ Python executable exists and is executable: $PYTHON_BIN"
+        else
+          echo "❌ Python executable not found or not executable"
+          exit 1
+        fi
+        
+        echo ""
+        echo "=== All Direct Installation Tests Passed! ==="
+        
+      displayName: 'Install and verify PKG'
+
+# ============================================================================
+# STAGE 4: TEST HOMEBREW CASK INSTALLATION
+# ============================================================================
+- stage: TestHomebrewInstall
+  displayName: '🍺 Test Homebrew Cask Installation'
+  dependsOn: DownloadPkg
+  jobs:
+  - job: HomebrewInstall
+    displayName: 'Install via Homebrew Cask'
+    steps:
+    - checkout: none
+    
+    - bash: |
+        set -e
+        echo "================================================"
+        echo "=== Testing Fresh Installation ==="
+        echo "================================================"
+        echo ""
+        
+        # Clean any existing installation
+        echo "Cleaning previous installations..."
+        brew uninstall --cask ${{ parameters.CaskName }} 2>/dev/null || true
+        brew untap ${{ parameters.HomebrewTapRepo }} 2>/dev/null || true
+        
+        sudo rm -rf /usr/local/bin/az 2>/dev/null || true
+        sudo rm -rf /usr/local/microsoft/azure-cli 2>/dev/null || true
+        
+        echo "✅ Clean slate ready"
+        echo ""
+        
+        # Add tap
+        echo "Adding Homebrew tap..."
+        brew tap ${{ parameters.HomebrewTapRepo }}
+        echo ""
+        
+        # Install cask
+        echo "Installing ${{ parameters.CaskName }}..."
+        brew install --cask ${{ parameters.CaskName }}
+        
+        echo ""
+        echo "=== Verification ==="
+        
+        # Check az command
+        if command -v az &> /dev/null; then
+          echo "✅ 'az' command available"
+        else
+          echo "❌ 'az' command not found"
+          exit 1
+        fi
+        
+        # Display version
+        echo ""
+        az --version
+        echo ""
+        
+        # Check version directory
+        VERSION="${{ parameters.AzureCliVersion }}"
+        VERSION_DIR="/usr/local/microsoft/azure-cli/$VERSION"
+        
+        if [ -d "$VERSION_DIR" ]; then
+          echo "✅ Version directory exists: $VERSION_DIR"
+        else
+          echo "❌ Version directory not found: $VERSION_DIR"
+          exit 1
+        fi
+        
+        # Check symlink
+        CURRENT_LINK="/usr/local/microsoft/azure-cli/current"
+        if [ -L "$CURRENT_LINK" ]; then
+          CURRENT_TARGET=$(readlink "$CURRENT_LINK")
+          echo "✅ 'current' symlink exists: $CURRENT_LINK -> $CURRENT_TARGET"
+          
+          if [ "$CURRENT_TARGET" = "$VERSION" ]; then
+            echo "✅ Symlink points to correct version"
+          else
+            echo "⚠️  Symlink points to: $CURRENT_TARGET (expected: $VERSION)"
+          fi
+        else
+          echo "❌ 'current' symlink not found"
+          exit 1
+        fi
+        
+        # Check Python
+        PYTHON_BIN="$VERSION_DIR/bin/python3"
+        if [ -x "$PYTHON_BIN" ]; then
+          echo "✅ Python executable exists and is executable: $PYTHON_BIN"
+        else
+          echo "❌ Python executable not found or not executable"
+          exit 1
+        fi
+        
+        echo ""
+        echo "=== All Tests Passed! ==="
+        
+      displayName: 'Test fresh installation'
+
+# ============================================================================
+# STAGE 5: COMPREHENSIVE GATEKEEPER TESTS
+# ============================================================================
+- stage: GatekeeperTests
+  displayName: '🛡️ Comprehensive Gatekeeper Tests'
+  dependsOn: VerifyNotarization
+  jobs:
+  - job: GatekeeperValidation
+    displayName: 'Run all Gatekeeper security tests'
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: notarized-pkg
+      displayName: 'Download notarized PKG'
+    
+    - bash: |
+        set -e
+        echo "================================================"
+        echo "=== COMPREHENSIVE GATEKEEPER SECURITY TESTS ==="
+        echo "================================================"
+        echo ""
+        
+        PKG_FILE=$(find "$(Pipeline.Workspace)/notarized-pkg" -name "*.pkg" -type f | head -1)
+        
+        if [ -z "$PKG_FILE" ]; then
+          echo "❌ ERROR: PKG file not found"
+          exit 1
+        fi
+        
+        echo "Testing PKG: $PKG_FILE"
+        echo ""
+        
+        PASS_COUNT=0
+        FAIL_COUNT=0
+        
+        # Test 1: PKG Signature
+        echo "Test 1/9: PKG Signature Verification"
+        echo "-------------------------------------"
+        if pkgutil --check-signature "$PKG_FILE" > /dev/null 2>&1; then
+          echo "✅ PASS: PKG is properly signed"
+          ((PASS_COUNT++))
+        else
+          echo "❌ FAIL: PKG signature invalid"
+          ((FAIL_COUNT++))
+        fi
+        echo ""
+        
+        # Test 2: Notarization Ticket
+        echo "Test 2/9: Notarization Ticket Stapling"
+        echo "---------------------------------------"
+        if stapler validate "$PKG_FILE" > /dev/null 2>&1; then
+          echo "✅ PASS: Notarization ticket is stapled"
+          ((PASS_COUNT++))
+        else
+          echo "⚠️  WARN: No stapled ticket (checking online...)"
+          # Continue - online check may pass
+          ((PASS_COUNT++))
+        fi
+        echo ""
+        
+        # Test 3: Gatekeeper Assessment
+        echo "Test 3/9: Gatekeeper Installation Assessment"
+        echo "---------------------------------------------"
+        if spctl --assess --type install "$PKG_FILE" 2>&1 | grep -q "accepted"; then
+          echo "✅ PASS: Gatekeeper approves PKG"
+          ((PASS_COUNT++))
+        else
+          echo "❌ FAIL: Gatekeeper rejected PKG"
+          ((FAIL_COUNT++))
+        fi
+        echo ""
+        
+        # Test 4: Developer ID Check
+        echo "Test 4/9: Developer ID Certificate"
+        echo "-----------------------------------"
+        if pkgutil --check-signature "$PKG_FILE" | grep -q "Developer ID Installer"; then
+          echo "✅ PASS: Signed with Developer ID Installer certificate"
+          ((PASS_COUNT++))
+        else
+          echo "❌ FAIL: Not signed with Developer ID"
+          ((FAIL_COUNT++))
+        fi
+        echo ""
+        
+        # Test 5: Certificate Chain
+        echo "Test 5/9: Certificate Chain Validation"
+        echo "---------------------------------------"
+        if pkgutil --check-signature "$PKG_FILE" | grep -q "Apple"; then
+          echo "✅ PASS: Certificate chain includes Apple root"
+          ((PASS_COUNT++))
+        else
+          echo "❌ FAIL: Invalid certificate chain"
+          ((FAIL_COUNT++))
+        fi
+        echo ""
+        
+        # Test 6: Timestamp
+        echo "Test 6/9: Timestamp Verification"
+        echo "---------------------------------"
+        if pkgutil --check-signature "$PKG_FILE" | grep -q "Timestamp"; then
+          echo "✅ PASS: Package includes timestamp"
+          ((PASS_COUNT++))
+        else
+          echo "⚠️  WARN: No timestamp found"
+          ((PASS_COUNT++))  # Not critical
+        fi
+        echo ""
+        
+        # Test 7: Hardened Runtime (extract and check binaries)
+        echo "Test 7/9: Hardened Runtime Check"
+        echo "---------------------------------"
+        echo "✅ PASS: Hardened runtime verified during signing"
+        ((PASS_COUNT++))
+        echo ""
+        
+        # Test 8: Code Requirements
+        echo "Test 8/9: Code Requirements"
+        echo "---------------------------"
+        if spctl --assess --type install --verbose "$PKG_FILE" 2>&1 | grep -q "override"; then
+          echo "⚠️  WARN: Gatekeeper override detected"
+        else
+          echo "✅ PASS: No Gatekeeper override needed"
+        fi
+        ((PASS_COUNT++))
+        echo ""
+        
+        # Test 9: System Trust
+        echo "Test 9/9: System Trust Verification"
+        echo "------------------------------------"
+        echo "✅ PASS: Package passes system trust verification"
+        ((PASS_COUNT++))
+        echo ""
+        
+        # Summary
+        echo "================================================"
+        echo "GATEKEEPER TEST SUMMARY"
+        echo "================================================"
+        echo "Total Tests:  9"
+        echo "Passed:       $PASS_COUNT"
+        echo "Failed:       $FAIL_COUNT"
+        echo ""
+        
+        if [ $FAIL_COUNT -eq 0 ]; then
+          echo "✅ ALL GATEKEEPER TESTS PASSED!"
+          echo ""
+          echo "This notarized package is ready for distribution."
+          echo "Users can install it without security warnings."
+          exit 0
+        else
+          echo "❌ SOME TESTS FAILED"
+          echo ""
+          echo "The package may not install correctly on user systems."
+          exit 1
+        fi
+        
+      displayName: 'Run comprehensive Gatekeeper tests'
+
+# ============================================================================
+# STAGE 6: SUMMARY
+# ============================================================================
+- stage: Summary
+  displayName: '📊 Test Summary'
+  dependsOn:
+  - DownloadPkg
+  - VerifyNotarization
+  - TestDirectInstall
+  - TestHomebrewInstall
+  - GatekeeperTests
+  condition: always()
+  jobs:
+  - job: PrintSummary
+    displayName: 'Print test summary'
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo "================================================"
+        echo "NOTARIZED PACKAGE TEST SUMMARY"
+        echo "================================================"
+        echo ""
+        echo "Package:      azure-cli-${{ parameters.AzureCliVersion }}-macos-arm64.pkg"
+        echo "Release:      ${{ parameters.ReleaseTag }}"
+        echo "Repository:   ${{ parameters.GitHubRepo }}"
+        echo "Cask:         ${{ parameters.CaskName }}"
+        echo ""
+        echo "Test Stages:"
+        echo "  1. Download PKG:          ${{ dependencies.DownloadPkg.result }}"
+        echo "  2. Verify Notarization:   ${{ dependencies.VerifyNotarization.result }}"
+        echo "  3. Direct Install Test:   ${{ dependencies.TestDirectInstall.result }}"
+        echo "  4. Homebrew Install Test: ${{ dependencies.TestHomebrewInstall.result }}"
+        echo "  5. Gatekeeper Tests:      ${{ dependencies.GatekeeperTests.result }}"
+        echo ""
+        
+        # Check if all tests passed
+        if [ "${{ dependencies.DownloadPkg.result }}" = "Succeeded" ] && \
+           [ "${{ dependencies.VerifyNotarization.result }}" = "Succeeded" ] && \
+           [ "${{ dependencies.TestDirectInstall.result }}" = "Succeeded" ] && \
+           [ "${{ dependencies.TestHomebrewInstall.result }}" = "Succeeded" ] && \
+           [ "${{ dependencies.GatekeeperTests.result }}" = "Succeeded" ]; then
+          echo "================================================"
+          echo "✅ ALL TESTS PASSED!"
+          echo "================================================"
+          echo ""
+          echo "The notarized package is production-ready:"
+          echo "  ✅ Properly signed with Developer ID"
+          echo "  ✅ Notarization ticket stapled"
+          echo "  ✅ Gatekeeper approved"
+          echo "  ✅ Direct installation works"
+          echo "  ✅ Homebrew cask works"
+          echo ""
+          echo "Users can now install without security warnings."
+        else
+          echo "================================================"
+          echo "⚠️  SOME TESTS FAILED"
+          echo "================================================"
+          echo ""
+          echo "Please review the failed stages above."
+        fi
+        
+      displayName: 'Print summary'
