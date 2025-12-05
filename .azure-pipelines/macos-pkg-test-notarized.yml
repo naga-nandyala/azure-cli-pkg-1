@@ -301,12 +301,13 @@ stages:
     - bash: |
         set -e
         
-        echo "=== Generating Homebrew Cask ==="
+        echo "=== Generating Homebrew Cask (matching complete-pr2) ==="
         
         VERSION="${{ parameters.AzureCliVersion }}"
         TAG_NAME="${{ parameters.ReleaseTag }}"
         CASK_NAME="${{ parameters.CaskName }}"
-        PKG_URL="https://github.com/${{ parameters.GitHubRepo }}/releases/download/${TAG_NAME}/azure-cli-${VERSION}-macos-arm64-notarized.pkg"
+        PKG_NAME="azure-cli-${VERSION}-macos-arm64-notarized.pkg"
+        PKG_URL="https://github.com/${{ parameters.GitHubRepo }}/releases/download/${TAG_NAME}/${PKG_NAME}"
         
         echo "Cask name: $CASK_NAME"
         echo "PKG URL: $PKG_URL"
@@ -320,37 +321,120 @@ stages:
         
         echo "SHA256: $SHA256"
         
-        # Generate Cask file (matching azure-cli-pr2.rb structure)
+        # Generate Cask file matching complete-pr2 structure
         CASK_FILE="Casks/${CASK_NAME}.rb"
         mkdir -p Casks
         
-        # Create cask using printf to avoid YAML parsing issues
-        printf 'cask "%s" do\n' "$CASK_NAME" > "$CASK_FILE"
-        printf '  version "%s"\n' "$VERSION" >> "$CASK_FILE"
-        printf '  sha256 "%s"\n' "$SHA256" >> "$CASK_FILE"
-        printf '\n' >> "$CASK_FILE"
-        printf '  url "%s"\n' "$PKG_URL" >> "$CASK_FILE"
-        printf '  name "Azure CLI"\n' >> "$CASK_FILE"
-        printf '  desc "Azure CLI with versioned installation (notarized)"\n' >> "$CASK_FILE"
-        printf '  homepage "https://github.com/%s"\n' "${{ parameters.GitHubRepo }}" >> "$CASK_FILE"
-        printf '\n' >> "$CASK_FILE"
-        printf '  pkg "azure-cli-%s-macos-arm64-notarized.pkg"\n' "$VERSION" >> "$CASK_FILE"
-        printf '\n' >> "$CASK_FILE"
-        printf '  caveats <<~EOS\n' >> "$CASK_FILE"
-        printf '    Azure CLI %s\n' "$VERSION" >> "$CASK_FILE"
-        printf '    Installation: /usr/local/microsoft/azure-cli/%s/\n' "$VERSION" >> "$CASK_FILE"
-        printf '    Symlink: /usr/local/microsoft/azure-cli/current -> %s\n' "$VERSION" >> "$CASK_FILE"
-        printf '    Launcher: /usr/local/bin/az\n' >> "$CASK_FILE"
-        printf '  EOS\n' >> "$CASK_FILE"
-        printf '\n' >> "$CASK_FILE"
-        printf '  zap trash: [\n' >> "$CASK_FILE"
-        printf '    "/usr/local/bin/az",\n' >> "$CASK_FILE"
-        printf '    "/usr/local/microsoft/azure-cli",\n' >> "$CASK_FILE"
-        printf '  ]\n' >> "$CASK_FILE"
-        printf 'end\n' >> "$CASK_FILE"
+        cat > "$CASK_FILE" << CASK_EOF
+        cask "${CASK_NAME}" do
+          version "${VERSION}"
+          sha256 "${SHA256}"
+          
+          url "${PKG_URL}"
+          name "Azure CLI (PR2 - Versioned)"
+          desc "Microsoft Azure Command-Line Interface with versioned installation support"
+          homepage "https://docs.microsoft.com/cli/azure/"
+        
+          pkg "${PKG_NAME}"
+        
+          postflight do
+            # Display installation summary
+            version_dir = "/usr/local/microsoft/azure-cli/#{version}"
+            current_link = "/usr/local/microsoft/azure-cli/current"
+            
+            if File.directory?(version_dir)
+              ohai "Azure CLI #{version} installed successfully"
+              puts "Installation directory: #{version_dir}"
+              
+              if File.symlink?(current_link)
+                active_version = File.readlink(current_link)
+                puts "Active version: #{active_version}"
+                
+                # Check if this is an upgrade
+                if active_version != version.to_s
+                  opoo "Previous version (#{active_version}) is still installed"
+                  puts "To remove old versions, run:"
+                  puts "  sudo /usr/local/microsoft/azure-cli/cleanup-old-versions.sh"
+                end
+              end
+            else
+              opoo "Installation directory not found: #{version_dir}"
+            end
+          end
+        
+          uninstall_preflight do
+            current_link = "/usr/local/microsoft/azure-cli/current"
+            
+            if File.symlink?(current_link)
+              current_version = File.readlink(current_link)
+              ohai "Removing Azure CLI active version: #{current_version}"
+              
+              # Count total versions
+              versions_dir = "/usr/local/microsoft/azure-cli"
+              if Dir.exist?(versions_dir)
+                version_dirs = Dir.glob("#{versions_dir}/[0-9]*").select { |f| File.directory?(f) }
+                
+                if version_dirs.length > 1
+                  opoo "You have #{version_dirs.length} versions installed"
+                  puts "Only the launcher and 'current' symlink will be removed."
+                  puts "Version directories will remain for manual inspection."
+                  puts ""
+                  puts "To remove ALL versions and data, run:"
+                  puts "  brew uninstall --zap --cask ${CASK_NAME}"
+                end
+              end
+            else
+              opoo "No active Azure CLI installation found"
+            end
+          end
+        
+          uninstall pkgutil: "${{ parameters.BundleId }}",
+                    delete:  [
+                      "/usr/local/bin/az",
+                      "/usr/local/microsoft/azure-cli/current",
+                      "/usr/local/microsoft/azure-cli/cleanup-old-versions.sh",
+                    ]
+        
+          # Note: Version directories are NOT deleted to preserve user's ability to rollback
+          # Users can manually remove them or use 'zap' for complete cleanup
+          
+          zap trash: "~/.azure",
+              rmdir: "/usr/local/microsoft/azure-cli"
+        
+          caveats <<~EOS
+            Azure CLI #{version} has been installed with versioned directory structure.
+        
+            Installation location:
+              /usr/local/microsoft/azure-cli/#{version}/
+        
+            Active version symlink:
+              /usr/local/microsoft/azure-cli/current -> #{version}
+        
+            Launcher script:
+              /usr/local/bin/az
+        
+            Multiple versions can coexist side-by-side. When you upgrade, the previous
+            version will be preserved automatically.
+        
+            To remove old versions:
+              sudo /usr/local/microsoft/azure-cli/cleanup-old-versions.sh
+        
+            To manually switch versions (advanced):
+              sudo ln -sf <version> /usr/local/microsoft/azure-cli/current
+              Example: sudo ln -sf 2.80.0 /usr/local/microsoft/azure-cli/current
+        
+            To verify installation:
+              az --version
+              ls -la /usr/local/microsoft/azure-cli/
+        
+            For complete removal including all versions:
+              brew uninstall --zap --cask ${CASK_NAME}
+          EOS
+        end
+        CASK_EOF
         
         echo ""
-        echo "✅ Cask generated:"
+        echo "✅ Cask generated (matches complete-pr2 structure):"
         cat "$CASK_FILE"
         
       displayName: 'Generate Cask file'
