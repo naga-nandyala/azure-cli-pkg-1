@@ -137,7 +137,7 @@ stages:
         echo ""
         echo "Creating GitHub release..."
         
-        cat > release_notes.md << 'NOTES'
+        cat > release_notes.md <<EOF
 **⚠️ UNSIGNED TEST BUILD - DO NOT USE IN PRODUCTION**
 
 This is an unsigned PKG for testing installation workflow.
@@ -146,14 +146,14 @@ This is an unsigned PKG for testing installation workflow.
 - For development/testing only
 
 **Installation:**
-```
+\`\`\`bash
 brew install --cask --no-quarantine ${{ parameters.CaskName }}
-```
+\`\`\`
 
 **Version:** ${VERSION}
 **Build:** $(BuildId)
-**Created:** $(date -u +%Y-%m-%dT%H:%M:%SZ)
-NOTES
+**Created:** \$(date -u +%Y-%m-%dT%H:%M:%SZ)
+EOF
         
         gh release create "$TAG_NAME" \
           --repo "${{ parameters.GitHubRepo }}" \
@@ -222,7 +222,7 @@ NOTES
         CASK_FILE="Casks/${CASK_NAME}.rb"
         mkdir -p Casks
         
-        cat > "$CASK_FILE" << 'EOF'
+        cat > "$CASK_FILE" <<CASKEOF
 cask "{{ CASK_NAME }}" do
   version "{{ VERSION }}"
   sha256 "{{ SHA256 }}"
@@ -279,7 +279,7 @@ cask "{{ CASK_NAME }}" do
     "/usr/local/microsoft/azure-cli",
   ]
 end
-EOF
+CASKEOF
         
         # Replace placeholders
         sed -i.bak "s|{{ CASK_NAME }}|$CASK_NAME|g" "$CASK_FILE"
