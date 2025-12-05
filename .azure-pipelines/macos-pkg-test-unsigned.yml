@@ -152,26 +152,21 @@ stages:
         echo "Renamed to: $RENAMED_PKG"
         
         # Create release notes
-        cat > "$(Build.ArtifactStagingDirectory)/release-notes.md" <<'EOF'
-WARNING: UNSIGNED TEST BUILD - DO NOT USE IN PRODUCTION
-
-This is an unsigned PKG for testing installation workflow.
-- No code signing
-- No Apple notarization  
-- For development/testing only
-
-Installation:
-\`\`\`bash
-brew install --cask --no-quarantine azure-cli-pr2-test
-\`\`\`
-
-Version: VERSION_PLACEHOLDER
-Build: BUILD_PLACEHOLDER
-EOF
-        
-        sed -i.bak "s/VERSION_PLACEHOLDER/${VERSION}/g" "$(Build.ArtifactStagingDirectory)/release-notes.md"
-        sed -i.bak "s/BUILD_PLACEHOLDER/$(BuildId)/g" "$(Build.ArtifactStagingDirectory)/release-notes.md"
-        rm "$(Build.ArtifactStagingDirectory)/release-notes.md.bak"
+        NOTES_FILE="$(Build.ArtifactStagingDirectory)/release-notes.md"
+        echo "WARNING: UNSIGNED TEST BUILD - DO NOT USE IN PRODUCTION" > "$NOTES_FILE"
+        echo "" >> "$NOTES_FILE"
+        echo "This is an unsigned PKG for testing installation workflow." >> "$NOTES_FILE"
+        echo "- No code signing" >> "$NOTES_FILE"
+        echo "- No Apple notarization" >> "$NOTES_FILE"
+        echo "- For development/testing only" >> "$NOTES_FILE"
+        echo "" >> "$NOTES_FILE"
+        echo "Installation:" >> "$NOTES_FILE"
+        echo "\`\`\`bash" >> "$NOTES_FILE"
+        echo "brew install --cask --no-quarantine azure-cli-pr2-test" >> "$NOTES_FILE"
+        echo "\`\`\`" >> "$NOTES_FILE"
+        echo "" >> "$NOTES_FILE"
+        echo "Version: ${VERSION}" >> "$NOTES_FILE"
+        echo "Build: $(BuildId)" >> "$NOTES_FILE"
         
         echo ""
         echo "✅ Release preparation complete"
