@@ -1,4 +1,4 @@
-# Azure CLI - AI Agent Instructions
+<!-- # Azure CLI - AI Agent Instructions
 
 ## Project Overview
 This is the **Azure CLI** codebase - Microsoft's cross-platform command-line tool for managing Azure resources. The project focuses on both the CLI product itself and macOS PKG distribution infrastructure with ESRP signing and Apple notarization.
@@ -162,4 +162,4 @@ When working with pipelines, common parameters:
 - Gatekeeper approval process achievable
 - Multiple distribution methods (Homebrew Cask, offline PKG) can share same notarized PKG
 
-**Next Steps**: Complete ESRP signing POC, validate end-to-end pipeline, finalize Gatekeeper validation approach.
+**Next Steps**: Complete ESRP signing POC, validate end-to-end pipeline, finalize Gatekeeper validation approach. -->

@@ -1,0 +1,415 @@
+trigger: none
+
+pr: none
+
+parameters:
+  - name: UnsignedBuildId
+    displayName: 'Build ID from naga_macos_build_pr2 pipeline'
+    type: string
+    default: ''
+  
+  - name: AzureCliVersion
+    displayName: 'Azure CLI Version'
+    type: string
+    default: '3.0.0'
+  
+  - name: BundleId
+    displayName: 'Bundle Identifier'
+    type: string
+    default: 'com.microsoft.azure.cli'
+  
+  - name: GitHubRepo
+    displayName: 'GitHub Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+  
+  - name: HomebrewTapRepo
+    displayName: 'Homebrew Tap Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+  
+  - name: CaskName
+    displayName: 'Homebrew Cask Name'
+    type: string
+    default: 'azure-cli-pr2-test'
+
+variables:
+  - name: BuildId
+    value: ${{ parameters.UnsignedBuildId }}
+
+pool:
+  vmImage: 'macOS-latest'
+
+stages:
+
+# ============================================================================
+# STAGE 1: DOWNLOAD UNSIGNED PKG
+# ============================================================================
+- stage: DownloadPkg
+  displayName: '📦 Download Unsigned PKG'
+  jobs:
+  - job: Download
+    displayName: 'Download from build pipeline'
+    steps:
+    - checkout: none
+    
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download unsigned PKG'
+      inputs:
+        buildType: 'specific'
+        project: '$(System.TeamProjectId)'
+        definition: 'naga_macos_build_pr2'
+        buildVersionToDownload: 'specific'
+        buildId: '$(BuildId)'
+        artifactName: 'macos-pkg'
+        targetPath: '$(Pipeline.Workspace)'
+    
+    - bash: |
+        set -e
+        echo "=== Downloaded PKG ==="
+        ls -lh "$(Pipeline.Workspace)"/*.pkg
+        
+        PKG_FILE=$(find "$(Pipeline.Workspace)" -name "*.pkg" -type f | head -1)
+        
+        if [ -z "$PKG_FILE" ]; then
+          echo "❌ ERROR: No PKG file found"
+          exit 1
+        fi
+        
+        echo ""
+        echo "✅ PKG found: $PKG_FILE"
+        echo "Size: $(du -h $PKG_FILE | cut -f1)"
+        
+      displayName: 'Verify PKG downloaded'
+    
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish unsigned PKG for next stage'
+      inputs:
+        targetPath: '$(Pipeline.Workspace)'
+        artifactName: 'unsigned-pkg'
+
+# ============================================================================
+# STAGE 2: PUBLISH TO GITHUB RELEASE
+# ============================================================================
+- stage: PublishToGitHub
+  displayName: '🚀 Publish to GitHub'
+  dependsOn: DownloadPkg
+  jobs:
+  - job: PublishRelease
+    displayName: 'Create GitHub release'
+    steps:
+    - checkout: self
+      persistCredentials: true
+    
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download PKG'
+      inputs:
+        artifactName: 'unsigned-pkg'
+        targetPath: '$(Pipeline.Workspace)'
+    
+    - bash: |
+        set -e
+        echo "=== Publishing to GitHub Release ==="
+        
+        VERSION="${{ parameters.AzureCliVersion }}"
+        TAG_NAME="v${VERSION}-test-unsigned"
+        RELEASE_NAME="Azure CLI ${VERSION} (Test - Unsigned)"
+        PKG_FILE=$(find "$(Pipeline.Workspace)" -name "*.pkg" -type f | head -1)
+        RENAMED_PKG="$(Pipeline.Workspace)/azure-cli-${VERSION}-macos-arm64-unsigned.pkg"
+        
+        echo "Version: $VERSION"
+        echo "Tag: $TAG_NAME"
+        echo "Original PKG: $PKG_FILE"
+        
+        # Rename PKG for clarity
+        mv "$PKG_FILE" "$RENAMED_PKG"
+        echo "Renamed to: $RENAMED_PKG"
+        
+        # Delete existing release/tag if it exists
+        echo ""
+        echo "Checking for existing release..."
+        gh release delete "$TAG_NAME" --yes --repo "${{ parameters.GitHubRepo }}" 2>/dev/null || echo "No existing release to delete"
+        
+        git tag -d "$TAG_NAME" 2>/dev/null || echo "No local tag to delete"
+        git push origin ":refs/tags/$TAG_NAME" 2>/dev/null || echo "No remote tag to delete"
+        
+        # Create new release
+        echo ""
+        echo "Creating GitHub release..."
+        gh release create "$TAG_NAME" \
+          --repo "${{ parameters.GitHubRepo }}" \
+          --title "$RELEASE_NAME" \
+          --notes "**⚠️ UNSIGNED TEST BUILD - DO NOT USE IN PRODUCTION**
+
+This is an unsigned PKG for testing installation workflow.
+- No code signing
+- No Apple notarization
+- For development/testing only
+
+**Installation:**
+\`\`\`bash
+brew install --cask --no-quarantine ${{ parameters.CaskName }}
+\`\`\`
+
+**Version:** ${VERSION}
+**Build:** $(BuildId)
+**Created:** $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+          "$RENAMED_PKG"
+        
+        echo ""
+        echo "✅ Release published successfully"
+        echo "URL: https://github.com/${{ parameters.GitHubRepo }}/releases/tag/$TAG_NAME"
+        
+      displayName: 'Publish GitHub release'
+      env:
+        GH_TOKEN: $(GITHUB_TOKEN)
+
+# ============================================================================
+# STAGE 3: UPDATE HOMEBREW CASK
+# ============================================================================
+- stage: UpdateHomebrew
+  displayName: '🍺 Update Homebrew Cask'
+  dependsOn: PublishToGitHub
+  jobs:
+  - job: UpdateCask
+    displayName: 'Update Cask formula'
+    steps:
+    - checkout: self
+      persistCredentials: true
+    
+    - bash: |
+        set -e
+        echo "=== Generating Homebrew Cask ==="
+        
+        VERSION="${{ parameters.AzureCliVersion }}"
+        TAG_NAME="v${VERSION}-test-unsigned"
+        CASK_NAME="${{ parameters.CaskName }}"
+        PKG_URL="https://github.com/${{ parameters.GitHubRepo }}/releases/download/${TAG_NAME}/azure-cli-${VERSION}-macos-arm64-unsigned.pkg"
+        
+        echo "Cask name: $CASK_NAME"
+        echo "PKG URL: $PKG_URL"
+        
+        # Download PKG to calculate SHA256
+        echo ""
+        echo "Downloading PKG to calculate SHA256..."
+        curl -L -o temp.pkg "$PKG_URL"
+        SHA256=$(shasum -a 256 temp.pkg | cut -d' ' -f1)
+        rm temp.pkg
+        
+        echo "SHA256: $SHA256"
+        
+        # Generate Cask file (matching azure-cli-pr2.rb structure)
+        CASK_FILE="homebrew-cask/Casks/${CASK_NAME}.rb"
+        mkdir -p homebrew-cask/Casks
+        
+        cat > "$CASK_FILE" << 'EOF'
+cask "{{ CASK_NAME }}" do
+  version "{{ VERSION }}"
+  sha256 "{{ SHA256 }}"
+
+  url "{{ PKG_URL }}"
+  name "Azure CLI (Test - Unsigned)"
+  desc "⚠️ UNSIGNED TEST BUILD - Azure command-line interface with versioned installation"
+  homepage "https://github.com/{{ GITHUB_REPO }}"
+
+  # ⚠️ UNSIGNED BUILD - Must use --no-quarantine
+  pkg "azure-cli-{{ VERSION }}-macos-arm64-unsigned.pkg"
+
+  # No uninstall - versioned installation allows multiple versions
+  # Users should use the cleanup script instead
+
+  caveats <<~EOS
+    ⚠️  WARNING: This is an UNSIGNED TEST BUILD
+    
+    This cask installs an unsigned PKG for testing purposes only.
+    It will NOT pass Gatekeeper verification.
+    
+    Azure CLI {{ VERSION }} has been installed with versioned directory structure.
+
+    Installation location:
+      /usr/local/microsoft/azure-cli/{{ VERSION }}/
+
+    Active version symlink:
+      /usr/local/microsoft/azure-cli/current -> {{ VERSION }}
+
+    Launcher script:
+      /usr/local/bin/az
+
+    Multiple versions can coexist side-by-side. When you upgrade, the previous
+    version will be preserved automatically.
+
+    To remove old versions:
+      sudo /usr/local/microsoft/azure-cli/cleanup-old-versions.sh
+
+    To manually switch versions (advanced):
+      sudo ln -sf <version> /usr/local/microsoft/azure-cli/current
+      Example: sudo ln -sf 2.80.0 /usr/local/microsoft/azure-cli/current
+
+    To verify installation:
+      az --version
+      ls -la /usr/local/microsoft/azure-cli/
+
+    For complete removal including all versions:
+      brew uninstall --zap --cask {{ CASK_NAME }}
+  EOS
+
+  # Zap removes everything including all versions
+  zap trash: [
+    "/usr/local/bin/az",
+    "/usr/local/microsoft/azure-cli",
+  ]
+end
+EOF
+        
+        # Replace placeholders
+        sed -i.bak "s|{{ CASK_NAME }}|$CASK_NAME|g" "$CASK_FILE"
+        sed -i.bak "s|{{ VERSION }}|$VERSION|g" "$CASK_FILE"
+        sed -i.bak "s|{{ SHA256 }}|$SHA256|g" "$CASK_FILE"
+        sed -i.bak "s|{{ PKG_URL }}|$PKG_URL|g" "$CASK_FILE"
+        sed -i.bak "s|{{ GITHUB_REPO }}|${{ parameters.GitHubRepo }}|g" "$CASK_FILE"
+        sed -i.bak "s|{{ BUNDLE_ID }}|${{ parameters.BundleId }}|g" "$CASK_FILE"
+        rm "$CASK_FILE.bak"
+        
+        echo ""
+        echo "✅ Cask generated:"
+        cat "$CASK_FILE"
+        
+      displayName: 'Generate Cask file'
+    
+    - bash: |
+        set -e
+        echo "=== Committing Cask to Repository ==="
+        
+        CASK_NAME="${{ parameters.CaskName }}"
+        VERSION="${{ parameters.AzureCliVersion }}"
+        CASK_FILE="homebrew-cask/Casks/${CASK_NAME}.rb"
+        
+        # Configure git
+        git config user.name "Azure DevOps"
+        git config user.email "azuredevops@microsoft.com"
+        
+        # Add and commit
+        git add "$CASK_FILE"
+        
+        if git diff --cached --quiet; then
+          echo "ℹ️  No changes to commit"
+        else
+          git commit -m "Update ${CASK_NAME} to ${VERSION} (unsigned test build)
+
+Build ID: $(BuildId)
+Pipeline: $(Build.DefinitionName)
+Commit: $(Build.SourceVersion)"
+          
+          git push origin HEAD:main
+          echo "✅ Cask committed and pushed"
+        fi
+        
+      displayName: 'Commit Cask to repository'
+
+# ============================================================================
+# STAGE 4: TEST INSTALLATION
+# ============================================================================
+- stage: TestInstallation
+  displayName: '✅ Test Installation'
+  dependsOn: UpdateHomebrew
+  jobs:
+  - job: TestFreshInstall
+    displayName: 'Test fresh installation'
+    steps:
+    - checkout: none
+    
+    - bash: |
+        set -e
+        echo "=== Testing Fresh Installation ==="
+        
+        CASK_NAME="${{ parameters.CaskName }}"
+        TAP_REPO="${{ parameters.HomebrewTapRepo }}"
+        EXPECTED_VERSION="${{ parameters.AzureCliVersion }}"
+        
+        # Add tap
+        echo "Adding Homebrew tap..."
+        brew tap "$TAP_REPO"
+        
+        # Install with --no-quarantine (unsigned PKG)
+        echo ""
+        echo "Installing $CASK_NAME..."
+        brew install --cask --no-quarantine "$CASK_NAME"
+        
+        # Wait for installation
+        sleep 5
+        
+        # Verify installation
+        echo ""
+        echo "=== Verification ==="
+        
+        # Check az command
+        if command -v az &> /dev/null; then
+          echo "✅ 'az' command available"
+          az --version | head -5
+        else
+          echo "❌ 'az' command not found"
+          exit 1
+        fi
+        
+        # Check version directory
+        VERSION_DIR="/usr/local/microsoft/azure-cli/${EXPECTED_VERSION}"
+        if [ -d "$VERSION_DIR" ]; then
+          echo ""
+          echo "✅ Version directory exists: $VERSION_DIR"
+        else
+          echo ""
+          echo "❌ Version directory missing: $VERSION_DIR"
+          exit 1
+        fi
+        
+        # Check current symlink
+        CURRENT_LINK="/usr/local/microsoft/azure-cli/current"
+        if [ -L "$CURRENT_LINK" ]; then
+          ACTUAL_TARGET=$(readlink "$CURRENT_LINK")
+          echo ""
+          echo "✅ 'current' symlink exists: $CURRENT_LINK -> $ACTUAL_TARGET"
+          
+          if [ "$ACTUAL_TARGET" = "$EXPECTED_VERSION" ]; then
+            echo "✅ Symlink points to correct version"
+          else
+            echo "❌ Symlink points to wrong version. Expected: $EXPECTED_VERSION, Got: $ACTUAL_TARGET"
+            exit 1
+          fi
+        else
+          echo ""
+          echo "❌ 'current' symlink missing: $CURRENT_LINK"
+          exit 1
+        fi
+        
+        # Check Python executable
+        PYTHON_EXEC="$VERSION_DIR/bin/python3"
+        if [ -x "$PYTHON_EXEC" ]; then
+          echo ""
+          echo "✅ Python executable exists and is executable: $PYTHON_EXEC"
+        else
+          echo ""
+          echo "❌ Python executable missing or not executable: $PYTHON_EXEC"
+          ls -l "$PYTHON_EXEC" 2>&1 || echo "File not found"
+          exit 1
+        fi
+        
+        echo ""
+        echo "=== All Tests Passed! ==="
+        
+      displayName: 'Test fresh installation'
+
+  - job: Summary
+    displayName: 'Test summary'
+    dependsOn: TestFreshInstall
+    condition: always()
+    steps:
+    - bash: |
+        echo "=== Test Summary ==="
+        echo "Version: ${{ parameters.AzureCliVersion }}"
+        echo "Cask: ${{ parameters.CaskName }}"
+        echo "Build: $(BuildId)"
+        echo ""
+        echo "Installation command:"
+        echo "  brew install --cask --no-quarantine ${{ parameters.CaskName }}"
+        
+      displayName: 'Summary'
