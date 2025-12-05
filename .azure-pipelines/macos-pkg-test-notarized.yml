@@ -227,6 +227,9 @@ stages:
         # Install the PKG
         sudo installer -pkg "$PKG_FILE" -target /
         
+        # Wait for installation to complete
+        sleep 5
+        
         echo ""
         echo "=== Installation Complete ==="
         echo ""
@@ -245,7 +248,7 @@ stages:
         # Check version
         echo ""
         echo "Azure CLI Version:"
-        az --version
+        az --version | head -5
         echo ""
         
         # Check installation directory
@@ -328,20 +331,21 @@ stages:
         echo "Installing ${{ parameters.CaskName }}..."
         brew install --cask ${{ parameters.CaskName }}
         
+        # Wait for installation to complete
+        sleep 5
+        
         echo ""
         echo "=== Verification ==="
         
         # Check az command
         if command -v az &> /dev/null; then
           echo "✅ 'az' command available"
+          az --version | head -5
         else
           echo "❌ 'az' command not found"
           exit 1
         fi
         
-        # Display version
-        echo ""
-        az --version
         echo ""
         
         # Check version directory
@@ -349,8 +353,10 @@ stages:
         VERSION_DIR="/usr/local/microsoft/azure-cli/$VERSION"
         
         if [ -d "$VERSION_DIR" ]; then
+          echo ""
           echo "✅ Version directory exists: $VERSION_DIR"
         else
+          echo ""
           echo "❌ Version directory not found: $VERSION_DIR"
           exit 1
         fi
@@ -359,24 +365,30 @@ stages:
         CURRENT_LINK="/usr/local/microsoft/azure-cli/current"
         if [ -L "$CURRENT_LINK" ]; then
           CURRENT_TARGET=$(readlink "$CURRENT_LINK")
+          echo ""
           echo "✅ 'current' symlink exists: $CURRENT_LINK -> $CURRENT_TARGET"
           
           if [ "$CURRENT_TARGET" = "$VERSION" ]; then
             echo "✅ Symlink points to correct version"
           else
-            echo "⚠️  Symlink points to: $CURRENT_TARGET (expected: $VERSION)"
+            echo "❌ Symlink points to wrong version. Expected: $VERSION, Got: $CURRENT_TARGET"
+            exit 1
           fi
         else
-          echo "❌ 'current' symlink not found"
+          echo ""
+          echo "❌ 'current' symlink missing: $CURRENT_LINK"
           exit 1
         fi
         
         # Check Python
         PYTHON_BIN="$VERSION_DIR/bin/python3"
         if [ -x "$PYTHON_BIN" ]; then
+          echo ""
           echo "✅ Python executable exists and is executable: $PYTHON_BIN"
         else
-          echo "❌ Python executable not found or not executable"
+          echo ""
+          echo "❌ Python executable missing or not executable: $PYTHON_BIN"
+          ls -l "$PYTHON_BIN" 2>&1 || echo "File not found"
           exit 1
         fi
         
