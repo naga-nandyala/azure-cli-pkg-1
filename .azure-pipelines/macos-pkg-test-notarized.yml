@@ -160,81 +160,11 @@ stages:
       displayName: 'Publish notarized PKG artifact'
 
 # ============================================================================
-# STAGE 2: VERIFY NOTARIZATION AND SIGNATURES
-# ============================================================================
-- stage: VerifyNotarization
-  displayName: '🔒 Verify Notarization & Signatures'
-  dependsOn: DownloadPkg
-  jobs:
-  - job: Verify
-    displayName: 'Verify PKG security attributes'
-    steps:
-    - checkout: none
-    
-    - download: current
-      artifact: notarized-pkg
-      displayName: 'Download notarized PKG'
-    
-    - bash: |
-        set -e
-        echo "=== PKG Security Verification ==="
-        echo ""
-        
-        PKG_FILE=$(find "$(Pipeline.Workspace)/notarized-pkg" -name "*.pkg" -type f | head -1)
-        
-        if [ -z "$PKG_FILE" ]; then
-          echo "❌ ERROR: PKG file not found"
-          exit 1
-        fi
-        
-        echo "PKG: $PKG_FILE"
-        echo ""
-        
-        # Test 1: Check PKG signature
-        echo "Test 1: Verifying PKG signature..."
-        if pkgutil --check-signature "$PKG_FILE"; then
-          echo "✅ PKG is properly signed"
-        else
-          echo "❌ PKG signature verification failed"
-          exit 1
-        fi
-        echo ""
-        
-        # Test 2: Check notarization stapling
-        echo "Test 2: Checking notarization ticket stapling..."
-        if stapler validate "$PKG_FILE"; then
-          echo "✅ Notarization ticket is stapled"
-        else
-          echo "⚠️  WARNING: Notarization ticket not stapled (may still be notarized)"
-        fi
-        echo ""
-        
-        # Test 3: Gatekeeper assessment
-        echo "Test 3: Gatekeeper security assessment..."
-        if spctl --assess --type install "$PKG_FILE"; then
-          echo "✅ Gatekeeper approves this PKG for installation"
-        else
-          echo "❌ Gatekeeper rejected the PKG"
-          exit 1
-        fi
-        echo ""
-        
-        # Test 4: Detailed signature info
-        echo "Test 4: Detailed signature information..."
-        echo "----------------------------------------"
-        pkgutil --check-signature "$PKG_FILE" | head -20
-        echo ""
-        
-        echo "=== All Security Checks Passed ==="
-        
-      displayName: 'Verify signatures and notarization'
-
-# ============================================================================
-# STAGE 3: TEST DIRECT PKG INSTALLATION
+# STAGE 2: TEST DIRECT PKG INSTALLATION
 # ============================================================================
 - stage: TestDirectInstall
   displayName: '📥 Test Direct PKG Installation'
-  dependsOn: VerifyNotarization
+  dependsOn: DownloadPkg
   jobs:
   - job: DirectInstall
     displayName: 'Install PKG directly with installer'
@@ -329,11 +259,11 @@ stages:
       displayName: 'Install and verify PKG'
 
 # ============================================================================
-# STAGE 4: UPDATE HOMEBREW CASK
+# STAGE 3: UPDATE HOMEBREW CASK
 # ============================================================================
 - stage: UpdateHomebrew
   displayName: '🍺 Update Homebrew Cask'
-  dependsOn: VerifyNotarization
+  dependsOn: DownloadPkg
   jobs:
   - job: UpdateCask
     displayName: 'Update Cask formula'
@@ -449,7 +379,7 @@ stages:
       displayName: 'Commit Cask to repository'
 
 # ============================================================================
-# STAGE 5: TEST HOMEBREW CASK INSTALLATION
+# STAGE 4: TEST HOMEBREW CASK INSTALLATION
 # ============================================================================
 - stage: TestHomebrewInstall
   displayName: '🍺 Test Homebrew Cask Installation'
@@ -554,11 +484,11 @@ stages:
       displayName: 'Test fresh installation'
 
 # ============================================================================
-# STAGE 6: COMPREHENSIVE GATEKEEPER TESTS
+# STAGE 5: COMPREHENSIVE GATEKEEPER TESTS
 # ============================================================================
 - stage: GatekeeperTests
   displayName: '🛡️ Comprehensive Gatekeeper Tests'
-  dependsOn: VerifyNotarization
+  dependsOn: DownloadPkg
   jobs:
   - job: GatekeeperValidation
     displayName: 'Run all Gatekeeper security tests'
@@ -712,13 +642,12 @@ stages:
       displayName: 'Run comprehensive Gatekeeper tests'
 
 # ============================================================================
-# STAGE 7: SUMMARY
+# STAGE 6: SUMMARY
 # ============================================================================
 - stage: Summary
   displayName: '📊 Test Summary'
   dependsOn:
   - DownloadPkg
-  - VerifyNotarization
   - TestDirectInstall
   - UpdateHomebrew
   - TestHomebrewInstall
@@ -742,11 +671,10 @@ stages:
         echo ""
         echo "Test Stages:"
         echo "  1. Download PKG:          Completed"
-        echo "  2. Verify Notarization:   Completed"
-        echo "  3. Direct Install Test:   Completed"
-        echo "  4. Update Homebrew Cask:  Completed"
-        echo "  5. Homebrew Install Test: Completed"
-        echo "  6. Gatekeeper Tests:      Completed"
+        echo "  2. Direct Install Test:   Completed"
+        echo "  3. Update Homebrew Cask:  Completed"
+        echo "  4. Homebrew Install Test: Completed"
+        echo "  5. Gatekeeper Tests:      Completed"
         echo ""
         echo "================================================"
         echo "✅ ALL TESTS PASSED!"
