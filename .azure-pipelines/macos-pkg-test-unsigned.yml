@@ -126,24 +126,22 @@ stages:
   - job: PublishRelease
     displayName: 'Create GitHub release'
     steps:
-    - checkout: self
-      persistCredentials: true
+    - checkout: none
     
     - task: DownloadPipelineArtifact@2
       displayName: 'Download PKG'
       inputs:
         artifactName: 'unsigned-pkg'
-        targetPath: '$(Pipeline.Workspace)'
+        targetPath: '$(Pipeline.Workspace)/unsigned-pkg'
     
     - bash: |
         set -e
-        echo "=== Publishing to GitHub Release ==="
+        echo "=== Preparing GitHub Release ==="
         
         VERSION="${{ parameters.AzureCliVersion }}"
         TAG_NAME="v${VERSION}-test-unsigned"
-        RELEASE_NAME="Azure CLI ${VERSION} (Test - Unsigned)"
-        PKG_FILE=$(find "$(Pipeline.Workspace)" -name "*.pkg" -type f | head -1)
-        RENAMED_PKG="$(Pipeline.Workspace)/azure-cli-${VERSION}-macos-arm64-unsigned.pkg"
+        PKG_FILE=$(find "$(Pipeline.Workspace)/unsigned-pkg" -name "*.pkg" -type f | head -1)
+        RENAMED_PKG="$(Build.ArtifactStagingDirectory)/azure-cli-${VERSION}-macos-arm64-unsigned.pkg"
         
         echo "Version: $VERSION"
         echo "Tag: $TAG_NAME"
@@ -153,49 +151,62 @@ stages:
         mv "$PKG_FILE" "$RENAMED_PKG"
         echo "Renamed to: $RENAMED_PKG"
         
-        # Delete existing release/tag if it exists
-        echo ""
-        echo "Checking for existing release..."
-        gh release delete "$TAG_NAME" --yes --repo "${{ parameters.GitHubRepo }}" 2>/dev/null || echo "No existing release to delete"
+        # Create release notes
+        cat > "$(Build.ArtifactStagingDirectory)/release-notes.md" <<'EOF'
+WARNING: UNSIGNED TEST BUILD - DO NOT USE IN PRODUCTION
+
+This is an unsigned PKG for testing installation workflow.
+- No code signing
+- No Apple notarization  
+- For development/testing only
+
+Installation:
+\`\`\`bash
+brew install --cask --no-quarantine azure-cli-pr2-test
+\`\`\`
+
+Version: VERSION_PLACEHOLDER
+Build: BUILD_PLACEHOLDER
+EOF
         
-        git tag -d "$TAG_NAME" 2>/dev/null || echo "No local tag to delete"
-        git push origin ":refs/tags/$TAG_NAME" 2>/dev/null || echo "No remote tag to delete"
-        
-        # Create new release
-        echo ""
-        echo "Creating GitHub release..."
-        
-        # Create release notes file
-        echo "WARNING: UNSIGNED TEST BUILD - DO NOT USE IN PRODUCTION" > release_notes.md
-        echo "" >> release_notes.md
-        echo "This is an unsigned PKG for testing installation workflow." >> release_notes.md
-        echo "- No code signing" >> release_notes.md
-        echo "- No Apple notarization" >> release_notes.md
-        echo "- For development/testing only" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "**Installation:**" >> release_notes.md
-        echo "\`\`\`bash" >> release_notes.md
-        echo "brew install --cask --no-quarantine ${{ parameters.CaskName }}" >> release_notes.md
-        echo "\`\`\`" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "**Version:** ${VERSION}" >> release_notes.md
-        echo "**Build:** $(BuildId)" >> release_notes.md
-        echo "**Created:** $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> release_notes.md
-        
-        gh release create "$TAG_NAME" \
-          --repo "${{ parameters.GitHubRepo }}" \
-          --title "$RELEASE_NAME" \
-          --notes-file release_notes.md \
-          "$RENAMED_PKG"
+        sed -i.bak "s/VERSION_PLACEHOLDER/${VERSION}/g" "$(Build.ArtifactStagingDirectory)/release-notes.md"
+        sed -i.bak "s/BUILD_PLACEHOLDER/$(BuildId)/g" "$(Build.ArtifactStagingDirectory)/release-notes.md"
+        rm "$(Build.ArtifactStagingDirectory)/release-notes.md.bak"
         
         echo ""
-        echo "✅ Release published successfully"
-        echo "URL: https://github.com/${{ parameters.GitHubRepo }}/releases/tag/$TAG_NAME"
+        echo "✅ Release preparation complete"
         
-      displayName: 'Publish GitHub release'
-      env:
-        GITHUB_TOKEN: $(GitHubPAT)
-        GH_TOKEN: $(GitHubPAT)
+      displayName: 'Prepare release assets'
+    
+    - task: GitHubRelease@1
+      displayName: 'Delete existing release (if exists)'
+      continueOnError: true
+      inputs:
+        gitHubConnection: 'github.com_naga-nandyala'
+        repositoryName: '${{ parameters.GitHubRepo }}'
+        action: 'delete'
+        tag: 'v${{ parameters.AzureCliVersion }}-test-unsigned'
+    
+    - task: GitHubRelease@1
+      displayName: 'Create GitHub Release'
+      inputs:
+        gitHubConnection: 'github.com_naga-nandyala'
+        repositoryName: '${{ parameters.GitHubRepo }}'
+        action: 'create'
+        target: '$(Build.SourceVersion)'
+        tagSource: 'userSpecifiedTag'
+        tag: 'v${{ parameters.AzureCliVersion }}-test-unsigned'
+        title: 'Azure CLI ${{ parameters.AzureCliVersion }} (Test - Unsigned)'
+        releaseNotesFilePath: '$(Build.ArtifactStagingDirectory)/release-notes.md'
+        assets: '$(Build.ArtifactStagingDirectory)/*.pkg'
+        addChangeLog: false
+    
+    - bash: |
+        echo "=== GitHub Release Created ==="
+        echo "Release: https://github.com/${{ parameters.GitHubRepo }}/releases/tag/v${{ parameters.AzureCliVersion }}-test-unsigned"
+        echo "Download URL: https://github.com/${{ parameters.GitHubRepo }}/releases/download/v${{ parameters.AzureCliVersion }}-test-unsigned/azure-cli-${{ parameters.AzureCliVersion }}-macos-arm64-unsigned.pkg"
+        
+      displayName: 'Display release URL'
 
 # ============================================================================
 # STAGE 3: UPDATE HOMEBREW CASK
