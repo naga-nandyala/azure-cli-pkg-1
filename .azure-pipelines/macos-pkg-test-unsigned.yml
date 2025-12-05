@@ -41,6 +41,25 @@ resources:
     name: naga-nandyala/homebrew-mycli-app
 
 variables:
+  # Disable CodeQL and other auto-injection tasks
+  - name: Codeql.Enabled
+    value: false
+  - name: Codeql.SkipTaskAutoInjection
+    value: true
+  - name: CodeQL.enabled
+    value: false
+  - name: runCodesignValidationInjection
+    value: false
+  
+  - name: DOTNET_CLI_TELEMETRY_OPTOUT
+    value: 1
+  - name: DOTNET_NOLOGO
+    value: 1
+  - name: NugetSecurityAnalysisWarningLevel
+    value: none
+  - name: skipNugetSecurityAnalysis
+    value: true
+  
   - name: BuildId
     value: ${{ parameters.UnsignedBuildId }}
   - name: GITHUB_TOKEN
@@ -175,7 +194,8 @@ stages:
         
       displayName: 'Publish GitHub release'
       env:
-        GH_TOKEN: $(GITHUB_TOKEN)
+        GITHUB_TOKEN: $(GitHubPAT)
+        GH_TOKEN: $(GitHubPAT)
 
 # ============================================================================
 # STAGE 3: UPDATE HOMEBREW CASK
