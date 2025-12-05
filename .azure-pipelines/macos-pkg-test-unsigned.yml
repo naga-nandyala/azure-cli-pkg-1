@@ -137,23 +137,22 @@ stages:
         echo ""
         echo "Creating GitHub release..."
         
-        cat > release_notes.md <<EOF
-WARNING: UNSIGNED TEST BUILD - DO NOT USE IN PRODUCTION
-
-This is an unsigned PKG for testing installation workflow.
-- No code signing
-- No Apple notarization
-- For development/testing only
-
-Installation:
-\`\`\`bash
-brew install --cask --no-quarantine ${{ parameters.CaskName }}
-\`\`\`
-
-Version: ${VERSION}
-Build: $(BuildId)
-Created: \$(date -u +%Y-%m-%dT%H:%M:%SZ)
-EOF
+        # Create release notes file
+        echo "WARNING: UNSIGNED TEST BUILD - DO NOT USE IN PRODUCTION" > release_notes.md
+        echo "" >> release_notes.md
+        echo "This is an unsigned PKG for testing installation workflow." >> release_notes.md
+        echo "- No code signing" >> release_notes.md
+        echo "- No Apple notarization" >> release_notes.md
+        echo "- For development/testing only" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "**Installation:**" >> release_notes.md
+        echo "\`\`\`bash" >> release_notes.md
+        echo "brew install --cask --no-quarantine ${{ parameters.CaskName }}" >> release_notes.md
+        echo "\`\`\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "**Version:** ${VERSION}" >> release_notes.md
+        echo "**Build:** $(BuildId)" >> release_notes.md
+        echo "**Created:** $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> release_notes.md
         
         gh release create "$TAG_NAME" \
           --repo "${{ parameters.GitHubRepo }}" \
