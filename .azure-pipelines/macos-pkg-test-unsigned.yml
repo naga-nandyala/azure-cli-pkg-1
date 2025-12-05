@@ -6,7 +6,7 @@ parameters:
   - name: UnsignedBuildId
     displayName: 'Build ID from naga_macos_build_pr2 pipeline'
     type: string
-    default: ''
+    default: '285883'
   
   - name: AzureCliVersion
     displayName: 'Azure CLI Version'
@@ -136,10 +136,8 @@ stages:
         # Create new release
         echo ""
         echo "Creating GitHub release..."
-        gh release create "$TAG_NAME" \
-          --repo "${{ parameters.GitHubRepo }}" \
-          --title "$RELEASE_NAME" \
-          --notes "**⚠️ UNSIGNED TEST BUILD - DO NOT USE IN PRODUCTION**
+        
+        RELEASE_NOTES="**⚠️ UNSIGNED TEST BUILD - DO NOT USE IN PRODUCTION**
 
 This is an unsigned PKG for testing installation workflow.
 - No code signing
@@ -147,13 +145,18 @@ This is an unsigned PKG for testing installation workflow.
 - For development/testing only
 
 **Installation:**
-\`\`\`bash
+\`\`\`
 brew install --cask --no-quarantine ${{ parameters.CaskName }}
 \`\`\`
 
 **Version:** ${VERSION}
 **Build:** $(BuildId)
-**Created:** $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+**Created:** $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        
+        gh release create "$TAG_NAME" \
+          --repo "${{ parameters.GitHubRepo }}" \
+          --title "$RELEASE_NAME" \
+          --notes "$RELEASE_NOTES" \
           "$RENAMED_PKG"
         
         echo ""
