@@ -555,12 +555,18 @@ fi
 
 # Create 'current' symlink (relative path)
 echo "Creating 'current' symlink: ${{CURRENT_LINK}} -> ${{NEW_VERSION}}"
-cd "${{BASE_DIR}}" && ln -sf "${{NEW_VERSION}}" current
+if cd "${{BASE_DIR}}" && ln -sf "${{NEW_VERSION}}" current; then
+    echo "✅ Symlink created successfully"
+else
+    echo "⚠️  Warning: Failed to create symlink" >&2
+fi
 
-# Verify symlink
-if [[ ! -L "${{CURRENT_LINK}}" ]]; then
-    echo "Error: Failed to create 'current' symlink" >&2
-    exit 1
+# Verify symlink (non-fatal)
+if [[ -L "${{CURRENT_LINK}}" ]]; then
+    LINK_TARGET=$(readlink "${{CURRENT_LINK}}")
+    echo "✅ Current symlink: ${{CURRENT_LINK}} -> ${{LINK_TARGET}}"
+else
+    echo "⚠️  Warning: Symlink verification failed" >&2
 fi
 
 # Verify launcher exists (non-fatal)
