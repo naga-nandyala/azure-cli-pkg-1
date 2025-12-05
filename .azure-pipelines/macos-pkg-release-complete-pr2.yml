@@ -551,23 +551,41 @@ stages:
           exit 1
         fi
         
-        # Set executable permissions
+        # Set executable permissions (CRITICAL - artifacts don't preserve Unix permissions!)
         echo ""
         echo "Setting executable permissions on binaries..."
         
         cd "$MERGED_PAYLOAD"
         
-        chmod +x bin/az 2>/dev/null || true
-        chmod +x microsoft/azure-cli/*/bin/az 2>/dev/null || true
+        # Main launcher
+        echo "Setting +x on bin/az..."
+        chmod +x bin/az
         
-        find microsoft/azure-cli/*/bin -type f -name "python*" ! -name "*.pyc" ! -name "*.py" -exec chmod +x {} \; 2>/dev/null || true
+        # Python executables in version directories
+        echo "Setting +x on Python executables..."
+        find microsoft/azure-cli/*/bin -type f -name "python*" ! -name "*.pyc" ! -name "*.py" | while read pyexe; do
+          chmod +x "$pyexe"
+          echo "  ✅ $pyexe"
+        done
         
-        find . -type f \( -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \; 2>/dev/null || true
+        # All other executables in bin directories
+        echo "Setting +x on all executables in bin directories..."
+        find microsoft/azure-cli/*/bin -type f ! -name "*.py" ! -name "*.pyc" | while read binfile; do
+          chmod +x "$binfile"
+        done
         
+        # Shared libraries
+        echo "Setting +x on shared libraries..."
+        find . -type f \( -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \;
+        
+        echo ""
+        echo "✅ Permissions set"
         echo ""
         echo "Verifying permissions on critical files:"
         ls -l bin/az
-        ls -l microsoft/azure-cli/*/bin/python* 2>/dev/null | head -3 || true
+        echo ""
+        echo "Python executables:"
+        find microsoft/azure-cli/*/bin -type f -name "python*" ! -name "*.pyc" ! -name "*.py" -exec ls -l {} \; | head -5
         
       displayName: 'Merge signed binaries and set permissions'
     
