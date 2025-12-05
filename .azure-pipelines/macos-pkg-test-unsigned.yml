@@ -213,25 +213,23 @@ stages:
   - job: UpdateCask
     displayName: 'Update Cask formula'
     steps:
-    - checkout: none
+    - checkout: homebrewtap
+      persistCredentials: true
+      clean: true
     
     - bash: |
         set -e
-        echo "=== Cloning Homebrew tap repository ==="
-        
-        git clone https://$(GitHubPAT)@github.com/naga-nandyala/homebrew-mycli-app.git tap-repo
-        cd tap-repo
-        
-        git config user.name "Azure DevOps"
+        echo "=== Configuring Git ==="
+        git config user.name "Azure Pipeline"
         git config user.email "azuredevops@microsoft.com"
         
-      env:
-        GITHUB_TOKEN: $(GitHubPAT)
-      displayName: 'Clone tap repository'
+        echo "Current branch: $(git branch --show-current)"
+        echo "Latest commit: $(git log -1 --oneline)"
+        
+      displayName: 'Configure git'
     
     - bash: |
         set -e
-        cd tap-repo
         
         echo "=== Generating Homebrew Cask ==="
         
@@ -289,7 +287,6 @@ stages:
     
     - bash: |
         set -e
-        cd tap-repo
         
         echo "=== Committing Cask to Repository ==="
         
@@ -297,20 +294,30 @@ stages:
         VERSION="${{ parameters.AzureCliVersion }}"
         CASK_FILE="Casks/${CASK_NAME}.rb"
         
-        # Configure git
-        git config user.name "Azure DevOps"
-        git config user.email "azuredevops@microsoft.com"
+        # Ensure Casks directory exists
+        mkdir -p Casks
+        
+        echo ""
+        echo "=== Cask Content ==="
+        cat "$CASK_FILE"
+        
+        echo ""
+        echo "=== Git Status ==="
+        git status
         
         # Add and commit
         git add "$CASK_FILE"
         
-        if git diff --cached --quiet; then
-          echo "No changes to commit"
+        if git diff --staged --quiet; then
+          echo "ℹ️  No changes to commit (cask already up to date)"
         else
-          COMMIT_MSG="Update ${CASK_NAME} to ${VERSION} (unsigned test) - Build $(BuildId)"
-          git commit -m "$COMMIT_MSG"
+          git commit -m "Update ${CASK_NAME} to ${VERSION} (unsigned test) - Build $(Build.BuildId)"
           
+          echo ""
+          echo "=== Pushing to GitHub ==="
           git push origin HEAD:main
+          
+          echo ""
           echo "✅ Cask committed and pushed"
         fi
         
