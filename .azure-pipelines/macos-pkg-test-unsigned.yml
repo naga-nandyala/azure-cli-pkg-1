@@ -221,73 +221,30 @@ stages:
         CASK_FILE="Casks/${CASK_NAME}.rb"
         mkdir -p Casks
         
-        cat > "$CASK_FILE" <<CASKEOF
-cask "{{ CASK_NAME }}" do
-  version "{{ VERSION }}"
-  sha256 "{{ SHA256 }}"
-
-  url "{{ PKG_URL }}"
-  name "Azure CLI (Test - Unsigned)"
-  desc "WARNING: UNSIGNED TEST BUILD - Azure command-line interface with versioned installation"
-  homepage "https://github.com/{{ GITHUB_REPO }}"
-
-  # WARNING: UNSIGNED BUILD - Must use --no-quarantine
-  pkg "azure-cli-{{ VERSION }}-macos-arm64-unsigned.pkg"
-
-  # No uninstall - versioned installation allows multiple versions
-  # Users should use the cleanup script instead
-
-  caveats <<~EOS
-    WARNING: This is an UNSIGNED TEST BUILD
-    
-    This cask installs an unsigned PKG for testing purposes only.
-    It will NOT pass Gatekeeper verification.
-    
-    Azure CLI {{ VERSION }} has been installed with versioned directory structure.
-
-    Installation location:
-      /usr/local/microsoft/azure-cli/{{ VERSION }}/
-
-    Active version symlink:
-      /usr/local/microsoft/azure-cli/current -> {{ VERSION }}
-
-    Launcher script:
-      /usr/local/bin/az
-
-    Multiple versions can coexist side-by-side. When you upgrade, the previous
-    version will be preserved automatically.
-
-    To remove old versions:
-      sudo /usr/local/microsoft/azure-cli/cleanup-old-versions.sh
-
-    To manually switch versions (advanced):
-      sudo ln -sf <version> /usr/local/microsoft/azure-cli/current
-      Example: sudo ln -sf 2.80.0 /usr/local/microsoft/azure-cli/current
-
-    To verify installation:
-      az --version
-      ls -la /usr/local/microsoft/azure-cli/
-
-    For complete removal including all versions:
-      brew uninstall --zap --cask {{ CASK_NAME }}
-  EOS
-
-  # Zap removes everything including all versions
-  zap trash: [
-    "/usr/local/bin/az",
-    "/usr/local/microsoft/azure-cli",
-  ]
-end
-CASKEOF
-        
-        # Replace placeholders
-        sed -i.bak "s|{{ CASK_NAME }}|$CASK_NAME|g" "$CASK_FILE"
-        sed -i.bak "s|{{ VERSION }}|$VERSION|g" "$CASK_FILE"
-        sed -i.bak "s|{{ SHA256 }}|$SHA256|g" "$CASK_FILE"
-        sed -i.bak "s|{{ PKG_URL }}|$PKG_URL|g" "$CASK_FILE"
-        sed -i.bak "s|{{ GITHUB_REPO }}|${{ parameters.GitHubRepo }}|g" "$CASK_FILE"
-        sed -i.bak "s|{{ BUNDLE_ID }}|${{ parameters.BundleId }}|g" "$CASK_FILE"
-        rm "$CASK_FILE.bak"
+        # Create cask using printf to avoid YAML parsing issues
+        printf 'cask "%s" do\n' "$CASK_NAME" > "$CASK_FILE"
+        printf '  version "%s"\n' "$VERSION" >> "$CASK_FILE"
+        printf '  sha256 "%s"\n' "$SHA256" >> "$CASK_FILE"
+        printf '\n' >> "$CASK_FILE"
+        printf '  url "%s"\n' "$PKG_URL" >> "$CASK_FILE"
+        printf '  name "Azure CLI (Test - Unsigned)"\n' >> "$CASK_FILE"
+        printf '  desc "UNSIGNED TEST - Azure CLI with versioned installation"\n' >> "$CASK_FILE"
+        printf '  homepage "https://github.com/%s"\n' "${{ parameters.GitHubRepo }}" >> "$CASK_FILE"
+        printf '\n' >> "$CASK_FILE"
+        printf '  pkg "azure-cli-%s-macos-arm64-unsigned.pkg"\n' "$VERSION" >> "$CASK_FILE"
+        printf '\n' >> "$CASK_FILE"
+        printf '  caveats <<~EOS\n' >> "$CASK_FILE"
+        printf '    Azure CLI %s (UNSIGNED TEST BUILD)\n' "$VERSION" >> "$CASK_FILE"
+        printf '    Installation: /usr/local/microsoft/azure-cli/%s/\n' "$VERSION" >> "$CASK_FILE"
+        printf '    Symlink: /usr/local/microsoft/azure-cli/current -> %s\n' "$VERSION" >> "$CASK_FILE"
+        printf '    Launcher: /usr/local/bin/az\n' >> "$CASK_FILE"
+        printf '  EOS\n' >> "$CASK_FILE"
+        printf '\n' >> "$CASK_FILE"
+        printf '  zap trash: [\n' >> "$CASK_FILE"
+        printf '    "/usr/local/bin/az",\n' >> "$CASK_FILE"
+        printf '    "/usr/local/microsoft/azure-cli",\n' >> "$CASK_FILE"
+        printf '  ]\n' >> "$CASK_FILE"
+        printf 'end\n' >> "$CASK_FILE"
         
         echo ""
         echo "✅ Cask generated:"
@@ -313,13 +270,10 @@ CASKEOF
         git add "$CASK_FILE"
         
         if git diff --cached --quiet; then
-          echo "ℹ️  No changes to commit"
+          echo "No changes to commit"
         else
-          git commit -m "Update ${CASK_NAME} to ${VERSION} (unsigned test build)
-
-Build ID: $(BuildId)
-Pipeline: $(Build.DefinitionName)
-Commit: $(Build.SourceVersion)"
+          COMMIT_MSG="Update ${CASK_NAME} to ${VERSION} (unsigned test) - Build $(BuildId)"
+          git commit -m "$COMMIT_MSG"
           
           git push origin HEAD:main
           echo "✅ Cask committed and pushed"
