@@ -138,21 +138,21 @@ stages:
         echo "Creating GitHub release..."
         
         cat > release_notes.md <<EOF
-**⚠️ UNSIGNED TEST BUILD - DO NOT USE IN PRODUCTION**
+WARNING: UNSIGNED TEST BUILD - DO NOT USE IN PRODUCTION
 
 This is an unsigned PKG for testing installation workflow.
 - No code signing
 - No Apple notarization
 - For development/testing only
 
-**Installation:**
+Installation:
 \`\`\`bash
 brew install --cask --no-quarantine ${{ parameters.CaskName }}
 \`\`\`
 
-**Version:** ${VERSION}
-**Build:** $(BuildId)
-**Created:** \$(date -u +%Y-%m-%dT%H:%M:%SZ)
+Version: ${VERSION}
+Build: $(BuildId)
+Created: \$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
         
         gh release create "$TAG_NAME" \
@@ -229,17 +229,17 @@ cask "{{ CASK_NAME }}" do
 
   url "{{ PKG_URL }}"
   name "Azure CLI (Test - Unsigned)"
-  desc "⚠️ UNSIGNED TEST BUILD - Azure command-line interface with versioned installation"
+  desc "WARNING: UNSIGNED TEST BUILD - Azure command-line interface with versioned installation"
   homepage "https://github.com/{{ GITHUB_REPO }}"
 
-  # ⚠️ UNSIGNED BUILD - Must use --no-quarantine
+  # WARNING: UNSIGNED BUILD - Must use --no-quarantine
   pkg "azure-cli-{{ VERSION }}-macos-arm64-unsigned.pkg"
 
   # No uninstall - versioned installation allows multiple versions
   # Users should use the cleanup script instead
 
   caveats <<~EOS
-    ⚠️  WARNING: This is an UNSIGNED TEST BUILD
+    WARNING: This is an UNSIGNED TEST BUILD
     
     This cask installs an unsigned PKG for testing purposes only.
     It will NOT pass Gatekeeper verification.
