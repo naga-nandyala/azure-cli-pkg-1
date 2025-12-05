@@ -86,7 +86,7 @@ stages:
         REPO="${{ parameters.GitHubRepo }}"
         TAG="${{ parameters.ReleaseTag }}"
         VERSION="${{ parameters.AzureCliVersion }}"
-        PKG_NAME="azure-cli-${VERSION}-macos-arm64.pkg"
+        PKG_NAME="azure-cli-${VERSION}-macos-arm64-notarized.pkg"
         
         # GitHub release asset URL
         RELEASE_URL="https://github.com/${REPO}/releases/download/${TAG}/${PKG_NAME}"
@@ -97,9 +97,28 @@ stages:
         # Create download directory
         mkdir -p "$(Pipeline.Workspace)/notarized-pkg"
         
-        # Download the PKG
+        # Download the PKG with detailed output
         echo "Downloading..."
-        curl -L -o "$(Pipeline.Workspace)/notarized-pkg/${PKG_NAME}" "$RELEASE_URL"
+        OUTPUT_FILE="$(Pipeline.Workspace)/notarized-pkg/${PKG_NAME}"
+        
+        HTTP_CODE=$(curl -L -w "%{http_code}" -o "$OUTPUT_FILE" "$RELEASE_URL")
+        
+        echo ""
+        echo "HTTP Response Code: $HTTP_CODE"
+        
+        if [ "$HTTP_CODE" != "200" ]; then
+          echo "❌ ERROR: Download failed with HTTP $HTTP_CODE"
+          echo ""
+          echo "Possible issues:"
+          echo "  - Release tag '$TAG' doesn't exist"
+          echo "  - PKG file '$PKG_NAME' not found in release"
+          echo "  - Repository '$REPO' is private or doesn't exist"
+          echo ""
+          echo "Please verify:"
+          echo "  1. Release exists at: https://github.com/${REPO}/releases/tag/${TAG}"
+          echo "  2. PKG is uploaded to the release"
+          exit 1
+        fi
         
         echo ""
         echo "=== Download Complete ==="
@@ -108,14 +127,31 @@ stages:
         PKG_FILE=$(find "$(Pipeline.Workspace)/notarized-pkg" -name "*.pkg" -type f | head -1)
         
         if [ -z "$PKG_FILE" ]; then
-          echo "❌ ERROR: PKG download failed"
+          echo "❌ ERROR: PKG file not found after download"
+          exit 1
+        fi
+        
+        # Verify file is not empty
+        FILE_SIZE=$(stat -f%z "$PKG_FILE" 2>/dev/null || stat -c%s "$PKG_FILE" 2>/dev/null)
+        if [ "$FILE_SIZE" -lt 1000 ]; then
+          echo "❌ ERROR: Downloaded file is too small ($FILE_SIZE bytes)"
+          echo "File contents:"
+          cat "$PKG_FILE"
           exit 1
         fi
         
         echo ""
         echo "✅ PKG downloaded successfully"
         echo "File: $PKG_FILE"
-        echo "Size: $(du -h "$PKG_FILE" | cut -f1)"
+        echo "Size: $(du -h "$PKG_FILE" | cut -f1) ($FILE_SIZE bytes)"
+        
+        # Verify it's actually a PKG file
+        FILE_TYPE=$(file "$PKG_FILE")
+        echo "File type: $FILE_TYPE"
+        
+        if ! echo "$FILE_TYPE" | grep -q "xar archive"; then
+          echo "⚠️  WARNING: File may not be a valid PKG (expected 'xar archive')"
+        fi
         
       displayName: 'Download notarized PKG from GitHub'
     
@@ -293,11 +329,131 @@ stages:
       displayName: 'Install and verify PKG'
 
 # ============================================================================
-# STAGE 4: TEST HOMEBREW CASK INSTALLATION
+# STAGE 4: UPDATE HOMEBREW CASK
+# ============================================================================
+- stage: UpdateHomebrew
+  displayName: '🍺 Update Homebrew Cask'
+  dependsOn: VerifyNotarization
+  jobs:
+  - job: UpdateCask
+    displayName: 'Update Cask formula'
+    steps:
+    - checkout: homebrewtap
+      persistCredentials: true
+      clean: true
+    
+    - bash: |
+        set -e
+        echo "=== Configuring Git ==="
+        git config user.name "Azure Pipeline"
+        git config user.email "azuredevops@microsoft.com"
+        
+        echo "Current branch: $(git branch --show-current)"
+        echo "Latest commit: $(git log -1 --oneline)"
+        
+      displayName: 'Configure git'
+    
+    - bash: |
+        set -e
+        
+        echo "=== Generating Homebrew Cask ==="
+        
+        VERSION="${{ parameters.AzureCliVersion }}"
+        TAG_NAME="${{ parameters.ReleaseTag }}"
+        CASK_NAME="${{ parameters.CaskName }}"
+        PKG_URL="https://github.com/${{ parameters.GitHubRepo }}/releases/download/${TAG_NAME}/azure-cli-${VERSION}-macos-arm64-notarized.pkg"
+        
+        echo "Cask name: $CASK_NAME"
+        echo "PKG URL: $PKG_URL"
+        
+        # Download PKG to calculate SHA256
+        echo ""
+        echo "Downloading PKG to calculate SHA256..."
+        curl -L -o temp.pkg "$PKG_URL"
+        SHA256=$(shasum -a 256 temp.pkg | cut -d' ' -f1)
+        rm temp.pkg
+        
+        echo "SHA256: $SHA256"
+        
+        # Generate Cask file (matching azure-cli-pr2.rb structure)
+        CASK_FILE="Casks/${CASK_NAME}.rb"
+        mkdir -p Casks
+        
+        # Create cask using printf to avoid YAML parsing issues
+        printf 'cask "%s" do\n' "$CASK_NAME" > "$CASK_FILE"
+        printf '  version "%s"\n' "$VERSION" >> "$CASK_FILE"
+        printf '  sha256 "%s"\n' "$SHA256" >> "$CASK_FILE"
+        printf '\n' >> "$CASK_FILE"
+        printf '  url "%s"\n' "$PKG_URL" >> "$CASK_FILE"
+        printf '  name "Azure CLI"\n' >> "$CASK_FILE"
+        printf '  desc "Azure CLI with versioned installation (notarized)\n' >> "$CASK_FILE"
+        printf '  homepage "https://github.com/%s"\n' "${{ parameters.GitHubRepo }}" >> "$CASK_FILE"
+        printf '\n' >> "$CASK_FILE"
+        printf '  pkg "azure-cli-%s-macos-arm64-notarized.pkg"\n' "$VERSION" >> "$CASK_FILE"
+        printf '\n' >> "$CASK_FILE"
+        printf '  caveats <<~EOS\n' >> "$CASK_FILE"
+        printf '    Azure CLI %s\n' "$VERSION" >> "$CASK_FILE"
+        printf '    Installation: /usr/local/microsoft/azure-cli/%s/\n' "$VERSION" >> "$CASK_FILE"
+        printf '    Symlink: /usr/local/microsoft/azure-cli/current -> %s\n' "$VERSION" >> "$CASK_FILE"
+        printf '    Launcher: /usr/local/bin/az\n' >> "$CASK_FILE"
+        printf '  EOS\n' >> "$CASK_FILE"
+        printf '\n' >> "$CASK_FILE"
+        printf '  zap trash: [\n' >> "$CASK_FILE"
+        printf '    "/usr/local/bin/az",\n' >> "$CASK_FILE"
+        printf '    "/usr/local/microsoft/azure-cli",\n' >> "$CASK_FILE"
+        printf '  ]\n' >> "$CASK_FILE"
+        printf 'end\n' >> "$CASK_FILE"
+        
+        echo ""
+        echo "✅ Cask generated:"
+        cat "$CASK_FILE"
+        
+      displayName: 'Generate Cask file'
+    
+    - bash: |
+        set -e
+        
+        echo "=== Committing Cask to Repository ==="
+        
+        CASK_NAME="${{ parameters.CaskName }}"
+        VERSION="${{ parameters.AzureCliVersion }}"
+        CASK_FILE="Casks/${CASK_NAME}.rb"
+        
+        # Ensure Casks directory exists
+        mkdir -p Casks
+        
+        echo ""
+        echo "=== Cask Content ==="
+        cat "$CASK_FILE"
+        
+        echo ""
+        echo "=== Git Status ==="
+        git status
+        
+        # Add and commit
+        git add "$CASK_FILE"
+        
+        if git diff --staged --quiet; then
+          echo "ℹ️  No changes to commit (cask already up to date)"
+        else
+          git commit -m "Update ${CASK_NAME} to ${VERSION} (notarized) - Build $(Build.BuildId)"
+          
+          echo ""
+          echo "=== Pushing to GitHub ==="
+          git push origin HEAD:main
+          
+          echo ""
+          echo "✅ Cask committed and pushed"
+        fi
+        
+      displayName: 'Commit Cask to repository'
+
+# ============================================================================
+# STAGE 5: TEST HOMEBREW CASK INSTALLATION
 # ============================================================================
 - stage: TestHomebrewInstall
   displayName: '🍺 Test Homebrew Cask Installation'
-  dependsOn: DownloadPkg
+  dependsOn: UpdateHomebrew
   jobs:
   - job: HomebrewInstall
     displayName: 'Install via Homebrew Cask'
@@ -398,7 +554,7 @@ stages:
       displayName: 'Test fresh installation'
 
 # ============================================================================
-# STAGE 5: COMPREHENSIVE GATEKEEPER TESTS
+# STAGE 6: COMPREHENSIVE GATEKEEPER TESTS
 # ============================================================================
 - stage: GatekeeperTests
   displayName: '🛡️ Comprehensive Gatekeeper Tests'
@@ -556,7 +712,7 @@ stages:
       displayName: 'Run comprehensive Gatekeeper tests'
 
 # ============================================================================
-# STAGE 6: SUMMARY
+# STAGE 7: SUMMARY
 # ============================================================================
 - stage: Summary
   displayName: '📊 Test Summary'
@@ -564,6 +720,7 @@ stages:
   - DownloadPkg
   - VerifyNotarization
   - TestDirectInstall
+  - UpdateHomebrew
   - TestHomebrewInstall
   - GatekeeperTests
   condition: always()
@@ -578,7 +735,7 @@ stages:
         echo "NOTARIZED PACKAGE TEST SUMMARY"
         echo "================================================"
         echo ""
-        echo "Package:      azure-cli-${{ parameters.AzureCliVersion }}-macos-arm64.pkg"
+        echo "Package:      azure-cli-${{ parameters.AzureCliVersion }}-macos-arm64-notarized.pkg"
         echo "Release:      ${{ parameters.ReleaseTag }}"
         echo "Repository:   ${{ parameters.GitHubRepo }}"
         echo "Cask:         ${{ parameters.CaskName }}"
@@ -587,8 +744,9 @@ stages:
         echo "  1. Download PKG:          Completed"
         echo "  2. Verify Notarization:   Completed"
         echo "  3. Direct Install Test:   Completed"
-        echo "  4. Homebrew Install Test: Completed"
-        echo "  5. Gatekeeper Tests:      Completed"
+        echo "  4. Update Homebrew Cask:  Completed"
+        echo "  5. Homebrew Install Test: Completed"
+        echo "  6. Gatekeeper Tests:      Completed"
         echo ""
         echo "================================================"
         echo "✅ ALL TESTS PASSED!"
