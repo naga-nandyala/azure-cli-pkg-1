@@ -26,16 +26,25 @@ parameters:
   - name: HomebrewTapRepo
     displayName: 'Homebrew Tap Repository (owner/repo)'
     type: string
-    default: 'naga-nandyala/azure-cli-pkg-1'
+    default: 'naga-nandyala/homebrew-mycli-app'
   
   - name: CaskName
     displayName: 'Homebrew Cask Name'
     type: string
     default: 'azure-cli-pr2-test'
 
+resources:
+  repositories:
+  - repository: homebrewtap
+    type: github
+    endpoint: github.com_naga-nandyala
+    name: naga-nandyala/homebrew-mycli-app
+
 variables:
   - name: BuildId
     value: ${{ parameters.UnsignedBuildId }}
+  - name: GITHUB_TOKEN
+    value: $(GitHubPAT)
 
 pool:
   vmImage: 'macOS-latest'
@@ -57,19 +66,19 @@ stages:
       displayName: 'Download unsigned PKG'
       inputs:
         buildType: 'specific'
-        project: '$(System.TeamProjectId)'
+        project: 'public'
         definition: 'naga_macos_build_pr2'
         buildVersionToDownload: 'specific'
         buildId: '$(BuildId)'
-        artifactName: 'macos-pkg'
-        targetPath: '$(Pipeline.Workspace)'
+        artifactName: 'pkg-installer-macos-arm64'
+        targetPath: '$(Pipeline.Workspace)/unsigned-pkg'
     
     - bash: |
         set -e
         echo "=== Downloaded PKG ==="
-        ls -lh "$(Pipeline.Workspace)"/*.pkg
+        ls -lh "$(Pipeline.Workspace)/unsigned-pkg"/*.pkg
         
-        PKG_FILE=$(find "$(Pipeline.Workspace)" -name "*.pkg" -type f | head -1)
+        PKG_FILE=$(find "$(Pipeline.Workspace)/unsigned-pkg" -name "*.pkg" -type f | head -1)
         
         if [ -z "$PKG_FILE" ]; then
           echo "❌ ERROR: No PKG file found"
@@ -85,7 +94,7 @@ stages:
     - task: PublishPipelineArtifact@1
       displayName: 'Publish unsigned PKG for next stage'
       inputs:
-        targetPath: '$(Pipeline.Workspace)'
+        targetPath: '$(Pipeline.Workspace)/unsigned-pkg'
         artifactName: 'unsigned-pkg'
 
 # ============================================================================
