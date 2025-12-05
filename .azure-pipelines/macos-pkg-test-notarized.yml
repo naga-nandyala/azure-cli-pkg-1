@@ -8,6 +8,11 @@ parameters:
     type: string
     default: '3.0.0'
   
+  - name: BundleId
+    displayName: 'Bundle Identifier'
+    type: string
+    default: 'com.microsoft.azure.cli'
+  
   - name: GitHubRepo
     displayName: 'GitHub Repository (owner/repo)'
     type: string
