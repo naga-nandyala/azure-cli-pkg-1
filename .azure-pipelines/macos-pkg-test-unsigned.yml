@@ -137,7 +137,8 @@ stages:
         echo ""
         echo "Creating GitHub release..."
         
-        RELEASE_NOTES="**⚠️ UNSIGNED TEST BUILD - DO NOT USE IN PRODUCTION**
+        cat > release_notes.md << 'NOTES'
+**⚠️ UNSIGNED TEST BUILD - DO NOT USE IN PRODUCTION**
 
 This is an unsigned PKG for testing installation workflow.
 - No code signing
@@ -145,18 +146,19 @@ This is an unsigned PKG for testing installation workflow.
 - For development/testing only
 
 **Installation:**
-\`\`\`
+```
 brew install --cask --no-quarantine ${{ parameters.CaskName }}
-\`\`\`
+```
 
 **Version:** ${VERSION}
 **Build:** $(BuildId)
-**Created:** $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+**Created:** $(date -u +%Y-%m-%dT%H:%M:%SZ)
+NOTES
         
         gh release create "$TAG_NAME" \
           --repo "${{ parameters.GitHubRepo }}" \
           --title "$RELEASE_NAME" \
-          --notes "$RELEASE_NOTES" \
+          --notes-file release_notes.md \
           "$RENAMED_PKG"
         
         echo ""
