@@ -174,11 +174,26 @@ brew install --cask --no-quarantine ${{ parameters.CaskName }}
   - job: UpdateCask
     displayName: 'Update Cask formula'
     steps:
-    - checkout: self
-      persistCredentials: true
+    - checkout: none
     
     - bash: |
         set -e
+        echo "=== Cloning Homebrew tap repository ==="
+        
+        git clone https://$(GitHubPAT)@github.com/naga-nandyala/homebrew-mycli-app.git tap-repo
+        cd tap-repo
+        
+        git config user.name "Azure DevOps"
+        git config user.email "azuredevops@microsoft.com"
+        
+      env:
+        GITHUB_TOKEN: $(GitHubPAT)
+      displayName: 'Clone tap repository'
+    
+    - bash: |
+        set -e
+        cd tap-repo
+        
         echo "=== Generating Homebrew Cask ==="
         
         VERSION="${{ parameters.AzureCliVersion }}"
@@ -199,8 +214,8 @@ brew install --cask --no-quarantine ${{ parameters.CaskName }}
         echo "SHA256: $SHA256"
         
         # Generate Cask file (matching azure-cli-pr2.rb structure)
-        CASK_FILE="homebrew-cask/Casks/${CASK_NAME}.rb"
-        mkdir -p homebrew-cask/Casks
+        CASK_FILE="Casks/${CASK_NAME}.rb"
+        mkdir -p Casks
         
         cat > "$CASK_FILE" << 'EOF'
 cask "{{ CASK_NAME }}" do
@@ -278,11 +293,13 @@ EOF
     
     - bash: |
         set -e
+        cd tap-repo
+        
         echo "=== Committing Cask to Repository ==="
         
         CASK_NAME="${{ parameters.CaskName }}"
         VERSION="${{ parameters.AzureCliVersion }}"
-        CASK_FILE="homebrew-cask/Casks/${CASK_NAME}.rb"
+        CASK_FILE="Casks/${CASK_NAME}.rb"
         
         # Configure git
         git config user.name "Azure DevOps"
