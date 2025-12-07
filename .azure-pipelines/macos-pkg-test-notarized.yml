@@ -370,6 +370,127 @@ stages:
       displayName: 'Commit Cask to repository'
 
 # ============================================================================
+# STAGE 3: DIAGNOSE PKG CONTENTS
+# ============================================================================
+- stage: DiagnosePkg
+  displayName: '🔍 Diagnose PKG Contents'
+  dependsOn: DownloadPkg
+  jobs:
+  - job: InspectPkg
+    displayName: 'Inspect PKG structure and scripts'
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: notarized-pkg
+      displayName: 'Download notarized PKG'
+    
+    - bash: |
+        set -e
+        
+        echo "================================================"
+        echo "=== PKG STRUCTURE DIAGNOSIS ==="
+        echo "================================================"
+        echo ""
+        
+        PKG_FILE=$(find "$(Pipeline.Workspace)/notarized-pkg" -name "*.pkg" -type f | head -1)
+        
+        if [ -z "$PKG_FILE" ]; then
+          echo "❌ ERROR: PKG file not found"
+          exit 1
+        fi
+        
+        echo "PKG File: $PKG_FILE"
+        echo ""
+        
+        # Extract PKG to inspect contents
+        TEMP_DIR=$(mktemp -d)
+        echo "Extracting PKG to: $TEMP_DIR"
+        
+        cd "$TEMP_DIR"
+        pkgutil --expand "$PKG_FILE" expanded
+        
+        echo ""
+        echo "=== PKG Structure ==="
+        find expanded/ -print | head -100
+        
+        echo ""
+        echo "=== Package Info ==="
+        if [ -f expanded/PackageInfo ]; then
+          cat expanded/PackageInfo
+        fi
+        
+        echo ""
+        echo "=== Distribution XML ==="
+        if [ -f expanded/Distribution ]; then
+          cat expanded/Distribution
+        fi
+        
+        echo ""
+        echo "=== Scripts Directory ==="
+        if [ -d expanded/Scripts ]; then
+          echo "Scripts found:"
+          ls -la expanded/Scripts/
+          echo ""
+          
+          for script in expanded/Scripts/*; do
+            if [ -f "$script" ]; then
+              echo "--- Content of $(basename $script) ---"
+              cat "$script"
+              echo ""
+            fi
+          done
+        else
+          echo "No Scripts directory found"
+        fi
+        
+        echo ""
+        echo "=== Component Packages ==="
+        for component in expanded/*.pkg; do
+          if [ -d "$component" ]; then
+            echo "Component: $(basename $component)"
+            
+            if [ -f "$component/PackageInfo" ]; then
+              echo "  PackageInfo:"
+              cat "$component/PackageInfo" | head -20
+            fi
+            
+            if [ -d "$component/Scripts" ]; then
+              echo "  Scripts:"
+              ls -la "$component/Scripts/"
+              
+              for script in "$component/Scripts"/*; do
+                if [ -f "$script" ]; then
+                  echo "    --- $(basename $script) ---"
+                  cat "$script" | head -100
+                  echo ""
+                fi
+              done
+            fi
+            echo ""
+          fi
+        done
+        
+        echo ""
+        echo "=== Attempting Manual Script Execution Test ==="
+        # Try to run scripts manually to see detailed errors
+        if [ -d expanded/Scripts ]; then
+          for script in expanded/Scripts/preinstall expanded/Scripts/postinstall; do
+            if [ -f "$script" ]; then
+              echo "Testing: $(basename $script)"
+              bash -x "$script" || echo "Script failed with exit code: $?"
+              echo ""
+            fi
+          done
+        fi
+        
+        # Cleanup
+        cd -
+        rm -rf "$TEMP_DIR"
+        
+      displayName: 'Diagnose PKG structure and scripts'
+
+# ============================================================================
 # STAGE 4: TEST HOMEBREW CASK INSTALLATION
 # ============================================================================
 - stage: TestHomebrewInstall
@@ -475,12 +596,13 @@ stages:
       displayName: 'Test fresh installation'
 
 # ============================================================================
-# STAGE 6: SUMMARY
+# STAGE 5: SUMMARY
 # ============================================================================
 - stage: Summary
   displayName: '📊 Test Summary'
   dependsOn:
   - DownloadPkg
+  - DiagnosePkg
   - UpdateHomebrew
   - TestHomebrewInstall
   condition: always()
@@ -502,24 +624,12 @@ stages:
         echo ""
         echo "Test Stages:"
         echo "  1. Download PKG:          Completed"
-        echo "  2. Update Homebrew Cask:  Completed"
-        echo "  3. Homebrew Install Test: Completed"
+        echo "  2. Diagnose PKG:          Completed (check for script errors)"
+        echo "  3. Update Homebrew Cask:  Completed"
+        echo "  4. Homebrew Install Test: Check results"
         echo ""
-        echo "Disabled (focus on Homebrew):"
-        echo "  - Direct PKG Install (PKG script errors)"
-        echo "  - Gatekeeper Tests (will re-enable after Homebrew works)"
+        echo "Purpose: Diagnose why notarized PKG install scripts fail"
         echo ""
         echo "================================================"
-        echo "✅ ALL TESTS PASSED!"
-        echo "================================================"
-        echo ""
-        echo "The notarized package is production-ready:"
-        echo "  ✅ Properly signed with Developer ID"
-        echo "  ✅ Notarization ticket stapled"
-        echo "  ✅ Gatekeeper approved"
-        echo "  ✅ Direct installation works"
-        echo "  ✅ Homebrew cask works"
-        echo ""
-        echo "Users can now install without security warnings."
         
       displayName: 'Print summary'
