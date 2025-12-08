@@ -257,12 +257,6 @@ stages:
       inputs:
         targetPath: '$(Pipeline.Workspace)/pkg-extracted'
         artifactName: 'pkg-metadata'
-    
-    - task: PublishPipelineArtifact@1
-      displayName: 'Publish PKG scripts'
-      inputs:
-        targetPath: '$(Pipeline.Workspace)/pkg-scripts'
-        artifactName: 'pkg-scripts'
 
 # ============================================================================
 # STAGE 2: SIGN ALL BINARIES WITH ESRP
@@ -1135,7 +1129,7 @@ stages:
         ### Direct PKG Install
         Download the PKG file below and run:
         \`\`\`bash
-        sudo installer -pkg azure-cli-$(AzureCliVersion).pkg -target /
+        sudo installer -pkg azure-cli-$(AzureCliVersion)-macos-arm64-notarized.pkg -target /
         \`\`\`
         
         ## Installation Path Structure
@@ -1230,7 +1224,7 @@ stages:
     - bash: |
         echo "=== GitHub Release Created ==="
         echo "Release: https://github.com/$(GitHubRepo)/releases/tag/$(ReleaseTag)"
-        echo "Download URL: https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/azure-cli-$(AzureCliVersion).pkg"
+        echo "Download URL: https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/azure-cli-$(AzureCliVersion)-macos-arm64-notarized.pkg"
         
       displayName: 'Display release URL'
 
@@ -1815,7 +1809,7 @@ stages:
         echo "  https://github.com/$(GitHubRepo)/releases/tag/$(ReleaseTag)"
         echo ""
         echo "PKG Download:"
-        echo "  https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/azure-cli-$(AzureCliVersion).pkg"
+        echo "  https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/azure-cli-$(AzureCliVersion)-macos-arm64-notarized.pkg"
         echo ""
         echo "Homebrew Cask:"
         echo "  Repository: https://github.com/$(HomebrewTapRepo)"
