@@ -1574,6 +1574,60 @@ stages:
         echo "Testing az command..."
         az --version
         
+        # Verify launcher script structure
+        echo ""
+        echo "=== Launcher Script Verification ==="
+        
+        if [ ! -x "/usr/local/bin/az" ]; then
+          echo "❌ Launcher is not executable"
+          exit 1
+        fi
+        echo "✅ Launcher is executable"
+        
+        # Verify launcher points to current symlink (not hardcoded version)
+        echo ""
+        echo "Checking launcher implementation..."
+        if grep -q "/usr/local/microsoft/azure-cli/current" "/usr/local/bin/az"; then
+          echo "✅ Launcher uses 'current' symlink"
+        else
+          echo "⚠️  Warning: Launcher may not use 'current' symlink"
+          echo "Launcher content:"
+          head -10 /usr/local/bin/az
+        fi
+        
+        # Verify Python interpreter exists and is executable
+        echo ""
+        echo "=== Python Interpreter Check ==="
+        PYTHON_PATH="$VERSION_DIR/bin/python3"
+        if [ ! -f "$PYTHON_PATH" ]; then
+          echo "❌ Python interpreter not found: $PYTHON_PATH"
+          exit 1
+        fi
+        echo "✅ Python interpreter exists: $PYTHON_PATH"
+        
+        if [ ! -x "$PYTHON_PATH" ]; then
+          echo "❌ Python interpreter not executable"
+          exit 1
+        fi
+        echo "✅ Python interpreter is executable"
+        
+        # Test actual CLI functionality
+        echo ""
+        echo "=== CLI Functionality Test ==="
+        if az version >/dev/null 2>&1; then
+          echo "✅ 'az version' command works"
+        else
+          echo "❌ 'az version' command failed"
+          exit 1
+        fi
+        
+        if az --help | grep -q "Azure Command-Line Interface"; then
+          echo "✅ 'az --help' command works"
+        else
+          echo "❌ 'az --help' command failed"
+          exit 1
+        fi
+        
         echo ""
         echo "✅ Fresh installation test PASSED"
         
@@ -1648,14 +1702,137 @@ stages:
         echo "All installed versions:"
         ls -la "$INSTALL_ROOT/"
         
+        # Verify az command still works with new version
+        echo ""
+        echo "=== CLI Functionality After Upgrade ==="
+        
+        INSTALLED_VERSION=$(az --version | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+        echo "CLI reports version: $INSTALLED_VERSION"
+        
+        if [ "$INSTALLED_VERSION" != "$NEW_VERSION" ]; then
+          echo "❌ CLI version mismatch (got $INSTALLED_VERSION, expected $NEW_VERSION)"
+          exit 1
+        fi
+        echo "✅ CLI version matches upgrade"
+        
+        # Test that old version is still accessible via direct symlink change
+        echo ""
+        echo "=== Testing Manual Version Switch ==="
+        
+        # Switch to old version
+        sudo ln -sf "$OLD_VERSION" "$INSTALL_ROOT/current"
+        
+        CURRENT_TARGET=$(readlink "$INSTALL_ROOT/current")
+        if [ "$CURRENT_TARGET" != "$OLD_VERSION" ]; then
+          echo "❌ Failed to switch to old version"
+          exit 1
+        fi
+        echo "✅ Switched to old version: $OLD_VERSION"
+        
+        # Switch back to new version
+        sudo ln -sf "$NEW_VERSION" "$INSTALL_ROOT/current"
+        
+        CURRENT_TARGET=$(readlink "$INSTALL_ROOT/current")
+        if [ "$CURRENT_TARGET" != "$NEW_VERSION" ]; then
+          echo "❌ Failed to switch back to new version"
+          exit 1
+        fi
+        echo "✅ Switched back to new version: $NEW_VERSION"
+        
         echo ""
         echo "✅ Upgrade test PASSED - versions preserved correctly"
         
       displayName: 'Test upgrade scenario'
   
+  - job: TestPermissions
+    displayName: 'Test permissions and structure'
+    dependsOn: TestUpgrade
+    pool:
+      vmImage: 'macos-14'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        set -e
+        echo "================================================"
+        echo "PERMISSIONS AND STRUCTURE TEST"
+        echo "================================================"
+        echo ""
+        
+        INSTALL_ROOT="/usr/local/microsoft/azure-cli"
+        VERSION_DIR="$INSTALL_ROOT/$(AzureCliVersion)"
+        
+        echo "=== File Permissions Verification ==="
+        
+        # Check launcher permissions
+        if [ -x "/usr/local/bin/az" ]; then
+          echo "✅ Launcher is executable: /usr/local/bin/az"
+          ls -l /usr/local/bin/az
+        else
+          echo "❌ Launcher not executable"
+          exit 1
+        fi
+        
+        # Check Python executable permissions
+        echo ""
+        echo "Python executables:"
+        PYTHON_EXES=$(find "$VERSION_DIR/bin" -type f -name "python*" ! -name "*.py" ! -name "*.pyc" 2>/dev/null || true)
+        
+        if [ -z "$PYTHON_EXES" ]; then
+          echo "❌ No Python executables found in $VERSION_DIR/bin"
+          exit 1
+        fi
+        
+        for pyexe in $PYTHON_EXES; do
+          if [ -x "$pyexe" ]; then
+            echo "✅ $pyexe (executable)"
+          else
+            echo "❌ $pyexe (not executable)"
+            exit 1
+          fi
+        done
+        
+        # Check shared libraries exist
+        echo ""
+        echo "Shared libraries check:"
+        DYLIB_COUNT=$(find "$VERSION_DIR" -name "*.dylib" 2>/dev/null | wc -l)
+        SO_COUNT=$(find "$VERSION_DIR" -name "*.so" 2>/dev/null | wc -l)
+        
+        echo "Found $DYLIB_COUNT .dylib files"
+        echo "Found $SO_COUNT .so files"
+        
+        if [ "$DYLIB_COUNT" -eq 0 ] && [ "$SO_COUNT" -eq 0 ]; then
+          echo "⚠️  Warning: No shared libraries found"
+        else
+          echo "✅ Shared libraries present"
+        fi
+        
+        # Check directory structure
+        echo ""
+        echo "=== Directory Structure Verification ==="
+        
+        EXPECTED_DIRS=(
+          "$VERSION_DIR/bin"
+          "$VERSION_DIR/lib"
+        )
+        
+        for dir in "${EXPECTED_DIRS[@]}"; do
+          if [ -d "$dir" ]; then
+            echo "✅ $dir exists"
+          else
+            echo "⚠️  $dir not found (may be optional)"
+          fi
+        done
+        
+        echo ""
+        echo "✅ Permissions and structure test PASSED"
+        
+      displayName: 'Test permissions and structure'
+  
   - job: TestCleanup
     displayName: 'Test cleanup utility'
-    dependsOn: TestUpgrade
+    dependsOn: TestPermissions
     pool:
       vmImage: 'macos-14'
     
