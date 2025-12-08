@@ -226,8 +226,7 @@ stages:
           desc "Microsoft Azure Command-Line Interface with versioned installation support"
           homepage "https://docs.microsoft.com/cli/azure/"
         
-          pkg "${PKG_NAME}",
-              allow_untrusted: true
+          pkg "${PKG_NAME}"
         
           postflight do
             # Display installation summary
