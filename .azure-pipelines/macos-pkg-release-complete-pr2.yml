@@ -572,7 +572,7 @@ stages:
         PKG_METADATA="$(Pipeline.Workspace)/pkg-metadata"
         
         if [ -f "$PKG_METADATA/Distribution" ]; then
-          cp "$PKG_METADATA/Distribution" "$(Pipeline.Workspace)/"
+          cp "$PKG_METADATA/Distribution" "$(Pipeline.Workspace)/Distribution"
           echo "✅ Distribution file copied"
         else
           echo "ℹ️  No Distribution file found (will use simple productbuild)"
@@ -594,16 +594,25 @@ stages:
         echo "Source directory: $MERGED_PAYLOAD"
         echo "Directory size: $(du -sh $MERGED_PAYLOAD | cut -f1)"
         
-        # NOTE: Skipping old install scripts - they expect old directory structure
-        # The versioned structure (/usr/local/microsoft/azure-cli/{version}/) 
-        # doesn't need pre/post install scripts - the payload is self-contained
-        echo "ℹ️  Creating PKG without install scripts (versioned structure is self-contained)"
+        # NOTE: Creating PKG without install scripts (versioned structure is self-contained)
+        # The payload at /usr/local/microsoft/azure-cli/{version}/ doesn't need scripts
+        # pkgbuild will automatically create Bom, PackageInfo, and other metadata
+        echo "ℹ️  Creating component PKG (no install scripts needed)"
+        
+        # Use original bundle ID and version for consistency
         pkgbuild --root "$MERGED_PAYLOAD" \
                  --identifier "$(BundleId)" \
                  --version "$(AzureCliVersion)" \
                  --install-location "/usr/local" \
                  --ownership recommended \
                  "$COMPONENT_PKG"
+        
+        # Verify component PKG structure
+        echo ""
+        echo "=== Component PKG Verification ==="
+        pkgutil --payload-files "$COMPONENT_PKG" | head -20
+        echo "..."
+        echo "Total files: $(pkgutil --payload-files $COMPONENT_PKG | wc -l)"
         
         echo "✅ Component PKG created: $(du -h $COMPONENT_PKG | cut -f1)"
         
@@ -624,8 +633,26 @@ stages:
         echo "Size: $(du -h $OUTPUT_PKG | cut -f1)"
         
         echo ""
-        echo "=== PKG Verification ==="
-        pkgutil --check-signature "$OUTPUT_PKG" || echo "Not yet signed (expected)"
+        echo "=== PKG Structure Verification ==="
+        
+        # Verify PKG can be expanded (critical for notarization)
+        echo "Testing PKG structure validity..."
+        TEMP_EXPAND="$(Pipeline.Workspace)/pkg-expand-test"
+        mkdir -p "$TEMP_EXPAND"
+        
+        if pkgutil --expand "$OUTPUT_PKG" "$TEMP_EXPAND"; then
+          echo "✅ PKG structure is valid (can be expanded)"
+          echo "Expanded structure:"
+          ls -la "$TEMP_EXPAND"
+          rm -rf "$TEMP_EXPAND"
+        else
+          echo "❌ PKG structure is INVALID - cannot expand"
+          exit 1
+        fi
+        
+        echo ""
+        echo "=== PKG Signature Check ==="
+        pkgutil --check-signature "$OUTPUT_PKG" || echo "Not yet signed (expected at this stage)"
         
       displayName: 'Build new PKG with signed binaries'
     
@@ -748,6 +775,92 @@ stages:
     - publish: $(Build.ArtifactStagingDirectory)/fully-signed-pkg
       artifact: fully-signed-macos-pkg
       displayName: 'Publish fully signed PKG'
+  
+  - job: DiagnoseSignedPkg
+    displayName: 'Diagnose signed PKG structure (macOS)'
+    dependsOn: SignPkg
+    pool:
+      vmImage: 'macos-14'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: fully-signed-macos-pkg
+      displayName: 'Download fully-signed PKG for diagnosis'
+    
+    - bash: |
+        set -e
+        echo "=== Diagnosing Fully-Signed PKG Before Notarization ==="
+        
+        PKG_FILE=$(find "$(Pipeline.Workspace)/fully-signed-macos-pkg" -name "*.pkg" -type f | head -1)
+        
+        if [ -z "$PKG_FILE" ]; then
+          echo "❌ PKG file not found"
+          exit 1
+        fi
+        
+        echo "PKG: $PKG_FILE"
+        echo "Size: $(du -h "$PKG_FILE" | cut -f1)"
+        echo ""
+        
+        # Check PKG signature
+        echo "=== PKG Signature Check ==="
+        pkgutil --check-signature "$PKG_FILE" || echo "Signature check failed or not signed"
+        
+        echo ""
+        echo "=== Expanding PKG to Inspect Structure ==="
+        EXPAND_DIR="/tmp/pkg-diagnosis"
+        rm -rf "$EXPAND_DIR"
+        pkgutil --expand "$PKG_FILE" "$EXPAND_DIR"
+        
+        echo "Top-level PKG contents:"
+        ls -la "$EXPAND_DIR/"
+        
+        # Check for Scripts directory at top level
+        if [ -d "$EXPAND_DIR/Scripts" ]; then
+          echo ""
+          echo "⚠️  PKG contains top-level Scripts directory:"
+          ls -la "$EXPAND_DIR/Scripts/"
+        else
+          echo ""
+          echo "✅ No top-level Scripts directory"
+        fi
+        
+        # Check Distribution file
+        if [ -f "$EXPAND_DIR/Distribution" ]; then
+          echo ""
+          echo "Distribution file found:"
+          cat "$EXPAND_DIR/Distribution"
+        fi
+        
+        # Check component PKGs
+        echo ""
+        echo "=== Component PKG(s) ==="
+        find "$EXPAND_DIR" -name "*.pkg" -type d | while read comp_pkg; do
+          echo ""
+          echo "Component: $(basename $comp_pkg)"
+          ls -la "$comp_pkg/"
+          
+          if [ -f "$comp_pkg/PackageInfo" ]; then
+            echo "PackageInfo:"
+            cat "$comp_pkg/PackageInfo"
+          fi
+          
+          if [ -d "$comp_pkg/Scripts" ]; then
+            echo "⚠️  Component has Scripts directory:"
+            ls -la "$comp_pkg/Scripts/"
+          else
+            echo "✅ Component has no Scripts directory"
+          fi
+        done
+        
+        rm -rf "$EXPAND_DIR"
+        echo ""
+        echo "=== Diagnosis Complete ==="
+        
+      displayName: 'Diagnose PKG structure'
+      condition: succeededOrFailed()
 
 # ============================================================================
 # STAGE 4: NOTARIZE WITH APPLE (ESRP)
