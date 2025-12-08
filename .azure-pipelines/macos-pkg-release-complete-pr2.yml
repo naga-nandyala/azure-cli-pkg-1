@@ -491,12 +491,6 @@ stages:
         artifactName: 'pkg-metadata'
         targetPath: '$(Pipeline.Workspace)/pkg-metadata'
     
-    - task: DownloadPipelineArtifact@2
-      displayName: 'Download PKG scripts'
-      inputs:
-        artifactName: 'pkg-scripts'
-        targetPath: '$(Pipeline.Workspace)/pkg-scripts'
-    
     - bash: |
         set -e
         echo "=== Merging signed binaries back into payload ==="
