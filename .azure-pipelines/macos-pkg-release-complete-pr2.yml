@@ -185,21 +185,9 @@ stages:
         echo "=== Payload extracted to: $PAYLOAD_DIR ==="
         echo "Total size: $(du -sh . | cut -f1)"
         
-        # Extract Scripts if present (contains pre/postinstall scripts)
-        if [ -f "$EXTRACT_DIR/$COMPONENT_PKG/Scripts" ]; then
-          echo ""
-          echo "=== Extracting Scripts ==="
-          SCRIPTS_DIR="$(Pipeline.Workspace)/pkg-scripts"
-          mkdir -p "$SCRIPTS_DIR"
-          
-          cd "$SCRIPTS_DIR"
-          cat "$EXTRACT_DIR/$COMPONENT_PKG/Scripts" | gunzip -dc | cpio -i
-          
-          echo "✅ Scripts extracted:"
-          ls -lh "$SCRIPTS_DIR"
-        else
-          echo "ℹ️  No Scripts found in PKG"
-        fi
+        # NOTE: Skipping script extraction - old scripts expect old directory structure
+        # The new versioned structure doesn't need install scripts
+        echo "ℹ️  Skipping install script extraction (not compatible with versioned structure)"
         
         # Find all executables and libraries that need signing
         echo ""
@@ -618,26 +606,16 @@ stages:
         echo "Source directory: $MERGED_PAYLOAD"
         echo "Directory size: $(du -sh $MERGED_PAYLOAD | cut -f1)"
         
-        SCRIPTS_DIR="$(Pipeline.Workspace)/pkg-scripts"
-        
-        if [ -d "$SCRIPTS_DIR" ] && [ -n "$(ls -A $SCRIPTS_DIR)" ]; then
-          echo "Including Scripts directory with pre/postinstall scripts"
-          pkgbuild --root "$MERGED_PAYLOAD" \
-                   --scripts "$SCRIPTS_DIR" \
-                   --identifier "$(BundleId)" \
-                   --version "$(AzureCliVersion)" \
-                   --install-location "/usr/local" \
-                   --ownership recommended \
-                   "$COMPONENT_PKG"
-        else
-          echo "ℹ️  No Scripts directory - creating PKG without scripts"
-          pkgbuild --root "$MERGED_PAYLOAD" \
-                   --identifier "$(BundleId)" \
-                   --version "$(AzureCliVersion)" \
-                   --install-location "/usr/local" \
-                   --ownership recommended \
-                   "$COMPONENT_PKG"
-        fi
+        # NOTE: Skipping old install scripts - they expect old directory structure
+        # The versioned structure (/usr/local/microsoft/azure-cli/{version}/) 
+        # doesn't need pre/post install scripts - the payload is self-contained
+        echo "ℹ️  Creating PKG without install scripts (versioned structure is self-contained)"
+        pkgbuild --root "$MERGED_PAYLOAD" \
+                 --identifier "$(BundleId)" \
+                 --version "$(AzureCliVersion)" \
+                 --install-location "/usr/local" \
+                 --ownership recommended \
+                 "$COMPONENT_PKG"
         
         echo "✅ Component PKG created: $(du -h $COMPONENT_PKG | cut -f1)"
         
