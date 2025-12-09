@@ -1850,7 +1850,9 @@ stages:
         echo "=== Testing Manual Version Switch ==="
         
         # Switch to old version (using absolute path)
-        sudo ln -sf "$INSTALL_ROOT/$OLD_VERSION" "$INSTALL_ROOT/current"
+        echo "Switching symlink to: $INSTALL_ROOT/$OLD_VERSION"
+        sudo rm -f "$INSTALL_ROOT/current"
+        sudo ln -s "$INSTALL_ROOT/$OLD_VERSION" "$INSTALL_ROOT/current"
         
         CURRENT_TARGET=$(readlink "$INSTALL_ROOT/current")
         CURRENT_VERSION=$(basename "$CURRENT_TARGET")
@@ -1865,7 +1867,9 @@ stages:
         echo "✅ Switched to old version: $OLD_VERSION"
         
         # Switch back to new version (using absolute path)
-        sudo ln -sf "$INSTALL_ROOT/$NEW_VERSION" "$INSTALL_ROOT/current"
+        echo "Switching symlink back to: $INSTALL_ROOT/$NEW_VERSION"
+        sudo rm -f "$INSTALL_ROOT/current"
+        sudo ln -s "$INSTALL_ROOT/$NEW_VERSION" "$INSTALL_ROOT/current"
         
         CURRENT_TARGET=$(readlink "$INSTALL_ROOT/current")
         CURRENT_VERSION=$(basename "$CURRENT_TARGET")
