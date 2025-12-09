@@ -772,6 +772,12 @@ stages:
         echo "================================================"
         echo ""
         
+        # Install cask first (each job runs on fresh VM)
+        echo "Installing cask for testing..."
+        brew tap ${{ parameters.HomebrewTapRepo }} 2>/dev/null || true
+        brew install --cask ${{ parameters.CaskName }}
+        
+        echo ""
         INSTALL_ROOT="/usr/local/microsoft/azure-cli"
         VERSION_DIR="$INSTALL_ROOT/${{ parameters.AzureCliVersion }}"
         
@@ -855,6 +861,12 @@ stages:
         echo "================================================"
         echo ""
         
+        # Install cask first (each job runs on fresh VM)
+        echo "Installing cask for testing..."
+        brew tap ${{ parameters.HomebrewTapRepo }} 2>/dev/null || true
+        brew install --cask ${{ parameters.CaskName }}
+        
+        echo ""
         INSTALL_ROOT="/usr/local/microsoft/azure-cli"
         CLEANUP_SCRIPT="$INSTALL_ROOT/cleanup-old-versions.sh"
         
@@ -898,6 +910,12 @@ stages:
         echo "================================================"
         echo ""
         
+        # Install cask first (each job runs on fresh VM)
+        echo "Installing cask for testing..."
+        brew tap ${{ parameters.HomebrewTapRepo }} 2>/dev/null || true
+        brew install --cask ${{ parameters.CaskName }}
+        
+        echo ""
         INSTALL_ROOT="/usr/local/microsoft/azure-cli"
         
         # Show what's installed before uninstall
