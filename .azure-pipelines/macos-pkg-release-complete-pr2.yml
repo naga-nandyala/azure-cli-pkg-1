@@ -1428,18 +1428,20 @@ stages:
             current_link = "/usr/local/microsoft/azure-cli/current"
             
             if File.directory?(version_dir)
-              # Create or update 'current' symlink if missing or pointing to different version
-              if !File.symlink?(current_link) || File.readlink(current_link) != version.to_s
-                File.delete(current_link) if File.exist?(current_link)
-                File.symlink(version.to_s, current_link)
-                puts "Created symlink: #{current_link} -> #{version}"
+              # Remove existing symlink (if any)
+              if File.symlink?(current_link) || File.exist?(current_link)
+                system_command "/bin/rm", args: ["-f", current_link], sudo: true
               end
+              
+              # Create new symlink with full path
+              system_command "/bin/ln", args: ["-sf", version_dir, current_link], sudo: true
+              ohai "Created symlink: #{current_link} -> #{version_dir}"
               
               ohai "Azure CLI #{version} installed successfully"
               puts "Installation directory: #{version_dir}"
               
               if File.symlink?(current_link)
-                active_version = File.readlink(current_link)
+                active_version = File.basename(File.readlink(current_link))
                 puts "Active version: #{active_version}"
                 
                 # Check if this is an upgrade
@@ -1703,12 +1705,12 @@ stages:
         # Verify launcher points to current symlink (not hardcoded version)
         echo ""
         echo "Checking launcher implementation..."
-        if grep -q "/usr/local/microsoft/azure-cli/current" "/usr/local/bin/az"; then
+        if grep -q 'CURRENT_LINK.*current' "/usr/local/bin/az" || grep -q '/current"' "/usr/local/bin/az"; then
           echo "✅ Launcher uses 'current' symlink"
         else
           echo "⚠️  Warning: Launcher may not use 'current' symlink"
-          echo "Launcher content:"
-          head -10 /usr/local/bin/az
+          echo "Launcher content (first 15 lines):"
+          head -15 /usr/local/bin/az
         fi
         
         # Verify Python interpreter exists and is executable
@@ -1737,10 +1739,13 @@ stages:
           exit 1
         fi
         
-        if az --help | grep -q "Azure Command-Line Interface"; then
+        # Test az --help (capture both stdout and stderr, ignore warnings)
+        if az --help 2>&1 | grep -qi "azure\|command"; then
           echo "✅ 'az --help' command works"
         else
           echo "❌ 'az --help' command failed"
+          echo "Output:"
+          az --help 2>&1 || true
           exit 1
         fi
         

@@ -229,27 +229,38 @@ stages:
           pkg "${PKG_NAME}"
         
           postflight do
-            # Display installation summary
+            # Ensure 'current' symlink exists and points to this version
             version_dir = "/usr/local/microsoft/azure-cli/#{version}"
             current_link = "/usr/local/microsoft/azure-cli/current"
             
-            if File.directory?(version_dir)
-              ohai "Azure CLI #{version} installed successfully"
-              puts "Installation directory: #{version_dir}"
-              
-              if File.symlink?(current_link)
-                active_version = File.readlink(current_link)
-                puts "Active version: #{active_version}"
-                
-                # Check if this is an upgrade
-                if active_version != version.to_s
-                  opoo "Previous version (#{active_version}) is still installed"
-                  puts "To remove old versions, run:"
-                  puts "  sudo /usr/local/microsoft/azure-cli/cleanup-old-versions.sh"
-                end
-              end
-            else
+            # Ensure installation directory exists
+            unless File.directory?(version_dir)
               opoo "Installation directory not found: #{version_dir}"
+              next
+            end
+            
+            # Remove existing symlink or file (if any)
+            if File.symlink?(current_link) || File.exist?(current_link)
+              system_command "/bin/rm", args: ["-f", current_link], sudo: true
+            end
+            
+            # Create new symlink pointing to this version (full path)
+            system_command "/bin/ln", args: ["-sf", version_dir, current_link], sudo: true
+            ohai "Created symlink: #{current_link} -> #{version_dir}"
+            
+            # Inform user
+            ohai "Azure CLI #{version} installed successfully"
+            puts "Installation directory: #{version_dir}"
+            puts "Active version symlink: #{current_link} -> #{version_dir}"
+            
+            # Check for older versions
+            versions_dir = "/usr/local/microsoft/azure-cli"
+            version_dirs = Dir.glob("#{versions_dir}/[0-9]*").select { |f| File.directory?(f) }
+            if version_dirs.length > 1
+              opoo "You have #{version_dirs.length} Azure CLI versions installed."
+              puts "Previous versions are preserved automatically."
+              puts "To remove old versions, run:"
+              puts "  sudo /usr/local/microsoft/azure-cli/cleanup-old-versions.sh"
             end
           end
         
