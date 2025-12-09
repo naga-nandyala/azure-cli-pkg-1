@@ -781,6 +781,7 @@ stages:
   - job: DiagnoseSignedPkg
     displayName: 'Diagnose signed PKG structure (macOS)'
     dependsOn: SignPkg
+    condition: succeededOrFailed()
     pool:
       vmImage: 'macos-14'
     
