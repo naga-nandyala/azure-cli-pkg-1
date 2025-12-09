@@ -1510,18 +1510,16 @@ stages:
             Multiple versions can coexist side-by-side. When you upgrade, the previous
             version will be preserved automatically.
         
-            To remove old versions:
-              sudo /usr/local/microsoft/azure-cli/cleanup-old-versions.sh
-        
-            To manually switch versions (advanced):
-              sudo ln -sf <version> /usr/local/microsoft/azure-cli/current
-              Example: sudo ln -sf 2.80.0 /usr/local/microsoft/azure-cli/current
-        
-            To verify installation:
-              az --version
-              ls -la /usr/local/microsoft/azure-cli/
-        
-            For complete removal including all versions:
+          To remove old versions:
+            sudo /usr/local/microsoft/azure-cli/cleanup-old-versions.sh
+      
+          To manually switch versions (advanced):
+            sudo ln -sf /usr/local/microsoft/azure-cli/<version> /usr/local/microsoft/azure-cli/current
+            Example: sudo ln -sf /usr/local/microsoft/azure-cli/2.80.0 /usr/local/microsoft/azure-cli/current
+      
+          To verify installation:
+            az --version
+            ls -la /usr/local/microsoft/azure-cli/            For complete removal including all versions:
               brew uninstall --zap --cask $(CaskName)
           EOS
         end

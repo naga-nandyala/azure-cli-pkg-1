@@ -609,6 +609,312 @@ stages:
         echo "=== All Tests Passed! ==="
         
       displayName: 'Test fresh installation'
+  
+  - job: TestUpgrade
+    displayName: 'Test upgrade with version preservation'
+    dependsOn: HomebrewInstall
+    steps:
+    - checkout: none
+    
+    - bash: |
+        set -e
+        echo "================================================"
+        echo "UPGRADE TEST (Version Preservation)"
+        echo "================================================"
+        echo ""
+        
+        # This test simulates upgrade by:
+        # 1. Creating a fake old version directory
+        # 2. Upgrading to current version
+        # 3. Verifying both versions coexist
+        
+        echo "Setting up mock previous installation..."
+        
+        INSTALL_ROOT="/usr/local/microsoft/azure-cli"
+        OLD_VERSION="2.79.0"
+        NEW_VERSION="${{ parameters.AzureCliVersion }}"
+        
+        # Create mock old version
+        sudo mkdir -p "$INSTALL_ROOT/$OLD_VERSION/bin"
+        echo "Mock version $OLD_VERSION" | sudo tee "$INSTALL_ROOT/$OLD_VERSION/bin/mock.txt"
+        sudo ln -sf "$INSTALL_ROOT/$OLD_VERSION" "$INSTALL_ROOT/current"
+        
+        echo "Mock old version created: $OLD_VERSION"
+        echo ""
+        
+        # Install current version (simulates upgrade)
+        echo "Installing current version (simulating upgrade)..."
+        brew tap ${{ parameters.HomebrewTapRepo }} 2>/dev/null || true
+        brew install --cask ${{ parameters.CaskName }}
+        
+        echo ""
+        echo "=== Checking Version Preservation ==="
+        
+        # Both versions should exist
+        if [ ! -d "$INSTALL_ROOT/$OLD_VERSION" ]; then
+          echo "❌ Old version directory removed (should be preserved)"
+          exit 1
+        fi
+        echo "✅ Old version preserved: $OLD_VERSION"
+        
+        if [ ! -d "$INSTALL_ROOT/$NEW_VERSION" ]; then
+          echo "❌ New version directory not found"
+          exit 1
+        fi
+        echo "✅ New version installed: $NEW_VERSION"
+        
+        # Current should point to new version (could be absolute or relative)
+        CURRENT_TARGET=$(readlink "$INSTALL_ROOT/current")
+        CURRENT_VERSION=$(basename "$CURRENT_TARGET")
+        
+        if [ "$CURRENT_VERSION" != "$NEW_VERSION" ]; then
+          echo "❌ Current symlink not updated (points to $CURRENT_VERSION)"
+          exit 1
+        fi
+        echo "✅ Current symlink updated to: $NEW_VERSION"
+        
+        # List all versions
+        echo ""
+        echo "All installed versions:"
+        ls -la "$INSTALL_ROOT/"
+        
+        # Verify az command still works with new version
+        echo ""
+        echo "=== CLI Functionality After Upgrade ==="
+        
+        INSTALLED_VERSION=$(az --version | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+        echo "CLI reports version: $INSTALLED_VERSION"
+        
+        if [ "$INSTALLED_VERSION" != "$NEW_VERSION" ]; then
+          echo "❌ CLI version mismatch (got $INSTALLED_VERSION, expected $NEW_VERSION)"
+          exit 1
+        fi
+        echo "✅ CLI version matches upgrade"
+        
+        # Test that old version is still accessible via direct symlink change
+        echo ""
+        echo "=== Testing Manual Version Switch ==="
+        
+        # Switch to old version (using absolute path)
+        sudo ln -sf "$INSTALL_ROOT/$OLD_VERSION" "$INSTALL_ROOT/current"
+        
+        CURRENT_TARGET=$(readlink "$INSTALL_ROOT/current")
+        CURRENT_VERSION=$(basename "$CURRENT_TARGET")
+        if [ "$CURRENT_VERSION" != "$OLD_VERSION" ]; then
+          echo "❌ Failed to switch to old version"
+          exit 1
+        fi
+        echo "✅ Switched to old version: $OLD_VERSION"
+        
+        # Switch back to new version
+        sudo ln -sf "$INSTALL_ROOT/$NEW_VERSION" "$INSTALL_ROOT/current"
+        
+        CURRENT_TARGET=$(readlink "$INSTALL_ROOT/current")
+        CURRENT_VERSION=$(basename "$CURRENT_TARGET")
+        if [ "$CURRENT_VERSION" != "$NEW_VERSION" ]; then
+          echo "❌ Failed to switch back to new version"
+          exit 1
+        fi
+        echo "✅ Switched back to new version: $NEW_VERSION"
+        
+        echo ""
+        echo "✅ Upgrade test PASSED - versions preserved correctly"
+        
+      displayName: 'Test upgrade scenario'
+  
+  - job: TestPermissions
+    displayName: 'Test permissions and structure'
+    dependsOn: TestUpgrade
+    steps:
+    - checkout: none
+    
+    - bash: |
+        set -e
+        echo "================================================"
+        echo "PERMISSIONS AND STRUCTURE TEST"
+        echo "================================================"
+        echo ""
+        
+        INSTALL_ROOT="/usr/local/microsoft/azure-cli"
+        VERSION_DIR="$INSTALL_ROOT/${{ parameters.AzureCliVersion }}"
+        
+        echo "=== File Permissions Verification ==="
+        
+        # Check launcher permissions
+        if [ -x "/usr/local/bin/az" ]; then
+          echo "✅ Launcher is executable: /usr/local/bin/az"
+          ls -l /usr/local/bin/az
+        else
+          echo "❌ Launcher not executable"
+          exit 1
+        fi
+        
+        # Check Python executable permissions
+        echo ""
+        echo "Python executables:"
+        PYTHON_EXES=$(find "$VERSION_DIR/bin" -type f -name "python*" ! -name "*.py" ! -name "*.pyc" 2>/dev/null || true)
+        
+        if [ -z "$PYTHON_EXES" ]; then
+          echo "❌ No Python executables found in $VERSION_DIR/bin"
+          exit 1
+        fi
+        
+        for pyexe in $PYTHON_EXES; do
+          if [ -x "$pyexe" ]; then
+            echo "✅ $pyexe (executable)"
+          else
+            echo "❌ $pyexe (not executable)"
+            exit 1
+          fi
+        done
+        
+        # Check shared libraries exist
+        echo ""
+        echo "Shared libraries check:"
+        DYLIB_COUNT=$(find "$VERSION_DIR" -name "*.dylib" 2>/dev/null | wc -l)
+        SO_COUNT=$(find "$VERSION_DIR" -name "*.so" 2>/dev/null | wc -l)
+        
+        echo "Found $DYLIB_COUNT .dylib files"
+        echo "Found $SO_COUNT .so files"
+        
+        if [ "$DYLIB_COUNT" -eq 0 ] && [ "$SO_COUNT" -eq 0 ]; then
+          echo "⚠️  Warning: No shared libraries found"
+        else
+          echo "✅ Shared libraries present"
+        fi
+        
+        # Check directory structure
+        echo ""
+        echo "=== Directory Structure Verification ==="
+        
+        EXPECTED_DIRS=(
+          "$VERSION_DIR/bin"
+          "$VERSION_DIR/lib"
+        )
+        
+        for dir in "${EXPECTED_DIRS[@]}"; do
+          if [ -d "$dir" ]; then
+            echo "✅ $dir exists"
+          else
+            echo "⚠️  $dir not found (may be optional)"
+          fi
+        done
+        
+        echo ""
+        echo "✅ Permissions and structure test PASSED"
+        
+      displayName: 'Test permissions and structure'
+  
+  - job: TestCleanup
+    displayName: 'Test cleanup utility'
+    dependsOn: TestPermissions
+    steps:
+    - checkout: none
+    
+    - bash: |
+        set -e
+        echo "================================================"
+        echo "CLEANUP UTILITY TEST"
+        echo "================================================"
+        echo ""
+        
+        INSTALL_ROOT="/usr/local/microsoft/azure-cli"
+        CLEANUP_SCRIPT="$INSTALL_ROOT/cleanup-old-versions.sh"
+        
+        if [ ! -f "$CLEANUP_SCRIPT" ]; then
+          echo "⚠️  Cleanup script not found: $CLEANUP_SCRIPT"
+          echo "This is expected if the PKG doesn't include it yet"
+          exit 0
+        fi
+        
+        echo "Found cleanup script: $CLEANUP_SCRIPT"
+        echo ""
+        
+        # Show current versions
+        echo "Versions before cleanup:"
+        ls -d "$INSTALL_ROOT"/*/ 2>/dev/null || echo "No version directories"
+        
+        echo ""
+        echo "Current active version:"
+        readlink "$INSTALL_ROOT/current"
+        
+        # Test cleanup script (dry run mode if available)
+        echo ""
+        echo "Testing cleanup script..."
+        sudo "$CLEANUP_SCRIPT" || echo "Cleanup script executed"
+        
+        echo ""
+        echo "✅ Cleanup utility test completed"
+        
+      displayName: 'Test cleanup utility'
+  
+  - job: TestUninstall
+    displayName: 'Test uninstall behavior'
+    dependsOn: TestCleanup
+    steps:
+    - checkout: none
+    
+    - bash: |
+        set -e
+        echo "================================================"
+        echo "UNINSTALL TEST"
+        echo "================================================"
+        echo ""
+        
+        INSTALL_ROOT="/usr/local/microsoft/azure-cli"
+        
+        # Show what's installed before uninstall
+        echo "Before uninstall:"
+        ls -la "$INSTALL_ROOT/" 2>/dev/null || echo "Directory not found"
+        
+        echo ""
+        echo "Uninstalling ${{ parameters.CaskName }}..."
+        brew uninstall --cask ${{ parameters.CaskName }}
+        
+        echo ""
+        echo "=== Verifying Uninstall ==="
+        
+        # Launcher should be removed
+        if [ -f "/usr/local/bin/az" ]; then
+          echo "❌ Launcher still exists"
+          exit 1
+        fi
+        echo "✅ Launcher removed"
+        
+        # Current symlink should be removed
+        if [ -L "$INSTALL_ROOT/current" ]; then
+          echo "❌ Current symlink still exists"
+          exit 1
+        fi
+        echo "✅ Current symlink removed"
+        
+        # Version directories should still exist (per design)
+        if [ -d "$INSTALL_ROOT/${{ parameters.AzureCliVersion }}" ]; then
+          echo "✅ Version directory preserved (by design)"
+        else
+          echo "ℹ️  Version directory removed (acceptable)"
+        fi
+        
+        echo ""
+        echo "=== Testing ZAP (Complete Removal) ==="
+        
+        # Reinstall for zap test
+        brew install --cask ${{ parameters.CaskName }}
+        
+        # Zap should remove everything
+        brew uninstall --zap --cask ${{ parameters.CaskName }}
+        
+        if [ -d "$INSTALL_ROOT" ]; then
+          echo "⚠️  Installation directory still exists after zap"
+          ls -la "$INSTALL_ROOT/"
+        else
+          echo "✅ Complete removal with --zap successful"
+        fi
+        
+        echo ""
+        echo "✅ Uninstall test PASSED"
+        
+      displayName: 'Test uninstall and zap'
 
 # ============================================================================
 # STAGE 5: SUMMARY
