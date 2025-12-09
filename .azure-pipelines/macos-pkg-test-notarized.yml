@@ -605,6 +605,26 @@ stages:
           exit 1
         fi
         
+        # Test actual CLI functionality
+        echo ""
+        echo "=== CLI Functionality Test ==="
+        if az version >/dev/null 2>&1; then
+          echo "✅ 'az version' command works"
+        else
+          echo "❌ 'az version' command failed"
+          exit 1
+        fi
+        
+        # Test az --help (capture both stdout and stderr, ignore warnings)
+        if az --help 2>&1 | grep -qi "azure\|command"; then
+          echo "✅ 'az --help' command works"
+        else
+          echo "❌ 'az --help' command failed"
+          echo "Output:"
+          az --help 2>&1 || true
+          exit 1
+        fi
+        
         echo ""
         echo "=== All Tests Passed! ==="
         
