@@ -638,7 +638,13 @@ stages:
         # Verify PKG can be expanded (critical for notarization)
         echo "Testing PKG structure validity..."
         TEMP_EXPAND="$(Pipeline.Workspace)/pkg-expand-test"
-        rm -rf "$TEMP_EXPAND"  # Clean up any existing test directory
+        
+        # Clean up any existing test directory
+        if [ -d "$TEMP_EXPAND" ]; then
+          echo "Removing existing test directory: $TEMP_EXPAND"
+          rm -rf "$TEMP_EXPAND"
+        fi
+        
         mkdir -p "$TEMP_EXPAND"
         
         if pkgutil --expand "$OUTPUT_PKG" "$TEMP_EXPAND"; then
