@@ -1854,8 +1854,12 @@ stages:
         
         CURRENT_TARGET=$(readlink "$INSTALL_ROOT/current")
         CURRENT_VERSION=$(basename "$CURRENT_TARGET")
+        echo "Debug: OLD_VERSION='$OLD_VERSION'"
+        echo "Debug: CURRENT_TARGET='$CURRENT_TARGET'"
+        echo "Debug: CURRENT_VERSION='$CURRENT_VERSION'"
+        
         if [ "$CURRENT_VERSION" != "$OLD_VERSION" ]; then
-          echo "❌ Failed to switch to old version"
+          echo "❌ Failed to switch to old version (expected: $OLD_VERSION, got: $CURRENT_VERSION)"
           exit 1
         fi
         echo "✅ Switched to old version: $OLD_VERSION"
