@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-"""Build a macOS .pkg installer for Azure CLI with VERSIONED installation support (PR2) - FIXED VERSION.
+"""Build a macOS .pkg installer for Azure CLI with VERSIONED installation support (PR2).
 
-This is the FIXED PR2 variant that implements Homebrew-style versioned installation
-AND bundles Python runtime for self-contained installation:
+This is the PR2 variant that implements Homebrew-style versioned installation:
 - Each version installs to: /usr/local/microsoft/azure-cli/{version}/
 - Symlink 'current' points to active version: /usr/local/microsoft/azure-cli/current
 - Launcher script reads 'current' symlink to find active version
 - Old versions preserved during upgrades (not removed)
 - Includes cleanup utility for manual old version removal
-- **FIX: Bundles Python runtime (libpython + stdlib) for self-contained installation**
 
 Key differences from original build_pkg_installer.py:
 1. VERSIONED_INSTALL mode: Installs to azure-cli/{version}/ instead of azure-cli/
@@ -47,7 +45,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Iterable, Optional
@@ -65,13 +62,6 @@ INSTALL_PREFIX = "microsoft"  # /usr/local/microsoft/
 BASE_INSTALL_DIR = f"{INSTALL_PREFIX}/{APP_NAME}"  # microsoft/azure-cli
 PKG_IDENTIFIER = "com.microsoft.azure-cli"  # Same identifier for both variants
 CLEANUP_SCRIPT_NAME = "cleanup-azure-cli-versions.sh"
-
-# Python build configuration - use python-build-standalone (relocatable Python)
-PYTHON_VERSION = "3.13.11"
-PYTHON_STANDALONE_URL = (
-    f"https://github.com/astral-sh/python-build-standalone/releases/download/20251217/"
-    f"cpython-{PYTHON_VERSION}%2B20251217-aarch64-apple-darwin-install_only.tar.gz"
-)
 
 
 class BuildError(RuntimeError):
@@ -149,85 +139,16 @@ def _ensure_clean(paths: Iterable[Path]) -> None:
             shutil.rmtree(path)
 
 
-def _create_virtualenv(venv_dir: Path, staging_dir: Path) -> Path:
-    """Create a virtual environment using python-build-standalone (relocatable Python)."""
+def _create_virtualenv(venv_dir: Path) -> Path:
+    """Create a virtual environment specifically for building the package."""
 
     _ensure_clean([venv_dir])
-
-    # Download python-build-standalone
-    python_root = staging_dir / "python"
-    python_root.mkdir(parents=True, exist_ok=True)
-
-    print(f"Downloading relocatable Python {PYTHON_VERSION}...")
-    tarball = staging_dir / "python.tar.gz"
-    urllib.request.urlretrieve(PYTHON_STANDALONE_URL, tarball)
-
-    print(f"Extracting Python to {python_root}")
-    _run(["tar", "xzf", str(tarball), "-C", str(python_root), "--strip-components=1"])
-
-    python_bin = python_root / "bin" / "python3"
-
-    print(f"Creating virtual environment at {venv_dir}")
-    _run([str(python_bin), "-m", "venv", str(venv_dir)])
-
+    print(f"Creating build virtual environment at {venv_dir}")
+    cmd = [sys.executable, "-m", "venv", "--copies", str(venv_dir)]
+    _run(cmd)
     python_path = _virtualenv_python(venv_dir)
-
-    # Manually copy Python stdlib (python-build-standalone venv doesn't copy by default)
-    python_major_minor = ".".join(PYTHON_VERSION.split(".")[:2])
-    stdlib_src = python_root / "lib" / f"python{python_major_minor}"
-    stdlib_dest = venv_dir / "lib" / f"python{python_major_minor}"
-
-    if stdlib_src.exists():
-        print(f"Copying Python stdlib from {stdlib_src}")
-        shutil.copytree(stdlib_src, stdlib_dest, dirs_exist_ok=True)
-        print("✅ Copied stdlib to venv")
-
-    python_path = _virtualenv_python(venv_dir)
-
-    # Copy libpython dylib to venv (python-build-standalone doesn't copy it automatically)
-    python_major_minor = ".".join(PYTHON_VERSION.split(".")[:2])
-    lib_src = python_root / "lib" / f"libpython{python_major_minor}.dylib"
-    lib_dest = venv_dir / "lib"
-    lib_dest.mkdir(exist_ok=True)
-
-    if lib_src.exists():
-        shutil.copy2(lib_src, lib_dest / lib_src.name)
-        print(f"✅ Copied {lib_src.name} to venv/lib")
-    else:
-        raise BuildError(f"libpython not found at {lib_src}")
-
-    # Install pip/setuptools/wheel
     _run([str(python_path), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"])
-
     return python_path
-
-
-def _verify_python_relocatable(venv_dir: Path) -> None:
-    """Verify that Python is relocatable (python-build-standalone).
-
-    With python-build-standalone, Python is already relocatable and uses @rpath.
-    We just verify that:
-    1. libpython dylib exists in venv/lib/
-    2. Python binary uses @rpath/libpython (not absolute paths)
-    """
-
-    python_bin = venv_dir / "bin" / "python3"
-    python_major_minor = ".".join(PYTHON_VERSION.split(".")[:2])
-    lib_dylib = venv_dir / "lib" / f"libpython{python_major_minor}.dylib"
-
-    # Verify libpython exists
-    if not lib_dylib.exists():
-        raise BuildError(f"libpython not found at {lib_dylib}")
-
-    print(f"✅ libpython found: {lib_dylib}")
-
-    # Verify Python uses @rpath (relocatable)
-    result = _run(["otool", "-L", str(python_bin)], capture_output=True)
-    if "@rpath/libpython" in result.stdout:
-        print("✅ Python is relocatable (uses @rpath)")
-    else:
-        print("⚠️  Warning: Python may not be fully relocatable")
-        print(result.stdout)
 
 
 def _install_azure_cli(python_path: Path) -> None:
@@ -305,12 +226,6 @@ else
 fi
 
 PYTHON="${{VENV_DIR}}/bin/python3"
-
-# Ensure Python can locate its stdlib and platform-dependent libraries
-# relative to the active virtual environment, even though the venv was
-# created under a temporary build prefix and later relocated into
-# /usr/local.
-export PYTHONHOME="${{VENV_DIR}}"
 
 # Verify installation integrity
 if [[ ! -x "${{PYTHON}}" ]]; then
@@ -707,52 +622,10 @@ def _create_package_root(venv_source: Path, *, version: str, platform_tag: str, 
     print(f"  Source size: {sum(f.stat().st_size for f in venv_source.rglob('*') if f.is_file()) / (1024*1024):.1f} MB")
     shutil.copytree(venv_source, venv_target, symlinks=False)
 
-    # Bundle Python stdlib from python-build-standalone into the venv so the
-    # installed runtime is fully self-contained and does not depend on the
-    # temporary build-time prefix recorded in pyvenv.cfg.
-    #
-    # Layout from python-build-standalone (install_only):
-    #   staging_dir/python/lib/python3.13/...
-    # We copy that stdlib tree into the venv's lib/python3.13 directory.
-    python_root = staging_dir / "python"
-    python_major_minor = ".".join(PYTHON_VERSION.split(".")[:2])
-    src_stdlib = python_root / "lib" / f"python{python_major_minor}"
-    dest_stdlib = venv_target / "lib" / f"python{python_major_minor}"
-
-    if src_stdlib.exists():
-        print(f"Bundling Python stdlib from {src_stdlib} -> {dest_stdlib}")
-        dest_stdlib.parent.mkdir(parents=True, exist_ok=True)
-        # dirs_exist_ok=True lets us merge into an existing lib/pythonX.Y
-        shutil.copytree(src_stdlib, dest_stdlib, dirs_exist_ok=True)
-    else:
-        print(f"⚠️  Warning: Python stdlib source not found at {src_stdlib}; runtime may be incomplete")
-
     # Prune bytecode to reduce size
     print("Pruning Python bytecode files...")
     _prune_bytecode(venv_target)
     print(f"  Target size: {sum(f.stat().st_size for f in venv_target.rglob('*') if f.is_file()) / (1024*1024):.1f} MB")
-
-    # Rewrite pyvenv.cfg so that the recorded "home" matches the final
-    # install prefix on the target system rather than the temporary
-    # build-time location. This helps Python compute a sensible
-    # exec_prefix and avoids the "Could not find platform dependent
-    # libraries <exec_prefix>" warning when running from the packaged
-    # installation.
-    pyvenv_cfg = venv_target / "pyvenv.cfg"
-    if pyvenv_cfg.exists():
-        final_venv_home = Path("/usr/local") / INSTALL_PREFIX / APP_NAME / version
-        try:
-            lines = pyvenv_cfg.read_text(encoding="utf-8").splitlines()
-            new_lines = []
-            for line in lines:
-                if line.startswith("home ="):
-                    new_lines.append(f"home = {final_venv_home}")
-                else:
-                    new_lines.append(line)
-            pyvenv_cfg.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
-            print(f"Rewrote pyvenv.cfg home to {final_venv_home}")
-        except OSError as exc:
-            print(f"⚠️  Warning: failed to rewrite pyvenv.cfg: {exc}")
 
     # Create the versioned launcher script
     print("Creating versioned launcher script")
@@ -826,7 +699,7 @@ def _create_pkg_installer(
 ) -> Path:
     """Create macOS .pkg installer with preinstall/postinstall scripts for versioning."""
 
-    pkg_filename = f"{APP_NAME}-{version}-{platform_tag}-fixed.pkg"
+    pkg_filename = f"{APP_NAME}-{version}-{platform_tag}.pkg"
     final_pkg_path = artifacts_dir / pkg_filename
     _ensure_clean([final_pkg_path])
 
@@ -842,8 +715,8 @@ def _create_pkg_installer(
     scripts_dir.mkdir(exist_ok=True)
 
     # Create preinstall and postinstall scripts
-    _create_preinstall_script(scripts_dir, version=version)
-    _create_postinstall_script(scripts_dir, version=version)
+    preinstall_path = _create_preinstall_script(scripts_dir, version=version)
+    postinstall_path = _create_postinstall_script(scripts_dir, version=version)
 
     # Step 1: Create component package with scripts
     component_pkg_name = f"{APP_NAME}-component-{version}-{platform_tag}.pkg"
@@ -934,12 +807,8 @@ def build_pkg_installer(*, platform_tag: str) -> None:
         # Phase 1: Create virtual environment and install Azure CLI
         print("\n[Phase 1/4] Creating virtual environment and installing Azure CLI")
         venv_dir = tmp_dir / "bundle-venv"
-        python_path = _create_virtualenv(venv_dir, tmp_dir)
+        python_path = _create_virtualenv(venv_dir)
         _install_azure_cli(python_path)
-
-        # Verify Python is relocatable (python-build-standalone is already relocatable)
-        print("\nVerifying Python is relocatable...")
-        _verify_python_relocatable(venv_dir)
 
         # Phase 2: Stage package root with VERSIONED paths
         print("\n[Phase 2/4] Staging package root (versioned installation)")
