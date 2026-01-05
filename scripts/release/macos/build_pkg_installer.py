@@ -49,6 +49,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -74,10 +75,22 @@ PKG_IDENTIFIER = "com.microsoft.azure-cli"
 
 # Python build configuration - use python-build-standalone (relocatable Python)
 PYTHON_VERSION = "3.13.11"
-PYTHON_STANDALONE_URL = (
-    f"https://github.com/astral-sh/python-build-standalone/releases/download/20251217/"
-    f"cpython-{PYTHON_VERSION}%2B20251217-aarch64-apple-darwin-install_only.tar.gz"
-)
+
+def _get_python_standalone_url() -> str:
+    """Get the appropriate Python standalone URL for the current architecture."""
+    arch = platform.machine().lower()
+    
+    if arch in ("arm64", "aarch64"):
+        arch_tag = "aarch64"
+    elif arch in ("x86_64", "amd64"):
+        arch_tag = "x86_64"
+    else:
+        raise BuildError(f"Unsupported architecture: {arch}")
+    
+    return (
+        f"https://github.com/astral-sh/python-build-standalone/releases/download/20251217/"
+        f"cpython-{PYTHON_VERSION}%2B20251217-{arch_tag}-apple-darwin-install_only.tar.gz"
+    )
 
 
 class BuildError(RuntimeError):
@@ -164,9 +177,11 @@ def _create_virtualenv(venv_dir: Path, staging_dir: Path) -> Path:
     python_root = staging_dir / "python"
     python_root.mkdir(parents=True, exist_ok=True)
 
-    print(f"Downloading relocatable Python {PYTHON_VERSION}...")
+    python_url = _get_python_standalone_url()
+    arch = platform.machine().lower()
+    print(f"Downloading relocatable Python {PYTHON_VERSION} for {arch}...")
     tarball = staging_dir / "python.tar.gz"
-    urllib.request.urlretrieve(PYTHON_STANDALONE_URL, tarball)
+    urllib.request.urlretrieve(python_url, tarball)
 
     print(f"Extracting Python to {python_root}")
     _run(["tar", "xzf", str(tarball), "-C", str(python_root), "--strip-components=1"])
