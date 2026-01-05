@@ -566,10 +566,10 @@ stages:
         
         # Set execute permissions on wrapper scripts
         chmod +x bin/az 2>/dev/null || true
-        chmod +x microsoft/azure-cli/bin/az 2>/dev/null || true
+        chmod +x microsoft/azure-cli/*/bin/az 2>/dev/null || true
         
         # Set execute permissions on Python executables
-        find microsoft/azure-cli/bin -type f -name "python*" ! -name "*.pyc" ! -name "*.py" -exec chmod +x {} \; 2>/dev/null || true
+        find microsoft/azure-cli/*/bin -type f -name "python*" ! -name "*.pyc" ! -name "*.py" -exec chmod +x {} \; 2>/dev/null || true
         
         # Set execute permissions on all Mach-O binaries (dylibs, .so files)
         find . -type f \( -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \; 2>/dev/null || true
@@ -578,7 +578,7 @@ stages:
         echo ""
         echo "Verifying permissions on critical files:"
         ls -l bin/az
-        ls -l microsoft/azure-cli/bin/python* | head -3
+        ls -l microsoft/azure-cli/*/bin/python* | head -3
         
       displayName: 'Merge signed binaries and set permissions'
     
@@ -1160,9 +1160,10 @@ stages:
         
         echo ""
         echo "Checking Python executable signature..."
-        if [ -f /usr/local/microsoft/azure-cli/bin/python3 ]; then
-          echo "Python executable: /usr/local/microsoft/azure-cli/bin/python3"
-          codesign -vv -d /usr/local/microsoft/azure-cli/bin/python3 2>&1
+        PYTHON_PATH=$(find /usr/local/microsoft/azure-cli/*/bin -name "python3" -type f 2>/dev/null | head -1)
+        if [ -n "$PYTHON_PATH" ]; then
+          echo "Python executable: $PYTHON_PATH"
+          codesign -vv -d "$PYTHON_PATH" 2>&1
           
           RESULT=$?
           if [ $RESULT -eq 0 ]; then
@@ -1177,8 +1178,9 @@ stages:
         echo ""
         echo "Checking for any unsigned binaries in installation..."
         UNSIGNED_COUNT=0
-        if [ -d /usr/local/microsoft/azure-cli/bin ]; then
-          for binary in /usr/local/microsoft/azure-cli/bin/*; do
+        BIN_DIR=$(find /usr/local/microsoft/azure-cli/*/bin -type d 2>/dev/null | head -1)
+        if [ -n "$BIN_DIR" ]; then
+          for binary in "$BIN_DIR"/*; do
             if [ -f "$binary" ] && [ -x "$binary" ]; then
               if ! codesign -v "$binary" 2>/dev/null; then
                 echo "⚠️  Unsigned: $binary"
@@ -1986,8 +1988,9 @@ stages:
         if [ -d /usr/local/microsoft/azure-cli ]; then
           echo "   ✅ Found directory: /usr/local/microsoft/azure-cli"
           
-          if [ -f /usr/local/microsoft/azure-cli/bin/python3 ]; then
-            echo "   ✅ Found Python in venv"
+          PYTHON_PATH=$(find /usr/local/microsoft/azure-cli/*/bin -name "python3" -type f 2>/dev/null | head -1)
+          if [ -n "$PYTHON_PATH" ]; then
+            echo "   ✅ Found Python in venv: $PYTHON_PATH"
           else
             echo "   ❌ ERROR: Python not found in venv"
             exit 1
@@ -2140,9 +2143,10 @@ stages:
           ls -la /usr/local/microsoft/azure-cli/ 2>/dev/null | head -15
           echo ""
           
-          if [ -f /usr/local/microsoft/azure-cli/bin/python3 ]; then
-            echo "   ✅ Found Python: /usr/local/microsoft/azure-cli/bin/python3"
-            ls -la /usr/local/microsoft/azure-cli/bin/python3
+          PYTHON_PATH=$(find /usr/local/microsoft/azure-cli/*/bin -name "python3" -type f 2>/dev/null | head -1)
+          if [ -n "$PYTHON_PATH" ]; then
+            echo "   ✅ Found Python: $PYTHON_PATH"
+            ls -la "$PYTHON_PATH"
           else
             echo "   ❌ ERROR: Python not found in venv"
           fi
