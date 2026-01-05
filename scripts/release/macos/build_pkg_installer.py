@@ -76,17 +76,18 @@ PKG_IDENTIFIER = "com.microsoft.azure-cli"
 # Python build configuration - use python-build-standalone (relocatable Python)
 PYTHON_VERSION = "3.13.11"
 
+
 def _get_python_standalone_url() -> str:
     """Get the appropriate Python standalone URL for the current architecture."""
     arch = platform.machine().lower()
-    
+
     if arch in ("arm64", "aarch64"):
         arch_tag = "aarch64"
     elif arch in ("x86_64", "amd64"):
         arch_tag = "x86_64"
     else:
         raise BuildError(f"Unsupported architecture: {arch}")
-    
+
     return (
         f"https://github.com/astral-sh/python-build-standalone/releases/download/20251217/"
         f"cpython-{PYTHON_VERSION}%2B20251217-{arch_tag}-apple-darwin-install_only.tar.gz"
