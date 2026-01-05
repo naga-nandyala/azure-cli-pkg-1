@@ -5,10 +5,6 @@
 trigger: none # Manual trigger only
 
 parameters:
-  - name: Version
-    displayName: 'Azure CLI Version (e.g., 2.76.0)'
-    type: string
-    default: '2.0.0'
   - name: CreateGitHubRelease
     displayName: 'Create GitHub Release with artifacts'
     type: boolean
@@ -39,8 +35,6 @@ variables:
     value: 1
   - name: DOTNET_NOLOGO
     value: 1
-  - name: Version
-    value: ${{ parameters.Version }}
   - name: GitHubRepo
     value: ${{ parameters.GitHubRepo }}
 
@@ -73,20 +67,15 @@ stages:
         addToPath: true
     
     - bash: |
-        if [ -n "$(Version)" ]; then
-          echo "VERSION=$(Version)" >> $AZURE_PIPELINES_ENV
-          echo "Using provided version: $(Version)"
-        else
-          VERSION=$(python -c "import re; content = open('src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\''\"'](.+?)['\''\"']', content); print(m.group(1) if m else 'ERROR')")
-          if [ "$VERSION" = "ERROR" ]; then
-            echo "❌ Failed to detect version"
-            exit 1
-          fi
-          echo "VERSION=$VERSION" >> $AZURE_PIPELINES_ENV
-          echo "Using version from azure-cli-core: $VERSION"
+        # Auto-detect version from azure-cli-core/__init__.py
+        VERSION=$(python -c "import re; content = open('src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\''\"](.+?)['\''\"]', content); print(m.group(1) if m else 'ERROR')")
+        if [ "$VERSION" = "ERROR" ]; then
+          echo "❌ Failed to detect version from azure-cli-core"
+          exit 1
         fi
+        echo "Auto-detected version from code: $VERSION"
         echo "##vso[task.setvariable variable=CLI_VERSION]$VERSION"
-      displayName: 'Set VERSION environment variable'
+      displayName: 'Auto-detect version from code'
     
     - bash: |
         if ! command -v pkgbuild >/dev/null 2>&1; then
@@ -291,13 +280,15 @@ stages:
         addToPath: true
     
     - bash: |
-        if [ -n "$(Version)" ]; then
-          VERSION="$(Version)"
-        else
-          VERSION=$(python -c "import re; content = open('src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\''\"'](.+?)['\''\"']', content); print(m.group(1) if m else 'ERROR')")
+        # Auto-detect version from azure-cli-core/__init__.py
+        VERSION=$(python -c "import re; content = open('src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\''\"](.+?)['\''\"]', content); print(m.group(1) if m else 'ERROR')")
+        if [ "$VERSION" = "ERROR" ]; then
+          echo "❌ Failed to detect version from azure-cli-core"
+          exit 1
         fi
+        echo "Auto-detected version: $VERSION"
         echo "##vso[task.setvariable variable=CLI_VERSION]$VERSION"
-      displayName: 'Set VERSION'
+      displayName: 'Auto-detect version from code'
     
     - task: DownloadPipelineArtifact@2
       displayName: 'Download ARM64 artifact'

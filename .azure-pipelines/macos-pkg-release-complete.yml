@@ -17,10 +17,6 @@ parameters:
     displayName: 'Unsigned Build ID (from naga_macos_build)'
     type: string
     default: '289589'
-  - name: AzureCliVersion
-    displayName: 'Azure CLI Version (e.g., 2.0.0)'
-    type: string
-    default: '2.0.0'
   - name: BundleId
     displayName: 'Bundle ID for signing/notarization'
     type: string
@@ -74,8 +70,6 @@ variables:
     value: none
   - name: skipNugetSecurityAnalysis
     value: true
-  - name: AzureCliVersion
-    value: ${{ parameters.AzureCliVersion }}
   - name: UnsignedBuildId
     value: ${{ parameters.UnsignedBuildId }}
   - name: BundleId
@@ -86,12 +80,10 @@ variables:
     value: ${{ parameters.HomebrewTapRepo }}
   - name: FormulaName
     value: ${{ parameters.FormulaName }}
-  - name: ReleaseTag
-    value: v${{ parameters.AzureCliVersion }}
   - name: GITHUB_TOKEN
     value: $[ resources.repositories['homebrewtap'].token ]
 
-name: release-complete-$(AzureCliVersion)-$(Build.BuildId)
+name: release-complete-$(Build.BuildId)
 
 stages:
 # ============================================================================
@@ -135,6 +127,20 @@ stages:
         
         echo "✅ Found PKG: $PKG_FILE"
         echo "PKG size: $(du -h "$PKG_FILE" | cut -f1)"
+        
+        # Extract version from filename: azure-cli-2.77.0-macos-arm64.pkg -> 2.77.0
+        PKG_BASENAME=$(basename "$PKG_FILE")
+        VERSION=$(echo "$PKG_BASENAME" | sed -E 's/azure-cli-([0-9]+\.[0-9]+\.[0-9]+)-.*/\1/')
+        
+        if [ -z "$VERSION" ] || [ "$VERSION" = "$PKG_BASENAME" ]; then
+          echo "❌ ERROR: Could not extract version from PKG filename: $PKG_BASENAME"
+          exit 1
+        fi
+        
+        echo ""
+        echo "✅ Auto-detected version from PKG: $VERSION"
+        echo "##vso[task.setvariable variable=AzureCliVersion;isOutput=true]$VERSION"
+        echo "##vso[task.setvariable variable=ReleaseTag;isOutput=true]v$VERSION"
         
         # Create extraction directory
         EXTRACT_DIR="$(Pipeline.Workspace)/pkg-extracted"
@@ -194,7 +200,8 @@ stages:
         echo "az executable:"
         find . -type f -name "az" -o -name "azurecli"
         
-      displayName: 'Extract PKG and Payload'
+      name: DetectVersion
+      displayName: 'Extract PKG and detect version'
     
     - bash: |
         set -e
@@ -487,8 +494,12 @@ stages:
 # ============================================================================
 - stage: RepackageAndSignPkg
   displayName: 'Stage 3: Repackage PKG and Sign'
-  dependsOn: SignBinaries
+  dependsOn:
+  - SignBinaries
+  - DownloadAndExtract
   condition: succeeded()
+  variables:
+    AzureCliVersion: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractPkg.outputs['DetectVersion.AzureCliVersion'] ]
   jobs:
   - job: RepackagePkg
     displayName: 'Repackage PKG with signed binaries (macOS)'
@@ -776,8 +787,12 @@ stages:
 # ============================================================================
 - stage: NotarizeWithApple
   displayName: 'Stage 4: Notarize with Apple via ESRP'
-  dependsOn: RepackageAndSignPkg
+  dependsOn:
+  - RepackageAndSignPkg
+  - DownloadAndExtract
   condition: succeeded()
+  variables:
+    AzureCliVersion: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractPkg.outputs['DetectVersion.AzureCliVersion'] ]
   jobs:
   - job: NotarizeARM64
     displayName: 'Notarize PKG with Apple (ESRP on Windows)'
@@ -1378,8 +1393,12 @@ stages:
 # ============================================================================
 - stage: PublishToGitHub
   displayName: 'Stage 6: Publish to GitHub Release'
-  dependsOn: GatekeeperSecurityValidation
+  dependsOn:
+  - GatekeeperSecurityValidation
+  - DownloadAndExtract
   condition: succeeded()
+  variables:
+    AzureCliVersion: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractPkg.outputs['DetectVersion.AzureCliVersion'] ]
   jobs:
   - job: CreateRelease
     displayName: 'Create GitHub release'
@@ -1499,8 +1518,12 @@ stages:
 # ============================================================================
 - stage: UpdateHomebrewFormula
   displayName: 'Stage 7: Update Homebrew Formula'
-  dependsOn: PublishToGitHub
+  dependsOn:
+  - PublishToGitHub
+  - DownloadAndExtract
   condition: succeeded()
+  variables:
+    AzureCliVersion: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractPkg.outputs['DetectVersion.AzureCliVersion'] ]
   jobs:
   - job: GenerateFormula
     displayName: 'Generate Homebrew formula'
@@ -1784,8 +1807,12 @@ stages:
 # ============================================================================
 - stage: TestInstallation
   displayName: 'Stage 8: Test Homebrew Installation'
-  dependsOn: UpdateHomebrewFormula
+  dependsOn:
+  - UpdateHomebrewFormula
+  - DownloadAndExtract
   condition: succeeded()
+  variables:
+    AzureCliVersion: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractPkg.outputs['DetectVersion.AzureCliVersion'] ]
   jobs:
   - job: TestHomebrewInstall
     displayName: 'Test Homebrew formula'
@@ -2215,6 +2242,8 @@ stages:
   - UpdateHomebrewFormula
   - TestInstallation
   condition: always()
+  variables:
+    AzureCliVersion: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractPkg.outputs['DetectVersion.AzureCliVersion'] ]
   jobs:
   - job: PrintSummary
     displayName: 'Print complete summary'
