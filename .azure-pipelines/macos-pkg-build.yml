@@ -53,15 +53,15 @@ stages:
   displayName: 'Build macOS PKG Installers'
   jobs:
   
-  # Build ARM64 PKG
-  - job: BuildPkgARM64
-    displayName: 'Build PKG (macOS ARM64)'
+  # Build both ARM64 and x86_64 PKGs on Apple Silicon runner
+  # (macOS-13 Intel runners are retired)
+  - job: BuildPkgBothArchs
+    displayName: 'Build PKG (ARM64 + x86_64 on Apple Silicon)'
     pool:
-      vmImage: 'macos-14'  # Apple Silicon
+      vmImage: 'macos-latest'  # Apple Silicon (macOS-15)
     
     variables:
-      PLATFORM_TAG: 'macos-arm64'
-      ARCH: 'arm64'
+      BUILD_BOTH_ARCHS: 'true'
     
     steps:
     - checkout: self
