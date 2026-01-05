@@ -252,51 +252,43 @@ def _install_azure_cli(python_path: Path) -> None:
 
 def _fix_hardcoded_paths(venv_dir: Path) -> None:
     """Fix hardcoded build paths in pyvenv.cfg and Python configuration.
-    
+
     python-build-standalone leaves hardcoded /install paths in:
     1. pyvenv.cfg (home = /install)
     2. Python's sys.path (includes /install/lib/python3.13/lib-dynload)
     3. sysconfig paths (platinclude = /install/include/python3.13)
-    
+
     We need to make these paths relative to the venv for true relocatability.
     """
     print("Fixing hardcoded build paths for relocatability...")
-    
+
     # Fix pyvenv.cfg
     pyvenv_cfg = venv_dir / "pyvenv.cfg"
     if pyvenv_cfg.exists():
         content = pyvenv_cfg.read_text(encoding="utf-8")
         original_content = content
-        
-        # Replace absolute /install paths with relative paths
-        # The 'home' key should point to the bin directory containing python
-        content = re.sub(
-            r"home = /install/bin",
-            "home = .",
-            content
-        )
-        
-        # Remove or relativize other /install references
-        content = re.sub(
-            r"base-prefix = /install",
-            f"base-prefix = .",
-            content
-        )
-        
-        content = re.sub(
-            r"base-exec-prefix = /install",
-            f"base-exec-prefix = .",
-            content
-        )
-        
+
+        # Replace absolute paths with relative paths
+        # The 'home' key should point to the bin directory (use ".")
+        content = re.sub(r"^home = .+$", "home = .", content, flags=re.MULTILINE)
+
+        # Remove absolute executable path
+        content = re.sub(r"^executable = .+$", "", content, flags=re.MULTILINE)
+
+        # Remove absolute command path
+        content = re.sub(r"^command = .+$", "", content, flags=re.MULTILINE)
+
+        # Clean up empty lines
+        content = re.sub(r"\n\n+", "\n", content)
+
         if content != original_content:
             pyvenv_cfg.write_text(content, encoding="utf-8")
-            print(f"  ✅ Fixed pyvenv.cfg")
-            
+            print("  ✅ Fixed pyvenv.cfg - removed absolute paths")
+
     # Create _pth file to ensure Python looks in the right places
     # This helps Python find stdlib and lib-dynload relative to itself
     python_major_minor = ".".join(PYTHON_VERSION.split(".")[:2])
-    
+
     # Verify lib-dynload exists and is populated
     lib_dynload_src = venv_dir / "lib" / f"python{python_major_minor}" / "lib-dynload"
     if not lib_dynload_src.exists() or not list(lib_dynload_src.iterdir()):

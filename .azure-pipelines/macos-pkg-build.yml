@@ -434,7 +434,7 @@ stages:
         echo "# Azure CLI macOS PKG Build Summary"
         echo ""
         echo "## Configuration"
-        echo "- **Version**: ${{ parameters.Version }}"
+        echo "- **Version**: Auto-detected from code"
         echo "- **Python**: 3.13.11 (self-contained)"
         echo "- **Build Method**: productbuild"
         echo "- **Runner**: macos-latest (Apple Silicon)"
