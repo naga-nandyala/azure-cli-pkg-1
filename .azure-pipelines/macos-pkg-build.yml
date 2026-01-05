@@ -51,12 +51,16 @@ stages:
   displayName: 'Build macOS PKG Installers'
   jobs:
   
-  # Build both ARM64 and x86_64 on Apple Silicon
-  # (macOS-13 Intel runners retired as of 2025)
-  - job: BuildBothArchitectures
-    displayName: 'Build PKG (ARM64 + x86_64)'
+  # Build ARM64 package on Apple Silicon
+  # (macOS-13 Intel runners retired - both jobs now run on macos-latest)
+  - job: BuildARM64
+    displayName: 'Build PKG (ARM64)'
     pool:
       vmImage: 'macos-latest'  # Apple Silicon (macOS-15)
+    
+    variables:
+      ARCH: 'arm64'
+      PLATFORM_TAG: 'macos-arm64'
     
     steps:
     - checkout: self
@@ -105,71 +109,165 @@ stages:
     
     - bash: |
         echo "========================================"
-        echo "Building macOS PKG Installers"
+        echo "Building macOS ARM64 PKG Installer"
         echo "========================================"
         echo "Host: $(uname -m) (Apple Silicon)"
         echo "Python: $(python --version)"
         echo "Version: $(CLI_VERSION)"
-        echo ""
-        echo "Note: Building BOTH architectures:"
-        echo "  - ARM64 (native)"
-        echo "  - x86_64 (cross-package, macOS-13 runners retired)"
+        echo "Target: ARM64 (native)"
         echo ""
         
-        echo "=== Building ARM64 Package ==="
-        python scripts/release/macos/build_pkg_installer.py --platform-tag macos-arm64
-        
-        echo ""
-        echo "=== Building x86_64 Package ==="
-        python scripts/release/macos/build_pkg_installer.py --platform-tag macos-x86_64
+        python scripts/release/macos/build_pkg_installer.py --platform-tag $(PLATFORM_TAG)
         
         echo ""
         echo "========================================"
-        echo "✅ Build Complete"
+        echo "✅ ARM64 Build Complete"
         echo "========================================"
         ls -lh dist/macos_pkg/*.pkg
-      displayName: 'Build PKG installers (ARM64 + x86_64)'
+      displayName: 'Build ARM64 PKG installer'
     
     - bash: |
-        echo "=== Verifying Packages ==="
+        echo "=== Verifying ARM64 Package ==="
         cd dist/macos_pkg
         VERSION="$(CLI_VERSION)"
         
-        for arch in arm64 x86_64; do
-          PKG_FILE="azure-cli-${VERSION}-macos-${arch}.pkg"
-          SHA_FILE="${PKG_FILE}.sha256"
-          
-          echo ""
-          echo "📦 Checking macos-${arch}..."
-          
-          if [ -f "$PKG_FILE" ]; then
-            echo "  ✅ PKG: $PKG_FILE ($(du -h "$PKG_FILE" | cut -f1))"
-          else
-            echo "  ❌ PKG missing: $PKG_FILE"
-            exit 1
-          fi
-          
-          if [ -f "$SHA_FILE" ]; then
-            echo "  ✅ SHA256: $(cat "$SHA_FILE" | cut -d' ' -f1)"
-          else
-            echo "  ❌ SHA256 missing: $SHA_FILE"
-            exit 1
-          fi
-          
-          # Quick validation
-          pkgutil --check-signature "$PKG_FILE" 2>&1 | head -3 || true
-          echo "  Files: $(pkgutil --payload-files "$PKG_FILE" | wc -l | xargs)"
-        done
+        PKG_FILE="azure-cli-${VERSION}-$(PLATFORM_TAG).pkg"
+        SHA_FILE="${PKG_FILE}.sha256"
         
+        if [ -f "$PKG_FILE" ]; then
+          echo "  ✅ PKG: $PKG_FILE ($(du -h "$PKG_FILE" | cut -f1))"
+        else
+          echo "  ❌ PKG missing: $PKG_FILE"
+          exit 1
+        fi
+        
+        if [ -f "$SHA_FILE" ]; then
+          echo "  ✅ SHA256: $(cat "$SHA_FILE" | cut -d' ' -f1)"
+        else
+          echo "  ❌ SHA256 missing: $SHA_FILE"
+          exit 1
+        fi
+        
+        pkgutil --check-signature "$PKG_FILE" 2>&1 | head -3 || true
+        echo "  Files: $(pkgutil --payload-files "$PKG_FILE" | wc -l | xargs)"
         echo ""
-        echo "✅ All packages verified successfully"
-      displayName: 'Verify packages'
+        echo "✅ ARM64 package verified"
+      displayName: 'Verify ARM64 package'
     
     - task: PublishPipelineArtifact@1
-      displayName: 'Upload PKG artifacts'
+      displayName: 'Upload ARM64 PKG artifact'
       inputs:
         targetPath: 'dist/macos_pkg'
-        artifact: 'pkg-installers-macos'
+        artifact: 'pkg-installer-macos-arm64'
+        publishLocation: 'pipeline'
+  
+  # Build x86_64 package on Apple Silicon (cross-package)
+  - job: BuildX86_64
+    displayName: 'Build PKG (x86_64)'
+    pool:
+      vmImage: 'macos-latest'  # Apple Silicon (macOS-15)
+    
+    variables:
+      ARCH: 'x86_64'
+      PLATFORM_TAG: 'macos-x86_64'
+    
+    steps:
+    - checkout: self
+      clean: true
+    
+    - task: UsePythonVersion@0
+      displayName: 'Set up Python $(PYTHON_VERSION)'
+      inputs:
+        versionSpec: '$(PYTHON_VERSION)'
+        addToPath: true
+    
+    - bash: |
+        if [ -n "$(Version)" ]; then
+          echo "VERSION=$(Version)" >> $AZURE_PIPELINES_ENV
+          echo "Using provided version: $(Version)"
+        else
+          VERSION=$(python -c "import re; content = open('src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\''\"'](.+?)['\''\"']', content); print(m.group(1) if m else 'ERROR')")
+          if [ "$VERSION" = "ERROR" ]; then
+            echo "❌ Failed to detect version"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> $AZURE_PIPELINES_ENV
+          echo "Using version from azure-cli-core: $VERSION"
+        fi
+        echo "##vso[task.setvariable variable=CLI_VERSION]$VERSION"
+      displayName: 'Set VERSION environment variable'
+    
+    - bash: |
+        if ! command -v pkgbuild >/dev/null 2>&1; then
+          echo "Installing Xcode Command Line Tools..."
+          xcode-select --install || true
+          until command -v pkgbuild >/dev/null 2>&1; do
+            echo "Waiting for Xcode Command Line Tools..."
+            sleep 10
+          done
+        fi
+        echo "✅ pkgbuild: $(which pkgbuild)"
+        echo "✅ productbuild: $(which productbuild)"
+      displayName: 'Verify Build Tools'
+    
+    - bash: python -m pip install --upgrade pip setuptools wheel
+      displayName: 'Upgrade pip'
+    
+    - bash: mkdir -p dist/macos_pkg
+      displayName: 'Create dist directory'
+    
+    - bash: |
+        echo "========================================"
+        echo "Building macOS x86_64 PKG Installer"
+        echo "========================================"
+        echo "Host: $(uname -m) (Apple Silicon)"
+        echo "Python: $(python --version)"
+        echo "Version: $(CLI_VERSION)"
+        echo "Target: x86_64 (cross-package)"
+        echo ""
+        
+        python scripts/release/macos/build_pkg_installer.py --platform-tag $(PLATFORM_TAG)
+        
+        echo ""
+        echo "========================================"
+        echo "✅ x86_64 Build Complete"
+        echo "========================================"
+        ls -lh dist/macos_pkg/*.pkg
+      displayName: 'Build x86_64 PKG installer'
+    
+    - bash: |
+        echo "=== Verifying x86_64 Package ==="
+        cd dist/macos_pkg
+        VERSION="$(CLI_VERSION)"
+        
+        PKG_FILE="azure-cli-${VERSION}-$(PLATFORM_TAG).pkg"
+        SHA_FILE="${PKG_FILE}.sha256"
+        
+        if [ -f "$PKG_FILE" ]; then
+          echo "  ✅ PKG: $PKG_FILE ($(du -h "$PKG_FILE" | cut -f1))"
+        else
+          echo "  ❌ PKG missing: $PKG_FILE"
+          exit 1
+        fi
+        
+        if [ -f "$SHA_FILE" ]; then
+          echo "  ✅ SHA256: $(cat "$SHA_FILE" | cut -d' ' -f1)"
+        else
+          echo "  ❌ SHA256 missing: $SHA_FILE"
+          exit 1
+        fi
+        
+        pkgutil --check-signature "$PKG_FILE" 2>&1 | head -3 || true
+        echo "  Files: $(pkgutil --payload-files "$PKG_FILE" | wc -l | xargs)"
+        echo ""
+        echo "✅ x86_64 package verified"
+      displayName: 'Verify x86_64 package'
+    
+    - task: PublishPipelineArtifact@1
+      displayName: 'Upload x86_64 PKG artifact'
+      inputs:
+        targetPath: 'dist/macos_pkg'
+        artifact: 'pkg-installer-macos-x86_64'
         publishLocation: 'pipeline'
 
 - stage: CreateGitHubRelease
@@ -202,20 +300,29 @@ stages:
       displayName: 'Set VERSION'
     
     - task: DownloadPipelineArtifact@2
-      displayName: 'Download artifacts'
+      displayName: 'Download ARM64 artifact'
       inputs:
-        artifact: 'pkg-installers-macos'
-        path: '$(Pipeline.Workspace)/artifacts'
+        artifact: 'pkg-installer-macos-arm64'
+        path: '$(Pipeline.Workspace)/artifacts-arm64'
+    
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download x86_64 artifact'
+      inputs:
+        artifact: 'pkg-installer-macos-x86_64'
+        path: '$(Pipeline.Workspace)/artifacts-x86_64'
     
     - bash: |
         mkdir -p release
         VERSION="$(CLI_VERSION)"
         
         echo "=== Preparing Release Assets ==="
-        find $(Pipeline.Workspace)/artifacts -type f -name "*.pkg" -o -name "*.sha256"
+        find $(Pipeline.Workspace)/artifacts-arm64 -type f
+        find $(Pipeline.Workspace)/artifacts-x86_64 -type f
         
-        cp $(Pipeline.Workspace)/artifacts/*.pkg release/
-        cp $(Pipeline.Workspace)/artifacts/*.sha256 release/
+        cp $(Pipeline.Workspace)/artifacts-arm64/*.pkg release/
+        cp $(Pipeline.Workspace)/artifacts-arm64/*.sha256 release/
+        cp $(Pipeline.Workspace)/artifacts-x86_64/*.pkg release/
+        cp $(Pipeline.Workspace)/artifacts-x86_64/*.sha256 release/
         
         echo ""
         echo "=== Release Files ==="
