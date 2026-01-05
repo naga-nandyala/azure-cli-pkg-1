@@ -70,7 +70,7 @@ AZURE_CLI_CORE_DIR = SRC_DIR / "azure-cli-core"
 APP_NAME = "azure-cli"
 CLI_EXECUTABLE_NAME = "az"
 INSTALL_PREFIX = "microsoft"  # /usr/local/microsoft/
-INSTALL_DIR = f"{INSTALL_PREFIX}/{APP_NAME}"  # Results in: microsoft/azure-cli
+INSTALL_BASE_DIR = f"{INSTALL_PREFIX}/{APP_NAME}"  # Base: microsoft/azure-cli
 PKG_IDENTIFIER = "com.microsoft.azure-cli"
 
 # Python build configuration - use python-build-standalone (relocatable Python)
@@ -295,14 +295,15 @@ def _write_file(path: Path, content: str, *, executable: bool = False) -> None:
         path.chmod(0o755)
 
 
-def _create_system_launcher(bin_dir: Path) -> None:
+def _create_system_launcher(bin_dir: Path, *, version: str) -> None:
     """Create simplified launcher script for direct system installation with bundled Python."""
 
+    install_dir = f"{INSTALL_BASE_DIR}/{version}"
     launcher_script = f"""#!/usr/bin/env bash
 set -euo pipefail
 
 # Simple direct path - no symlink resolution needed
-VENV_DIR="/usr/local/{INSTALL_DIR}"
+VENV_DIR="/usr/local/{install_dir}"
 PYTHON="${{VENV_DIR}}/bin/python3"
 
 # Ensure Python can locate its stdlib and platform-dependent libraries
@@ -329,14 +330,14 @@ exec "${{PYTHON}}" -m azure.cli "$@"
     print(f"Created launcher script: {bin_dir / CLI_EXECUTABLE_NAME}")
 
 
-def _create_package_root(venv_source: Path, *, platform_tag: str, staging_dir: Path) -> Path:
+def _create_package_root(venv_source: Path, *, version: str, platform_tag: str, staging_dir: Path) -> Path:
     """Stage files in the layout they should appear on the target system."""
 
     # Create the installation structure that mirrors /usr/local
     pkg_root = staging_dir / "pkg_root"
     bin_dir = pkg_root / "bin"
-    install_prefix_dir = pkg_root / INSTALL_PREFIX
-    venv_target = install_prefix_dir / APP_NAME
+    install_prefix_dir = pkg_root / INSTALL_PREFIX / APP_NAME
+    venv_target = install_prefix_dir / version
 
     _ensure_clean([pkg_root])
     bin_dir.mkdir(parents=True, exist_ok=True)
@@ -358,7 +359,7 @@ def _create_package_root(venv_source: Path, *, platform_tag: str, staging_dir: P
 
     # Create the launcher script
     print("Creating system launcher script")
-    _create_system_launcher(bin_dir)
+    _create_system_launcher(bin_dir, version=version)
 
     return pkg_root
 
@@ -528,7 +529,7 @@ def build_pkg_installer(*, platform_tag: str) -> None:
 
         # Phase 2: Stage package root
         print("\n[Phase 2/4] Staging package root")
-        pkg_root = _create_package_root(venv_dir, platform_tag=platform_tag, staging_dir=staging_dir)
+        pkg_root = _create_package_root(venv_dir, version=version, platform_tag=platform_tag, staging_dir=staging_dir)
 
         # Phase 3: Create .pkg installer
         print("\n[Phase 3/4] Creating .pkg installer")
@@ -561,7 +562,7 @@ def build_pkg_installer(*, platform_tag: str) -> None:
     print("Installation Details:")
     print("  Target:      /usr/local/")
     print(f"  Executable:  /usr/local/bin/{CLI_EXECUTABLE_NAME}")
-    print(f"  Runtime:     /usr/local/{INSTALL_DIR}/")
+    print(f"  Runtime:     /usr/local/{INSTALL_BASE_DIR}/{version}/")
     print("  Dependencies: NONE (Python runtime bundled)")
     print()
     print("Next steps:")
