@@ -52,7 +52,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
-import platform
 import re
 import shutil
 import subprocess
@@ -77,16 +76,15 @@ CLI_EXECUTABLE_NAME = "az"
 PYTHON_VERSION = "3.13.11"
 
 
-def _get_python_standalone_url() -> str:
-    """Get the appropriate Python standalone URL for the current architecture."""
-    arch = platform.machine().lower()
-
-    if arch in ("arm64", "aarch64"):
+def _get_python_standalone_url(platform_tag: str) -> str:
+    """Get the appropriate Python standalone URL for the target platform."""
+    # Extract architecture from platform tag (e.g., "macos-arm64" -> "aarch64")
+    if "arm64" in platform_tag:
         arch_tag = "aarch64"
-    elif arch in ("x86_64", "amd64"):
+    elif "x86_64" in platform_tag:
         arch_tag = "x86_64"
     else:
-        raise BuildError(f"Unsupported architecture: {arch}")
+        raise BuildError(f"Unsupported platform tag: {platform_tag}")
 
     return (
         f"https://github.com/astral-sh/python-build-standalone/releases/download/20251217/"
@@ -163,17 +161,17 @@ def _ensure_clean(paths: Iterable[Path]) -> None:
                 print(f"Removed file: {path}")
 
 
-def _create_virtualenv(venv_dir: Path, staging_dir: Path) -> Path:
+def _create_virtualenv(venv_dir: Path, staging_dir: Path, platform_tag: str) -> Path:
     """Create a virtual environment using python-build-standalone (relocatable Python)."""
     _ensure_clean([venv_dir])
 
-    # Download python-build-standalone
+    # Download python-build-standalone for target architecture
     python_root = staging_dir / "python"
     python_root.mkdir(parents=True, exist_ok=True)
 
-    python_url = _get_python_standalone_url()
-    arch = platform.machine().lower()
-    print(f"Downloading relocatable Python {PYTHON_VERSION} for {arch}...")
+    python_url = _get_python_standalone_url(platform_tag)
+    target_arch = "ARM64" if "arm64" in platform_tag else "Intel (x86_64)"
+    print(f"Downloading relocatable Python {PYTHON_VERSION} for {target_arch}...")
     tarball = staging_dir / "python.tar.gz"
     urllib.request.urlretrieve(python_url, tarball)
 
@@ -500,9 +498,9 @@ def build_binary_tar_gz(*, platform_tag: str) -> None:
 
         print(f"\nTemporary directory: {tmp_dir}")
 
-        # Create virtual environment with python-build-standalone
+        # Create virtual environment with python-build-standalone for target platform
         print("\n1. Creating virtual environment...")
-        python_path = _create_virtualenv(venv_dir, staging_dir)
+        python_path = _create_virtualenv(venv_dir, staging_dir, platform_tag)
 
         # Install Azure CLI
         print("\n2. Installing Azure CLI and dependencies...")
