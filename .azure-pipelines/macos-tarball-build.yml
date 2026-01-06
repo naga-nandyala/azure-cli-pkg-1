@@ -49,7 +49,7 @@ stages:
   - job: BuildARM64
     displayName: 'Build Tarball (ARM64)'
     pool:
-      vmImage: 'macos-latest'  # Apple Silicon (macOS-15)
+      vmImage: 'macos-14'  # Apple Silicon (ARM64) - macos-14 or macos-15
     
     variables:
       ARCH: 'arm64'
@@ -86,10 +86,10 @@ stages:
         echo "========================================"
         echo "Building macOS ARM64 Tarball"
         echo "========================================"
-        echo "Host: $(uname -m) (Apple Silicon)"
+        echo "Host: $(uname -m)"
         echo "Python: $(python --version)"
         echo "Version: $(CLI_VERSION)"
-        echo "Target: ARM64 (native)"
+        echo "Target: ARM64 (native on Apple Silicon)"
         echo ""
         
         python scripts/release/macos/build_binary_tar_gz.py --platform-tag $(PLATFORM_TAG)
@@ -144,11 +144,11 @@ stages:
         targetPath: '$(Build.SourcesDirectory)/dist/binary_tar_gz'
         artifactName: 'tarball-arm64'
   
-  # Build x86_64 tarball on Apple Silicon (cross-build)
+  # Build x86_64 tarball on Apple Silicon (cross-build via Rosetta 2)
   - job: BuildX86_64
     displayName: 'Build Tarball (x86_64)'
     pool:
-      vmImage: 'macos-latest'  # Apple Silicon (macOS-15)
+      vmImage: 'macos-14'  # Apple Silicon - will cross-build x86_64 via Rosetta 2
     
     variables:
       ARCH: 'x86_64'
@@ -185,10 +185,10 @@ stages:
         echo "========================================"
         echo "Building macOS x86_64 Tarball"
         echo "========================================"
-        echo "Host: $(uname -m) (Apple Silicon)"
+        echo "Host: $(uname -m)"
         echo "Python: $(python --version)"
         echo "Version: $(CLI_VERSION)"
-        echo "Target: x86_64 (cross-build)"
+        echo "Target: x86_64 (cross-build via Rosetta 2 on ARM64)"
         echo ""
         
         python scripts/release/macos/build_binary_tar_gz.py --platform-tag $(PLATFORM_TAG)
