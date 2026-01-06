@@ -693,7 +693,7 @@ stages:
   - job: TestARM64
     displayName: 'Test ARM64 installation on Apple Silicon'
     pool:
-      vmImage: 'macos-14'
+      vmImage: 'macOS-15-arm64'  # Native Apple Silicon runner
     
     steps:
     - checkout: none
@@ -846,10 +846,10 @@ stages:
   
   - job: TestX86_64
     displayName: 'Test x86_64 installation on Intel'
-    # Note: Intel (macos-13) runners are retired as of January 2026
-    # Using ARM64 runner with Rosetta 2 emulation for x86_64 validation
+    # Note: macos-latest is Intel (x86_64) as of January 2026
+    # Tests x86_64 tarball on native Intel hardware
     pool:
-      vmImage: 'macos-14'  # ARM64 runner, can test x86_64 via Rosetta 2
+      vmImage: 'macos-latest'  # Intel runner for native x86_64 testing
     
     steps:
     - checkout: none
@@ -864,12 +864,8 @@ stages:
         sw_vers
         echo ""
         
-        echo "Native Architecture:"
+        echo "Architecture:"
         uname -m
-        echo ""
-        
-        echo "Note: Testing x86_64 tarball on ARM64 (Apple Silicon) via Rosetta 2"
-        echo "This validates compatibility for Intel Macs through emulation"
         echo ""
         
         echo "Homebrew Version:"

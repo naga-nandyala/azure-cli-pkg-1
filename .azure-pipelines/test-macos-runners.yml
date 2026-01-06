@@ -158,6 +158,7 @@ jobs:
   - TestMacOSLatest
   - TestMacOS14
   - TestMacOS15
+  - TestMacOS15ARM64
   - TestMacOS13
   condition: always()
   pool:

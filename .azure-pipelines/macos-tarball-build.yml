@@ -86,10 +86,11 @@ stages:
         echo "========================================"
         echo "Building macOS ARM64 Tarball"
         echo "========================================"
-        echo "Host: $(uname -m) (Apple Silicon)"
+        HOST_ARCH=$(uname -m)
+        echo "Host: $HOST_ARCH ($([ "$HOST_ARCH" = "arm64" ] && echo "Apple Silicon - native build" || echo "Intel - INCOMPATIBLE"))"
         echo "Python: $(python --version)"
         echo "Version: $(CLI_VERSION)"
-        echo "Target: ARM64 (native)"
+        echo "Target: ARM64"
         echo ""
         
         python scripts/release/macos/build_binary_tar_gz.py --platform-tag $(PLATFORM_TAG)
@@ -185,10 +186,11 @@ stages:
         echo "========================================"
         echo "Building macOS x86_64 Tarball"
         echo "========================================"
-        echo "Host: $(uname -m) (Apple Silicon)"
+        HOST_ARCH=$(uname -m)
+        echo "Host: $HOST_ARCH ($([ "$HOST_ARCH" = "x86_64" ] && echo "Intel - native build" || echo "Apple Silicon - using Rosetta"))"
         echo "Python: $(python --version)"
         echo "Version: $(CLI_VERSION)"
-        echo "Target: x86_64 (cross-build)"
+        echo "Target: x86_64"
         echo ""
         
         python scripts/release/macos/build_binary_tar_gz.py --platform-tag $(PLATFORM_TAG)
