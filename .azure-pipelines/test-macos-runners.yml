@@ -3,6 +3,17 @@
 
 trigger: none # Manual trigger only
 
+variables:
+  # Disable CodeQL and other auto-injection tasks
+  - name: Codeql.Enabled
+    value: false
+  - name: Codeql.SkipTaskAutoInjection
+    value: true
+  - name: CodeQL.enabled
+    value: false
+  - name: runCodesignValidationInjection
+    value: false
+
 name: test-macos-runners-$(Date:yyyyMMdd)-$(Rev:r)
 
 jobs:
@@ -59,7 +70,32 @@ jobs:
       python3 --version
       echo "Python architecture: $(python3 -c 'import platform; print(platform.machine())')"
     displayName: 'Check macOS-14'
-
+- job: TestMacOS15ARM64
+  displayName: 'Test macOS-15-arm64'
+  pool:
+    vmImage: 'macOS-15-arm64'
+  
+  steps:
+  - bash: |
+      echo "========================================"
+      echo "macOS-15-arm64 Runner Info"
+      echo "========================================"
+      echo "Architecture: $(uname -m)"
+      echo "OS Version: $(sw_vers -productVersion)"
+      echo "OS Build: $(sw_vers -buildVersion)"
+      echo "Hostname: $(hostname)"
+      echo ""
+      echo "Rosetta 2 available:"
+      if arch -x86_64 /bin/bash -c "echo 'Yes'" 2>/dev/null; then
+        echo "  ✅ Yes (can run x86_64 on ARM64)"
+      else
+        echo "  ❌ No (Intel-only or Rosetta not installed)"
+      fi
+      echo ""
+      echo "Python info:"
+      python3 --version
+      echo "Python architecture: $(python3 -c 'import platform; print(platform.machine())')"
+    displayName: 'Check macOS-15-arm64'
 - job: TestMacOS15
   displayName: 'Test macOS-15'
   pool:
@@ -86,6 +122,33 @@ jobs:
       python3 --version
       echo "Python architecture: $(python3 -c 'import platform; print(platform.machine())')"
     displayName: 'Check macOS-15'
+
+- job: TestMacOS15ARM64
+  displayName: 'Test macOS-15-arm64 (Apple Silicon Preview)'
+  pool:
+    vmImage: 'macOS-15-arm64'
+  
+  steps:
+  - bash: |
+      echo "========================================"
+      echo "macOS-15-arm64 Runner Info"
+      echo "========================================"
+      echo "Architecture: $(uname -m)"
+      echo "OS Version: $(sw_vers -productVersion)"
+      echo "OS Build: $(sw_vers -buildVersion)"
+      echo "Hostname: $(hostname)"
+      echo ""
+      echo "Rosetta 2 available:"
+      if arch -x86_64 /bin/bash -c "echo 'Yes'" 2>/dev/null; then
+        echo "  ✅ Yes (can run x86_64 on ARM64)"
+      else
+        echo "  ❌ No (Intel-only or Rosetta not installed)"
+      fi
+      echo ""
+      echo "Python info:"
+      python3 --version
+      echo "Python architecture: $(python3 -c 'import platform; print(platform.machine())')"
+    displayName: 'Check macOS-15-arm64'
 
 - job: TestMacOS13
   displayName: 'Test macOS-13'
