@@ -622,9 +622,21 @@ stages:
         mkdir -p Formula
         cp $(Pipeline.Workspace)/homebrew-formula/$(FormulaName).rb Formula/
         
-        # Add and commit
+        # Add formula
         git add Formula/$(FormulaName).rb
-        git commit -m "Update Azure CLI Tarball to version $(AzureCliVersion)
+        
+        # Check if there are changes to commit
+        if git diff --cached --quiet; then
+          echo "ℹ️  No changes detected - formula is already up-to-date"
+          echo "   This is expected if the formula hasn't changed"
+          echo ""
+          COMMIT_SHA=$(git rev-parse HEAD)
+          echo "✅ Formula is current (no update needed)"
+          echo "   Repository: https://github.com/$(HomebrewTapRepo)"
+          echo "   Latest commit: $COMMIT_SHA"
+        else
+          # Commit changes
+          git commit -m "Update Azure CLI Tarball to version $(AzureCliVersion)
 
         - Version: $(AzureCliVersion)
         - Release Tag: $(ReleaseTag)
@@ -635,15 +647,16 @@ stages:
         
         Build: $(TarballBuildId)
         Release: $(Build.BuildId)"
-        
-        # Push to main
-        git push origin main
-        
-        COMMIT_SHA=$(git rev-parse HEAD)
-        echo ""
-        echo "✅ Formula committed to main branch!"
-        echo "   Repository: https://github.com/$(HomebrewTapRepo)"
-        echo "   Commit: $COMMIT_SHA"
+          
+          # Push to main
+          git push origin main
+          
+          COMMIT_SHA=$(git rev-parse HEAD)
+          echo ""
+          echo "✅ Formula committed to main branch!"
+          echo "   Repository: https://github.com/$(HomebrewTapRepo)"
+          echo "   Commit: $COMMIT_SHA"
+        fi
         echo ""
       displayName: 'Commit and push formula'
     
