@@ -1399,6 +1399,7 @@ stages:
   condition: succeeded()
   variables:
     AzureCliVersion: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractPkg.outputs['DetectVersion.AzureCliVersion'] ]
+    ReleaseTag: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractPkg.outputs['DetectVersion.ReleaseTag'] ]
   jobs:
   - job: CreateRelease
     displayName: 'Create GitHub release'
@@ -1524,6 +1525,7 @@ stages:
   condition: succeeded()
   variables:
     AzureCliVersion: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractPkg.outputs['DetectVersion.AzureCliVersion'] ]
+    ReleaseTag: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractPkg.outputs['DetectVersion.ReleaseTag'] ]
   jobs:
   - job: GenerateFormula
     displayName: 'Generate Homebrew formula'
@@ -2244,6 +2246,7 @@ stages:
   condition: always()
   variables:
     AzureCliVersion: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractPkg.outputs['DetectVersion.AzureCliVersion'] ]
+    ReleaseTag: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractPkg.outputs['DetectVersion.ReleaseTag'] ]
   jobs:
   - job: PrintSummary
     displayName: 'Print complete summary'
