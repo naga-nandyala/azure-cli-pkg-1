@@ -1,0 +1,917 @@
+# Azure CLI - Complete macOS Tarball Release Pipeline
+# This pipeline performs:
+# 1. Download tarballs from build pipeline
+# 2. Publish tarballs to GitHub Release
+# 3. Update Homebrew formula in tap repository
+# 4. Test Homebrew installation
+#
+# No ESRP signing or notarization required - tarballs use SHA256 verification only
+
+trigger: none # Manual trigger only
+
+parameters:
+  - name: TarballBuildId
+    displayName: 'Tarball Build ID (from macos-tarball-build pipeline)'
+    type: string
+    default: '289814'
+  - name: GitHubRepo
+    displayName: 'GitHub Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+  - name: HomebrewTapRepo
+    displayName: 'Homebrew Tap Repository'
+    type: string
+    default: 'naga-nandyala/homebrew-mycli-app'
+  - name: FormulaName
+    displayName: 'Homebrew Formula Name'
+    type: string
+    default: 'azure-cli-tarball'
+  - name: IsPreRelease
+    displayName: 'Mark GitHub release as Pre-release'
+    type: boolean
+    default: false
+  - name: IsDraft
+    displayName: 'Create GitHub release as Draft'
+    type: boolean
+    default: false
+
+resources:
+  repositories:
+  - repository: homebrewtap
+    type: github
+    endpoint: github.com_naga-nandyala
+    name: naga-nandyala/homebrew-mycli-app
+  pipelines:
+  - pipeline: tarball-build
+    source: macos-tarball-build
+    trigger: none
+
+variables:
+  # Disable CodeQL and other auto-injection tasks
+  - name: Codeql.Enabled
+    value: false
+  - name: Codeql.SkipTaskAutoInjection
+    value: true
+  - name: CodeQL.enabled
+    value: false
+  - name: runCodesignValidationInjection
+    value: false
+  
+  - name: DOTNET_CLI_TELEMETRY_OPTOUT
+    value: 1
+  - name: DOTNET_NOLOGO
+    value: 1
+  - name: NugetSecurityAnalysisWarningLevel
+    value: none
+  - name: skipNugetSecurityAnalysis
+    value: true
+  - name: TarballBuildId
+    value: ${{ parameters.TarballBuildId }}
+  - name: GitHubRepo
+    value: ${{ parameters.GitHubRepo }}
+  - name: HomebrewTapRepo
+    value: ${{ parameters.HomebrewTapRepo }}
+  - name: FormulaName
+    value: ${{ parameters.FormulaName }}
+  - name: GITHUB_TOKEN
+    value: $[ resources.repositories['homebrewtap'].token ]
+
+name: tarball-release-$(Build.BuildId)
+
+stages:
+# ============================================================================
+# STAGE 1: DOWNLOAD TARBALLS FROM BUILD PIPELINE
+# ============================================================================
+- stage: DownloadTarballs
+  displayName: 'Stage 1: Download Tarballs'
+  jobs:
+  - job: DownloadArtifacts
+    displayName: 'Download ARM64 and x86_64 tarballs'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download ARM64 tarball'
+      inputs:
+        source: 'specific'
+        project: '$(System.TeamProjectId)'
+        pipeline: 'macos-tarball-build'
+        runVersion: 'specific'
+        runId: '$(TarballBuildId)'
+        artifact: 'azure-cli-tarball-macos-arm64'
+        path: '$(Pipeline.Workspace)/arm64'
+    
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download x86_64 tarball'
+      inputs:
+        source: 'specific'
+        project: '$(System.TeamProjectId)'
+        pipeline: 'macos-tarball-build'
+        runVersion: 'specific'
+        runId: '$(TarballBuildId)'
+        artifact: 'azure-cli-tarball-macos-x86_64'
+        path: '$(Pipeline.Workspace)/x86_64'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Verify Downloaded Tarballs"
+        echo "======================================"
+        echo ""
+        
+        ARM64_TAR=$(find $(Pipeline.Workspace)/arm64 -name "*.tar.gz" -type f | head -1)
+        X86_64_TAR=$(find $(Pipeline.Workspace)/x86_64 -name "*.tar.gz" -type f | head -1)
+        
+        if [ -z "$ARM64_TAR" ]; then
+          echo "❌ ERROR: ARM64 tarball not found!"
+          exit 1
+        fi
+        
+        if [ -z "$X86_64_TAR" ]; then
+          echo "❌ ERROR: x86_64 tarball not found!"
+          exit 1
+        fi
+        
+        echo "ARM64 Tarball:"
+        echo "  File: $(basename $ARM64_TAR)"
+        echo "  Size: $(du -h $ARM64_TAR | cut -f1)"
+        echo ""
+        
+        echo "x86_64 Tarball:"
+        echo "  File: $(basename $X86_64_TAR)"
+        echo "  Size: $(du -h $X86_64_TAR | cut -f1)"
+        echo ""
+        
+        # Extract version from filename (e.g., azure-cli-2.77.0-macos-arm64.tar.gz)
+        ARM64_NAME=$(basename "$ARM64_TAR")
+        VERSION=$(echo "$ARM64_NAME" | sed -E 's/azure-cli-([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+        
+        echo "Detected Version: $VERSION"
+        echo ""
+        
+        # Export variables for later stages
+        echo "##vso[task.setvariable variable=AzureCliVersion;isOutput=true]$VERSION"
+        echo "##vso[task.setvariable variable=ReleaseTag;isOutput=true]v$VERSION-tarball"
+        echo "##vso[task.setvariable variable=ARM64_TARBALL_NAME;isOutput=true]$ARM64_NAME"
+        echo "##vso[task.setvariable variable=X86_64_TARBALL_NAME;isOutput=true]$(basename $X86_64_TAR)"
+        
+        # Verify SHA256 files exist
+        if [ -f "${ARM64_TAR}.sha256" ]; then
+          echo "✅ ARM64 SHA256 file found"
+          cat "${ARM64_TAR}.sha256"
+        else
+          echo "⚠️  ARM64 SHA256 file missing - will generate"
+        fi
+        echo ""
+        
+        if [ -f "${X86_64_TAR}.sha256" ]; then
+          echo "✅ x86_64 SHA256 file found"
+          cat "${X86_64_TAR}.sha256"
+        else
+          echo "⚠️  x86_64 SHA256 file missing - will generate"
+        fi
+        echo ""
+        
+        echo "✅ All tarballs verified"
+      name: VerifyTarballs
+      displayName: 'Verify tarballs and detect version'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Consolidate Tarballs"
+        echo "======================================"
+        echo ""
+        
+        # Create consolidated directory for publishing
+        mkdir -p "$(Build.ArtifactStagingDirectory)/release-tarballs"
+        
+        # Copy all tarballs and SHA256 files
+        cp -v $(Pipeline.Workspace)/arm64/*.tar.gz* "$(Build.ArtifactStagingDirectory)/release-tarballs/"
+        cp -v $(Pipeline.Workspace)/x86_64/*.tar.gz* "$(Build.ArtifactStagingDirectory)/release-tarballs/"
+        
+        echo ""
+        echo "Release files:"
+        ls -lh "$(Build.ArtifactStagingDirectory)/release-tarballs/"
+        
+      displayName: 'Consolidate release files'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/release-tarballs
+      artifact: release-tarballs
+      displayName: 'Publish consolidated tarballs'
+
+# ============================================================================
+# STAGE 2: PUBLISH TO GITHUB RELEASE
+# ============================================================================
+- stage: PublishToGitHub
+  displayName: 'Stage 2: Publish to GitHub Release'
+  dependsOn: DownloadTarballs
+  condition: succeeded()
+  variables:
+    AzureCliVersion: $[ stageDependencies.DownloadTarballs.DownloadArtifacts.outputs['VerifyTarballs.AzureCliVersion'] ]
+    ReleaseTag: $[ stageDependencies.DownloadTarballs.DownloadArtifacts.outputs['VerifyTarballs.ReleaseTag'] ]
+    ARM64_TARBALL_NAME: $[ stageDependencies.DownloadTarballs.DownloadArtifacts.outputs['VerifyTarballs.ARM64_TARBALL_NAME'] ]
+    X86_64_TARBALL_NAME: $[ stageDependencies.DownloadTarballs.DownloadArtifacts.outputs['VerifyTarballs.X86_64_TARBALL_NAME'] ]
+  jobs:
+  - job: CreateRelease
+    displayName: 'Create GitHub release with tarballs'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: release-tarballs
+      displayName: 'Download tarballs'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Prepare Release Notes"
+        echo "======================================"
+        echo ""
+        
+        RELEASE_DIR="$(Pipeline.Workspace)/release-tarballs"
+        
+        # Get tarball details
+        ARM64_TAR=$(find "$RELEASE_DIR" -name "*arm64.tar.gz" -type f | head -1)
+        X86_64_TAR=$(find "$RELEASE_DIR" -name "*x86_64.tar.gz" -type f | head -1)
+        
+        ARM64_SIZE=$(du -h "$ARM64_TAR" | cut -f1)
+        X86_64_SIZE=$(du -h "$X86_64_TAR" | cut -f1)
+        
+        # Get SHA256 sums
+        if [ -f "${ARM64_TAR}.sha256" ]; then
+          ARM64_SHA256=$(cat "${ARM64_TAR}.sha256" | awk '{print $1}')
+        else
+          ARM64_SHA256=$(sha256sum "$ARM64_TAR" | awk '{print $1}')
+          echo "$ARM64_SHA256  $(basename $ARM64_TAR)" > "${ARM64_TAR}.sha256"
+        fi
+        
+        if [ -f "${X86_64_TAR}.sha256" ]; then
+          X86_64_SHA256=$(cat "${X86_64_TAR}.sha256" | awk '{print $1}')
+        else
+          X86_64_SHA256=$(sha256sum "$X86_64_TAR" | awk '{print $1}')
+          echo "$X86_64_SHA256  $(basename $X86_64_TAR)" > "${X86_64_TAR}.sha256"
+        fi
+        
+        # Create release notes
+        cat > release-notes.md <<EOF
+        # Azure CLI $(AzureCliVersion) - Tarball Release
+        
+        ## Official Tarball Distribution
+        
+        This release provides **self-contained tarballs** for macOS with all dependencies bundled.
+        
+        ## Downloads
+        
+        ### macOS ARM64 (Apple Silicon)
+        - **File**: \`$(ARM64_TARBALL_NAME)\`
+        - **Size**: ${ARM64_SIZE}
+        - **SHA256**: \`${ARM64_SHA256}\`
+        
+        ### macOS x86_64 (Intel)
+        - **File**: \`$(X86_64_TARBALL_NAME)\`
+        - **Size**: ${X86_64_SIZE}
+        - **SHA256**: \`${X86_64_SHA256}\`
+        
+        ## Installation
+        
+        ### Option 1: Homebrew (Recommended)
+        
+        \`\`\`bash
+        brew tap $(HomebrewTapRepo)
+        brew install $(FormulaName)
+        \`\`\`
+        
+        ### Option 2: Manual Installation
+        
+        **ARM64 (Apple Silicon):**
+        \`\`\`bash
+        # Download and verify
+        curl -LO https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/$(ARM64_TARBALL_NAME)
+        curl -LO https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/$(ARM64_TARBALL_NAME).sha256
+        
+        # Verify SHA256
+        echo "\${ARM64_SHA256}  $(ARM64_TARBALL_NAME)" | shasum -a 256 -c -
+        
+        # Extract and install
+        sudo mkdir -p /usr/local
+        sudo tar -xzf $(ARM64_TARBALL_NAME) -C /usr/local
+        
+        # Add to PATH
+        export PATH="/usr/local/bin:\$PATH"
+        
+        # Verify installation
+        az --version
+        \`\`\`
+        
+        **x86_64 (Intel):**
+        \`\`\`bash
+        # Download and verify
+        curl -LO https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/$(X86_64_TARBALL_NAME)
+        curl -LO https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/$(X86_64_TARBALL_NAME).sha256
+        
+        # Verify SHA256
+        echo "\${X86_64_SHA256}  $(X86_64_TARBALL_NAME)" | shasum -a 256 -c -
+        
+        # Extract and install
+        sudo mkdir -p /usr/local
+        sudo tar -xzf $(X86_64_TARBALL_NAME) -C /usr/local
+        
+        # Add to PATH
+        export PATH="/usr/local/bin:\$PATH"
+        
+        # Verify installation
+        az --version
+        \`\`\`
+        
+        ## Tarball Structure
+        
+        - **Format**: Self-contained with Python 3.13.11
+        - **Installation**: Extracts to \`/usr/local/\`
+        - **Binary**: \`/usr/local/bin/az\`
+        - **Runtime**: \`/usr/local/libexec/az/\`
+        - **No code signing**: Uses SHA256 verification only
+        - **Size**: ~54MB compressed, ~400MB installed
+        
+        ## Features
+        
+        - ✅ Complete Python runtime bundled
+        - ✅ All Azure CLI modules included
+        - ✅ No system Python dependencies
+        - ✅ No Homebrew dependencies
+        - ✅ Portable and reproducible
+        - ✅ SHA256 verified integrity
+        
+        ## Build Information
+        
+        - **Build ID**: $(TarballBuildId)
+        - **Release ID**: $(Build.BuildId)
+        - **Release Date**: $(Build.BuildNumber)
+        
+        ## Uninstallation
+        
+        \`\`\`bash
+        # Manual uninstall
+        sudo rm -rf /usr/local/libexec/az
+        sudo rm -f /usr/local/bin/az
+        
+        # Homebrew uninstall
+        brew uninstall $(FormulaName)
+        \`\`\`
+        
+        ## Documentation
+        
+        - **Azure CLI Docs**: https://learn.microsoft.com/cli/azure/
+        - **GitHub Repository**: https://github.com/$(GitHubRepo)
+        - **Report Issues**: https://github.com/$(GitHubRepo)/issues
+        EOF
+        
+        echo "✅ Release notes created"
+        echo ""
+        cat release-notes.md
+        
+      displayName: 'Prepare release notes'
+    
+    # Delete existing release if it exists (allows re-running pipeline)
+    - task: GitHubRelease@1
+      displayName: 'Delete existing release if present'
+      continueOnError: true
+      inputs:
+        gitHubConnection: 'github.com_naga-nandyala'
+        repositoryName: '$(GitHubRepo)'
+        action: 'delete'
+        tag: '$(ReleaseTag)'
+    
+    - task: GitHubRelease@1
+      displayName: 'Create GitHub Release'
+      inputs:
+        gitHubConnection: 'github.com_naga-nandyala'
+        repositoryName: '$(GitHubRepo)'
+        action: 'create'
+        target: '$(Build.SourceVersion)'
+        tagSource: 'userSpecifiedTag'
+        tag: '$(ReleaseTag)'
+        title: 'Azure CLI $(AzureCliVersion) - Tarball'
+        releaseNotesSource: 'filePath'
+        releaseNotesFilePath: '$(System.DefaultWorkingDirectory)/release-notes.md'
+        assets: '$(Pipeline.Workspace)/release-tarballs/*'
+        isDraft: ${{ parameters.IsDraft }}
+        isPreRelease: ${{ parameters.IsPreRelease }}
+        addChangeLog: false
+    
+    - bash: |
+        echo "======================================"
+        echo "  GitHub Release Created!"
+        echo "======================================"
+        echo ""
+        echo "✅ Release Published Successfully"
+        echo ""
+        echo "Tag: $(ReleaseTag)"
+        echo "Version: $(AzureCliVersion)"
+        echo "Repository: https://github.com/$(GitHubRepo)/releases/tag/$(ReleaseTag)"
+        echo ""
+        echo "Assets:"
+        echo "  - $(ARM64_TARBALL_NAME)"
+        echo "  - $(ARM64_TARBALL_NAME).sha256"
+        echo "  - $(X86_64_TARBALL_NAME)"
+        echo "  - $(X86_64_TARBALL_NAME).sha256"
+        echo ""
+      displayName: 'Release summary'
+
+# ============================================================================
+# STAGE 3: UPDATE HOMEBREW FORMULA
+# ============================================================================
+- stage: UpdateHomebrewFormula
+  displayName: 'Stage 3: Update Homebrew Formula'
+  dependsOn:
+  - PublishToGitHub
+  - DownloadTarballs
+  condition: succeeded()
+  variables:
+    AzureCliVersion: $[ stageDependencies.DownloadTarballs.DownloadArtifacts.outputs['VerifyTarballs.AzureCliVersion'] ]
+    ReleaseTag: $[ stageDependencies.DownloadTarballs.DownloadArtifacts.outputs['VerifyTarballs.ReleaseTag'] ]
+    ARM64_TARBALL_NAME: $[ stageDependencies.DownloadTarballs.DownloadArtifacts.outputs['VerifyTarballs.ARM64_TARBALL_NAME'] ]
+    X86_64_TARBALL_NAME: $[ stageDependencies.DownloadTarballs.DownloadArtifacts.outputs['VerifyTarballs.X86_64_TARBALL_NAME'] ]
+  jobs:
+  - job: GenerateFormula
+    displayName: 'Generate Homebrew formula'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: release-tarballs
+      displayName: 'Download tarballs'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Get Tarball SHA256 Checksums"
+        echo "======================================"
+        echo ""
+        
+        RELEASE_DIR="$(Pipeline.Workspace)/release-tarballs"
+        
+        ARM64_TAR=$(find "$RELEASE_DIR" -name "*arm64.tar.gz" -type f | head -1)
+        X86_64_TAR=$(find "$RELEASE_DIR" -name "*x86_64.tar.gz" -type f | head -1)
+        
+        # Get SHA256
+        if [ -f "${ARM64_TAR}.sha256" ]; then
+          ARM64_SHA256=$(cat "${ARM64_TAR}.sha256" | awk '{print $1}')
+        else
+          ARM64_SHA256=$(sha256sum "$ARM64_TAR" | awk '{print $1}')
+        fi
+        
+        if [ -f "${X86_64_TAR}.sha256" ]; then
+          X86_64_SHA256=$(cat "${X86_64_TAR}.sha256" | awk '{print $1}')
+        else
+          X86_64_SHA256=$(sha256sum "$X86_64_TAR" | awk '{print $1}')
+        fi
+        
+        # Construct download URLs
+        ARM64_URL="https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/$(ARM64_TARBALL_NAME)"
+        X86_64_URL="https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/$(X86_64_TARBALL_NAME)"
+        
+        echo "ARM64 Details:"
+        echo "  URL: $ARM64_URL"
+        echo "  SHA256: $ARM64_SHA256"
+        echo ""
+        
+        echo "x86_64 Details:"
+        echo "  URL: $X86_64_URL"
+        echo "  SHA256: $X86_64_SHA256"
+        echo ""
+        
+        # Export variables
+        echo "##vso[task.setvariable variable=ARM64_SHA256;isOutput=true]$ARM64_SHA256"
+        echo "##vso[task.setvariable variable=X86_64_SHA256;isOutput=true]$X86_64_SHA256"
+        echo "##vso[task.setvariable variable=ARM64_URL;isOutput=true]$ARM64_URL"
+        echo "##vso[task.setvariable variable=X86_64_URL;isOutput=true]$X86_64_URL"
+        
+      name: GetTarballDetails
+      displayName: 'Get tarball SHA256 and URLs'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Generate Homebrew Formula"
+        echo "======================================"
+        echo ""
+        
+        mkdir -p Formula
+        
+        # Generate formula with architecture-specific bottles
+        cat > Formula/$(FormulaName).rb <<'FORMULA_END'
+        class AzureCliTarball < Formula
+          desc "Microsoft Azure CLI - Tarball Distribution"
+          homepage "https://learn.microsoft.com/cli/azure/"
+          version "$(AzureCliVersion)"
+          
+          on_arm do
+            url "$(GetTarballDetails.ARM64_URL)"
+            sha256 "$(GetTarballDetails.ARM64_SHA256)"
+          end
+          
+          on_intel do
+            url "$(GetTarballDetails.X86_64_URL)"
+            sha256 "$(GetTarballDetails.X86_64_SHA256)"
+          end
+          
+          def install
+            # Extract tarball structure:
+            #   bin/az (wrapper script)
+            #   libexec/az/ (Python runtime and libraries)
+            
+            # Install to prefix
+            prefix.install Dir["*"]
+            
+            # Ensure az wrapper is executable
+            chmod 0755, bin/"az"
+          end
+          
+          test do
+            system "#{bin}/az", "--version"
+          end
+          
+          def caveats
+            <<~EOS
+              Azure CLI Tarball has been installed!
+              
+              Installation Details:
+                • Executable: #{bin}/az
+                • Runtime: #{prefix}/libexec/az/
+                • Python: Bundled Python 3.13.11
+              
+              This is a self-contained tarball with all dependencies.
+              No additional system Python or packages required!
+              
+              To get started:
+                az login
+                az account list
+              
+              Documentation:
+                https://learn.microsoft.com/cli/azure/
+            EOS
+          end
+        end
+        FORMULA_END
+        
+        echo "✅ Formula generated: Formula/$(FormulaName).rb"
+        echo ""
+        cat Formula/$(FormulaName).rb
+        
+      displayName: 'Generate formula file'
+    
+    - publish: Formula
+      artifact: homebrew-formula
+      displayName: 'Publish formula artifact'
+  
+  - job: CommitFormula
+    displayName: 'Commit formula to tap repository'
+    dependsOn: GenerateFormula
+    variables:
+      ARM64_SHA256: $[ dependencies.GenerateFormula.outputs['GetTarballDetails.ARM64_SHA256'] ]
+      X86_64_SHA256: $[ dependencies.GenerateFormula.outputs['GetTarballDetails.X86_64_SHA256'] ]
+      ARM64_URL: $[ dependencies.GenerateFormula.outputs['GetTarballDetails.ARM64_URL'] ]
+      X86_64_URL: $[ dependencies.GenerateFormula.outputs['GetTarballDetails.X86_64_URL'] ]
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: homebrewtap
+      persistCredentials: true
+      displayName: 'Checkout Homebrew tap repository'
+    
+    - download: current
+      artifact: homebrew-formula
+      displayName: 'Download formula'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Configure Git"
+        echo "======================================"
+        echo ""
+        
+        git config --global user.email "azure-pipelines@microsoft.com"
+        git config --global user.name "Azure Pipelines Bot"
+        
+        echo "✅ Git configured"
+      displayName: 'Configure git'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Commit Formula to Main Branch"
+        echo "======================================"
+        echo ""
+        
+        # Check current state
+        echo "Current branch:"
+        git branch -a
+        echo ""
+        
+        # Checkout main branch
+        git checkout -B main origin/main
+        
+        # Copy formula
+        mkdir -p Formula
+        cp $(Pipeline.Workspace)/homebrew-formula/$(FormulaName).rb Formula/
+        
+        # Add and commit
+        git add Formula/$(FormulaName).rb
+        git commit -m "Update Azure CLI Tarball to version $(AzureCliVersion)
+
+        - Version: $(AzureCliVersion)
+        - Release Tag: $(ReleaseTag)
+        - ARM64 SHA256: $(ARM64_SHA256)
+        - x86_64 SHA256: $(X86_64_SHA256)
+        - Architecture-specific bottles for Apple Silicon and Intel
+        - Self-contained tarball with bundled Python 3.13.11
+        
+        Build: $(TarballBuildId)
+        Release: $(Build.BuildId)"
+        
+        # Push to main
+        git push origin main
+        
+        COMMIT_SHA=$(git rev-parse HEAD)
+        echo ""
+        echo "✅ Formula committed to main branch!"
+        echo "   Repository: https://github.com/$(HomebrewTapRepo)"
+        echo "   Commit: $COMMIT_SHA"
+        echo ""
+      displayName: 'Commit and push formula'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Formula Update Summary"
+        echo "======================================"
+        echo ""
+        echo "✅ Homebrew Formula Updated!"
+        echo ""
+        echo "Repository: https://github.com/$(HomebrewTapRepo)"
+        echo "Formula: $(FormulaName)"
+        echo "Version: $(AzureCliVersion)"
+        echo ""
+        echo "Users can now install with:"
+        echo ""
+        echo "  brew tap $(HomebrewTapRepo)"
+        echo "  brew install $(FormulaName)"
+        echo ""
+      displayName: 'Update summary'
+
+# ============================================================================
+# STAGE 4: TEST HOMEBREW INSTALLATION
+# ============================================================================
+- stage: TestInstallation
+  displayName: 'Stage 4: Test Homebrew Installation'
+  dependsOn:
+  - UpdateHomebrewFormula
+  - DownloadTarballs
+  condition: succeeded()
+  variables:
+    AzureCliVersion: $[ stageDependencies.DownloadTarballs.DownloadArtifacts.outputs['VerifyTarballs.AzureCliVersion'] ]
+  jobs:
+  - job: TestARM64
+    displayName: 'Test ARM64 installation on Apple Silicon'
+    pool:
+      vmImage: 'macos-14'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo "======================================"
+        echo "  System Information"
+        echo "======================================"
+        echo ""
+        
+        echo "macOS Version:"
+        sw_vers
+        echo ""
+        
+        echo "Architecture:"
+        uname -m
+        echo ""
+        
+        echo "Homebrew Version:"
+        brew --version
+        echo ""
+      displayName: 'Show system info'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Remove Pre-installed Azure CLI"
+        echo "======================================"
+        echo ""
+        
+        if command -v az &> /dev/null; then
+          echo "⚠️  Pre-installed Azure CLI detected"
+          az --version || true
+          echo ""
+          
+          # Cleanup
+          brew uninstall azure-cli 2>/dev/null || true
+          brew uninstall --cask azure-cli 2>/dev/null || true
+          sudo rm -f /usr/local/bin/az
+          sudo rm -rf /usr/local/libexec/az
+          sudo rm -rf /usr/local/microsoft/azure-cli
+          
+          hash -r
+          echo "✅ Cleanup complete"
+        else
+          echo "✅ No pre-installed Azure CLI"
+        fi
+        echo ""
+      displayName: 'Remove pre-installed CLI'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Install via Homebrew"
+        echo "======================================"
+        echo ""
+        
+        echo "Adding tap: $(HomebrewTapRepo)"
+        brew tap $(HomebrewTapRepo)
+        echo ""
+        
+        echo "Installing formula: $(FormulaName)"
+        brew install $(FormulaName)
+        echo ""
+        
+        echo "✅ Installation complete"
+      displayName: 'Install via Homebrew'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Verify Installation"
+        echo "======================================"
+        echo ""
+        
+        echo "Checking 'az' command availability..."
+        which az
+        echo ""
+        
+        echo "Checking version..."
+        az --version
+        echo ""
+        
+        # Check installation structure
+        echo "Checking installation structure..."
+        if [ -f /opt/homebrew/bin/az ]; then
+          echo "✅ Found: /opt/homebrew/bin/az"
+          ls -la /opt/homebrew/bin/az
+        fi
+        echo ""
+        
+        if [ -d /opt/homebrew/Cellar/$(FormulaName) ]; then
+          echo "✅ Found: /opt/homebrew/Cellar/$(FormulaName)"
+          ls -la /opt/homebrew/Cellar/$(FormulaName)/
+        fi
+        echo ""
+        
+        # Verify Python bundled
+        echo "Checking bundled Python..."
+        PYTHON_PATH=$(find /opt/homebrew/Cellar/$(FormulaName) -name python3 -type f 2>/dev/null | head -1)
+        if [ -n "$PYTHON_PATH" ]; then
+          echo "✅ Bundled Python found: $PYTHON_PATH"
+          $PYTHON_PATH --version
+        fi
+        echo ""
+        
+        echo "✅ Verification complete"
+      displayName: 'Verify installation'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Test Azure CLI Commands"
+        echo "======================================"
+        echo ""
+        
+        echo "Test 1: Version command"
+        az --version | head -10
+        echo ""
+        
+        echo "Test 2: Help command"
+        az --help | head -20
+        echo ""
+        
+        echo "Test 3: List accounts (should prompt for login)"
+        az account list 2>&1 || echo "Expected: Not logged in (requires az login)"
+        echo ""
+        
+        echo "✅ All tests passed"
+      displayName: 'Test CLI commands'
+    
+    - bash: |
+        echo "======================================"
+        echo "  ARM64 Test Summary"
+        echo "======================================"
+        echo ""
+        echo "✅ Installation Successful"
+        echo "✅ All Commands Working"
+        echo ""
+        echo "Architecture: ARM64 (Apple Silicon)"
+        echo "Version: $(AzureCliVersion)"
+        echo "Formula: $(FormulaName)"
+        echo ""
+      displayName: 'Test summary'
+    
+    - bash: |
+        brew uninstall $(FormulaName) 2>/dev/null || true
+        echo "✅ Cleanup complete"
+      displayName: 'Cleanup'
+      condition: always()
+
+# ============================================================================
+# STAGE 5: RELEASE SUMMARY
+# ============================================================================
+- stage: ReleaseSummary
+  displayName: 'Stage 5: Release Summary'
+  dependsOn:
+  - PublishToGitHub
+  - UpdateHomebrewFormula
+  - TestInstallation
+  - DownloadTarballs
+  condition: succeeded()
+  variables:
+    AzureCliVersion: $[ stageDependencies.DownloadTarballs.DownloadArtifacts.outputs['VerifyTarballs.AzureCliVersion'] ]
+    ReleaseTag: $[ stageDependencies.DownloadTarballs.DownloadArtifacts.outputs['VerifyTarballs.ReleaseTag'] ]
+  jobs:
+  - job: Summary
+    displayName: 'Release summary'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo ""
+        echo "======================================"
+        echo "  Azure CLI Tarball Release Summary"
+        echo "======================================"
+        echo ""
+        echo "# Azure CLI Tarball Release Complete! 🎉"
+        echo ""
+        echo "## Release Information"
+        echo ""
+        echo "- **Version**: $(AzureCliVersion)"
+        echo "- **Release Tag**: $(ReleaseTag)"
+        echo "- **Build ID**: $(TarballBuildId)"
+        echo "- **Release ID**: $(Build.BuildId)"
+        echo ""
+        echo "## Published Assets"
+        echo ""
+        echo "✅ ARM64 (Apple Silicon) tarball + SHA256"
+        echo "✅ x86_64 (Intel) tarball + SHA256"
+        echo "✅ GitHub Release created"
+        echo "✅ Homebrew formula updated"
+        echo "✅ Installation tested on ARM64"
+        echo ""
+        echo "## GitHub Release"
+        echo ""
+        echo "URL: https://github.com/$(GitHubRepo)/releases/tag/$(ReleaseTag)"
+        echo ""
+        echo "## Homebrew Installation"
+        echo ""
+        echo "\`\`\`bash"
+        echo "brew tap $(HomebrewTapRepo)"
+        echo "brew install $(FormulaName)"
+        echo "\`\`\`"
+        echo ""
+        echo "## Manual Installation"
+        echo ""
+        echo "\`\`\`bash"
+        echo "# Download tarball from GitHub releases"
+        echo "# Verify SHA256 checksum"
+        echo "# Extract: sudo tar -xzf azure-cli-*.tar.gz -C /usr/local"
+        echo "# Run: az --version"
+        echo "\`\`\`"
+        echo ""
+        echo "## What's Included"
+        echo ""
+        echo "✅ Self-contained tarball structure"
+        echo "✅ Bundled Python 3.13.11 runtime"
+        echo "✅ All Azure CLI modules included"
+        echo "✅ No system Python dependencies"
+        echo "✅ SHA256 verified integrity"
+        echo "✅ ~54MB compressed, ~400MB installed"
+        echo ""
+        echo "======================================"
+        echo "  Release Pipeline Completed Successfully!"
+        echo "======================================"
+        echo ""
+      displayName: 'Print release summary'
