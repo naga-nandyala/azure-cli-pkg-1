@@ -161,7 +161,9 @@ stages:
   - job: BuildX86_64
     displayName: 'Build Tarball (x86_64)'
     pool:
-      vmImage: 'macos-15'  # Apple Silicon - will cross-build x86_64 via Rosetta 2
+      vmImage: 'macos-14'  # Try macos-14 for ARM64 (will cross-build x86_64)
+      demands:
+      - Agent.OSArchitecture -equals ARM64
     
     variables:
       ARCH: 'x86_64'
