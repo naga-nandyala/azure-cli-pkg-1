@@ -1,0 +1,446 @@
+# Azure CLI - macOS Tarball Build Pipeline
+# This pipeline builds tar.gz archives for Homebrew Formula distribution
+# No signing/notarization needed - Homebrew verifies via SHA256 checksums
+
+trigger: none # Manual trigger only
+
+parameters:
+  - name: CreateGitHubRelease
+    displayName: 'Create GitHub Release with artifacts'
+    type: boolean
+    default: false
+  - name: Prerelease
+    displayName: 'Mark as pre-release'
+    type: boolean
+    default: false
+  - name: GitHubRepo
+    displayName: 'GitHub Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+
+variables:
+  # Disable CodeQL and other auto-injection tasks
+  - name: Codeql.Enabled
+    value: false
+  - name: Codeql.SkipTaskAutoInjection
+    value: true
+  - name: CodeQL.enabled
+    value: false
+  - name: runCodesignValidationInjection
+    value: false
+  
+  - name: PYTHON_VERSION
+    value: '3.12'
+  - name: DOTNET_CLI_TELEMETRY_OPTOUT
+    value: 1
+  - name: DOTNET_NOLOGO
+    value: 1
+  - name: GitHubRepo
+    value: ${{ parameters.GitHubRepo }}
+
+name: build-macos-tarball-$(Date:yyyyMMdd)-$(Rev:r)
+
+stages:
+- stage: BuildTarball
+  displayName: 'Build macOS Tarball Archives'
+  jobs:
+  
+  # Build ARM64 tarball on Apple Silicon
+  - job: BuildARM64
+    displayName: 'Build Tarball (ARM64)'
+    pool:
+      vmImage: 'macos-latest'  # Apple Silicon (macOS-15)
+    
+    variables:
+      ARCH: 'arm64'
+      PLATFORM_TAG: 'macos-arm64'
+    
+    steps:
+    - checkout: self
+      clean: true
+    
+    - task: UsePythonVersion@0
+      displayName: 'Set up Python $(PYTHON_VERSION)'
+      inputs:
+        versionSpec: '$(PYTHON_VERSION)'
+        addToPath: true
+    
+    - bash: |
+        # Auto-detect version from azure-cli-core/__init__.py
+        VERSION=$(python -c "import re; content = open('src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\\''\"](.+?)['\\''\"]', content); print(m.group(1) if m else 'ERROR')")
+        if [ "$VERSION" = "ERROR" ]; then
+          echo "❌ Failed to detect version from azure-cli-core"
+          exit 1
+        fi
+        echo "Auto-detected version from code: $VERSION"
+        echo "##vso[task.setvariable variable=CLI_VERSION]$VERSION"
+      displayName: 'Auto-detect version from code'
+    
+    - bash: python -m pip install --upgrade pip setuptools wheel
+      displayName: 'Upgrade pip'
+    
+    - bash: mkdir -p dist/binary_tar_gz
+      displayName: 'Create dist directory'
+    
+    - bash: |
+        echo "========================================"
+        echo "Building macOS ARM64 Tarball"
+        echo "========================================"
+        echo "Host: $(uname -m) (Apple Silicon)"
+        echo "Python: $(python --version)"
+        echo "Version: $(CLI_VERSION)"
+        echo "Target: ARM64 (native)"
+        echo ""
+        
+        python scripts/release/macos/build_binary_tar_gz.py --platform-tag $(PLATFORM_TAG)
+        
+        echo ""
+        echo "========================================"
+        echo "✅ ARM64 Build Complete"
+        echo "========================================"
+        ls -lh dist/binary_tar_gz/*.tar.gz
+      displayName: 'Build ARM64 tarball'
+    
+    - bash: |
+        echo "=== Verifying ARM64 Tarball ==="
+        cd dist/binary_tar_gz
+        
+        # Find the tarball file
+        TARBALL=$(ls azure-cli-*-$(PLATFORM_TAG).tar.gz 2>/dev/null | head -1)
+        
+        if [ -z "$TARBALL" ]; then
+          echo "❌ Tarball not found"
+          exit 1
+        fi
+        
+        SHA_FILE="${TARBALL}.sha256"
+        
+        echo "  ✅ Tarball: $TARBALL ($(du -h "$TARBALL" | cut -f1))"
+        
+        if [ -f "$SHA_FILE" ]; then
+          echo "  ✅ SHA256: $(cat "$SHA_FILE" | cut -d' ' -f1)"
+          # Verify checksum
+          shasum -a 256 -c "$SHA_FILE"
+        else
+          echo "  ❌ SHA256 file not found"
+          exit 1
+        fi
+        
+        # Verify tarball structure
+        echo ""
+        echo "  Tarball structure:"
+        tar -tzf "$TARBALL" | head -20
+        
+        echo ""
+        echo "  Total files: $(tar -tzf "$TARBALL" | wc -l | xargs)"
+        echo "  No .pyc files: $(tar -tzf "$TARBALL" | grep -c '\.pyc$' || echo 0)"
+        echo ""
+        echo "✅ ARM64 tarball verified"
+      displayName: 'Verify ARM64 tarball'
+    
+    - task: PublishPipelineArtifact@1
+      displayName: 'Upload ARM64 tarball artifact'
+      inputs:
+        targetPath: '$(Build.SourcesDirectory)/dist/binary_tar_gz'
+        artifactName: 'tarball-arm64'
+  
+  # Build x86_64 tarball on Apple Silicon (cross-build)
+  - job: BuildX86_64
+    displayName: 'Build Tarball (x86_64)'
+    pool:
+      vmImage: 'macos-latest'  # Apple Silicon (macOS-15)
+    
+    variables:
+      ARCH: 'x86_64'
+      PLATFORM_TAG: 'macos-x86_64'
+    
+    steps:
+    - checkout: self
+      clean: true
+    
+    - task: UsePythonVersion@0
+      displayName: 'Set up Python $(PYTHON_VERSION)'
+      inputs:
+        versionSpec: '$(PYTHON_VERSION)'
+        addToPath: true
+    
+    - bash: |
+        # Auto-detect version from azure-cli-core/__init__.py
+        VERSION=$(python -c "import re; content = open('src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\\''\"](.+?)['\\''\"]', content); print(m.group(1) if m else 'ERROR')")
+        if [ "$VERSION" = "ERROR" ]; then
+          echo "❌ Failed to detect version from azure-cli-core"
+          exit 1
+        fi
+        echo "Auto-detected version from code: $VERSION"
+        echo "##vso[task.setvariable variable=CLI_VERSION]$VERSION"
+      displayName: 'Auto-detect version from code'
+    
+    - bash: python -m pip install --upgrade pip setuptools wheel
+      displayName: 'Upgrade pip'
+    
+    - bash: mkdir -p dist/binary_tar_gz
+      displayName: 'Create dist directory'
+    
+    - bash: |
+        echo "========================================"
+        echo "Building macOS x86_64 Tarball"
+        echo "========================================"
+        echo "Host: $(uname -m) (Apple Silicon)"
+        echo "Python: $(python --version)"
+        echo "Version: $(CLI_VERSION)"
+        echo "Target: x86_64 (cross-build)"
+        echo ""
+        
+        python scripts/release/macos/build_binary_tar_gz.py --platform-tag $(PLATFORM_TAG)
+        
+        echo ""
+        echo "========================================"
+        echo "✅ x86_64 Build Complete"
+        echo "========================================"
+        ls -lh dist/binary_tar_gz/*.tar.gz
+      displayName: 'Build x86_64 tarball'
+    
+    - bash: |
+        echo "=== Verifying x86_64 Tarball ==="
+        cd dist/binary_tar_gz
+        
+        # Find the tarball file
+        TARBALL=$(ls azure-cli-*-$(PLATFORM_TAG).tar.gz 2>/dev/null | head -1)
+        
+        if [ -z "$TARBALL" ]; then
+          echo "❌ Tarball not found"
+          exit 1
+        fi
+        
+        SHA_FILE="${TARBALL}.sha256"
+        
+        echo "  ✅ Tarball: $TARBALL ($(du -h "$TARBALL" | cut -f1))"
+        
+        if [ -f "$SHA_FILE" ]; then
+          echo "  ✅ SHA256: $(cat "$SHA_FILE" | cut -d' ' -f1)"
+          # Verify checksum
+          shasum -a 256 -c "$SHA_FILE"
+        else
+          echo "  ❌ SHA256 file not found"
+          exit 1
+        fi
+        
+        # Verify tarball structure
+        echo ""
+        echo "  Tarball structure:"
+        tar -tzf "$TARBALL" | head -20
+        
+        echo ""
+        echo "  Total files: $(tar -tzf "$TARBALL" | wc -l | xargs)"
+        echo "  No .pyc files: $(tar -tzf "$TARBALL" | grep -c '\.pyc$' || echo 0)"
+        echo ""
+        echo "✅ x86_64 tarball verified"
+      displayName: 'Verify x86_64 tarball'
+    
+    - task: PublishPipelineArtifact@1
+      displayName: 'Upload x86_64 tarball artifact'
+      inputs:
+        targetPath: '$(Build.SourcesDirectory)/dist/binary_tar_gz'
+        artifactName: 'tarball-x86_64'
+
+- stage: CreateGitHubRelease
+  displayName: 'Create GitHub Release'
+  dependsOn: BuildTarball
+  condition: and(succeeded(), eq('${{ parameters.CreateGitHubRelease }}', true))
+  jobs:
+  - job: PublishRelease
+    displayName: 'Publish to GitHub Releases'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: self
+      clean: true
+    
+    - task: UsePythonVersion@0
+      displayName: 'Set up Python $(PYTHON_VERSION)'
+      inputs:
+        versionSpec: '$(PYTHON_VERSION)'
+        addToPath: true
+    
+    - bash: |
+        # Auto-detect version from azure-cli-core/__init__.py
+        VERSION=$(python -c "import re; content = open('src/azure-cli-core/azure/cli/core/__init__.py').read(); m = re.search(r'__version__\s*=\s*['\\''\"](.+?)['\\''\"]', content); print(m.group(1) if m else 'ERROR')")
+        if [ "$VERSION" = "ERROR" ]; then
+          echo "❌ Failed to detect version"
+          exit 1
+        fi
+        echo "Auto-detected version: $VERSION"
+        echo "##vso[task.setvariable variable=CLI_VERSION]$VERSION"
+      displayName: 'Auto-detect version from code'
+    
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download ARM64 artifact'
+      inputs:
+        artifactName: 'tarball-arm64'
+        targetPath: '$(Pipeline.Workspace)/tarball-arm64'
+    
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download x86_64 artifact'
+      inputs:
+        artifactName: 'tarball-x86_64'
+        targetPath: '$(Pipeline.Workspace)/tarball-x86_64'
+    
+    - bash: |
+        mkdir -p release
+        VERSION="$(CLI_VERSION)"
+        
+        echo "=== Preparing Release Assets ==="
+        find $(Pipeline.Workspace)/tarball-arm64 -type f
+        find $(Pipeline.Workspace)/tarball-x86_64 -type f
+        
+        cp $(Pipeline.Workspace)/tarball-arm64/*.tar.gz release/
+        cp $(Pipeline.Workspace)/tarball-arm64/*.sha256 release/
+        cp $(Pipeline.Workspace)/tarball-x86_64/*.tar.gz release/
+        cp $(Pipeline.Workspace)/tarball-x86_64/*.sha256 release/
+        
+        echo ""
+        echo "=== Release Files ==="
+        ls -lh release/
+      displayName: 'Prepare release assets'
+    
+    - pwsh: |
+        $version = "$(CLI_VERSION)"
+        $tag = "azure-cli-tarball-v$version"
+        $repo = "$(GitHubRepo)"
+        $prerelease = if ("${{ parameters.Prerelease }}" -eq "true") { $true } else { $false }
+        
+        $body = @"
+        # Azure CLI v$version - macOS Tarball (Homebrew Formula)
+        
+        ## 🍺 Homebrew Formula Installation
+        
+        ``````bash
+        brew tap naga-nandyala/mycli-app
+        brew install azure-cli
+        ``````
+        
+        ## 📦 Direct Download
+        
+        **Apple Silicon**: ``azure-cli-$version-macos-arm64.tar.gz``  
+        **Intel**: ``azure-cli-$version-macos-x86_64.tar.gz``
+        
+        ``````bash
+        # Download and extract
+        curl -L -o azure-cli.tar.gz https://github.com/$repo/releases/download/$tag/azure-cli-$version-macos-<arch>.tar.gz
+        tar xzf azure-cli.tar.gz
+        
+        # Install to /opt/homebrew/Cellar (manual)
+        sudo mkdir -p /opt/homebrew/Cellar/azure-cli/$version
+        sudo cp -R bin libexec /opt/homebrew/Cellar/azure-cli/$version/
+        sudo ln -s /opt/homebrew/Cellar/azure-cli/$version/bin/az /usr/local/bin/az
+        
+        # Verify
+        az --version
+        ``````
+        
+        ## Package Info
+        
+        - **Self-contained Python 3.13.11** (no external dependencies)
+        - **libexec structure** (Python isolation, no conflicts)
+        - **No .pyc bytecode** (smaller size, faster download)
+        - **Size**: ~54MB compressed, ~400MB installed
+        - **Security**: SHA256 verified, no signing needed for Homebrew
+        
+        ## Verification
+        
+        ``````bash
+        shasum -a 256 -c azure-cli-$version-macos-<arch>.tar.gz.sha256
+        ``````
+        
+        ## Why No Code Signing?
+        
+        Homebrew tarballs don't require Apple code signing or notarization:
+        - ✅ Integrity verified via SHA256 checksums
+        - ✅ Distributed through trusted Homebrew tap
+        - ✅ Installed to Homebrew Cellar (managed environment)
+        - ✅ Python binaries already signed in python-build-standalone
+        
+        Code signing is only required for:
+        - `.pkg` installers (direct user installation)
+        - `.app` bundles (GUI applications)
+        - Not applicable to `.tar.gz` archives
+        "@
+        
+        Write-Host "Creating GitHub release: $tag"
+        Write-Host "Version: $version"
+        Write-Host "Prerelease: $prerelease"
+        Write-Host ""
+        Write-Host "Release body:"
+        Write-Host $body
+      displayName: 'Prepare release notes'
+    
+    - task: GitHubRelease@1
+      displayName: 'Create GitHub Release'
+      inputs:
+        gitHubConnection: 'github.com_naga-nandyala'
+        repositoryName: '$(GitHubRepo)'
+        action: 'create'
+        target: '$(Build.SourceVersion)'
+        tagSource: 'userSpecifiedTag'
+        tag: 'azure-cli-tarball-v$(CLI_VERSION)'
+        title: 'Azure CLI v$(CLI_VERSION) - macOS Tarball'
+        releaseNotesSource: 'inline'
+        releaseNotesInline: |
+          # Azure CLI v$(CLI_VERSION) - macOS Tarball (Homebrew Formula)
+          
+          ## 🍺 Homebrew Installation
+          ```bash
+          brew tap naga-nandyala/mycli-app
+          brew install azure-cli
+          ```
+          
+          ## 📦 Package Details
+          - Self-contained Python 3.13.11
+          - libexec structure (isolated Python runtime)
+          - No bytecode (.pyc files removed)
+          - Size: ~54MB compressed, ~400MB installed
+          
+          ## Security
+          - SHA256 checksums provided
+          - No code signing needed (Homebrew distribution model)
+          - Python binaries pre-signed in python-build-standalone
+        assets: 'release/*'
+        isDraft: false
+        isPreRelease: ${{ parameters.Prerelease }}
+        addChangeLog: false
+
+- stage: Summary
+  displayName: 'Build Summary'
+  dependsOn: BuildTarball
+  condition: always()
+  jobs:
+  - job: PrintSummary
+    displayName: 'Print Build Summary'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - bash: |
+        echo "========================================"
+        echo "TARBALL BUILD SUMMARY"
+        echo "========================================"
+        echo ""
+        echo "Pipeline: $(Build.DefinitionName)"
+        echo "Build: $(Build.BuildNumber)"
+        echo "Status: ${{ dependencies.BuildTarball.result }}"
+        echo ""
+        echo "Artifacts:"
+        echo "  - tarball-arm64"
+        echo "  - tarball-x86_64"
+        echo ""
+        echo "Next Steps:"
+        echo "  1. Download artifacts from pipeline"
+        echo "  2. Verify SHA256 checksums"
+        echo "  3. Test with Homebrew formula"
+        echo "  4. Create GitHub release (if enabled)"
+        echo ""
+        echo "Note: No code signing/notarization needed"
+        echo "Homebrew verifies integrity via SHA256"
+        echo "========================================"
+      displayName: 'Print summary'

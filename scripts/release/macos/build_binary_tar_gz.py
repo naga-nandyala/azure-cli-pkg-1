@@ -384,8 +384,38 @@ Created: {__file__}
     print(f"Created README: {readme_path}")
 
 
+def _reorganize_bin_directory(venv_dir: Path) -> None:
+    """Reorganize bin/ directory for Homebrew compatibility.
+
+    Homebrew expects only clean launchers in bin/ (az, python3).
+    Move extra scripts (.bat, .ps1, .sh, activate scripts) to bin-extra/.
+    """
+    bin_dir = venv_dir / "bin"
+    bin_extra_dir = venv_dir / "bin-extra"
+
+    if not bin_dir.exists():
+        print("  ⚠️  bin/ directory not found, skipping reorganization")
+        return
+
+    bin_extra_dir.mkdir(exist_ok=True)
+
+    # Files to keep in bin/ (Homebrew-compatible launchers only)
+    keep_in_bin = {"az", "python3", "pip", "pip3"}
+
+    # Move everything else to bin-extra/
+    moved_count = 0
+    for item in bin_dir.iterdir():
+        if item.name not in keep_in_bin:
+            target = bin_extra_dir / item.name
+            shutil.move(str(item), str(target))
+            moved_count += 1
+            print(f"  Moved: {item.name} → bin-extra/")
+
+    print(f"  Kept {len(keep_in_bin)} files in bin/, moved {moved_count} to bin-extra/")
+
+
 def _create_binary_tar_gz(venv_dir: Path, version: str, platform_tag: str, artifacts_dir: Path) -> Path:
-    """Create binary tar.gz archive from virtualenv."""
+    """Create binary tar.gz archive from virtualenv with libexec structure."""
     archive_name = f"{APP_NAME}-{version}-{platform_tag}.tar.gz"
     archive_path = artifacts_dir / archive_name
 
@@ -394,13 +424,39 @@ def _create_binary_tar_gz(venv_dir: Path, version: str, platform_tag: str, artif
     print(f"Creating binary tar.gz archive: {archive_path}")
     print(f"  Source size: {sum(f.stat().st_size for f in venv_dir.rglob('*') if f.is_file()) / (1024*1024):.1f} MB")
 
-    # Create archive with azure-cli-{VERSION}/ as root directory
+    # Create a temporary directory with proper Homebrew structure:
+    # - libexec/ contains all Python runtime files (bin/, lib/, include/, etc.)
+    # - bin/ contains only the launcher script (symlink to libexec/bin/az)
+    # This isolates the Python runtime from system Python packages
+    temp_dir = artifacts_dir / f"temp_{archive_name}"
+    _ensure_clean([temp_dir])
+    temp_dir.mkdir(parents=True)
+
+    # Create libexec subdirectory
+    libexec_dir = temp_dir / "libexec"
+    libexec_dir.mkdir()
+
+    # Move all venv contents to libexec/
+    print("  Creating libexec structure...")
+    for item in venv_dir.iterdir():
+        shutil.move(str(item), str(libexec_dir / item.name))
+        print(f"    Moved {item.name} → libexec/{item.name}")
+
+    # Create bin/ directory at root with symlink to libexec/bin/az
+    bin_dir = temp_dir / "bin"
+    bin_dir.mkdir()
+    az_symlink = bin_dir / "az"
+    az_symlink.symlink_to("../libexec/bin/az")
+    print("    Created bin/az → ../libexec/bin/az")
+
+    # Create archive from temp directory
     with tarfile.open(archive_path, "w:gz") as tar:
-        # Add all files from venv with proper arcname
-        for item in venv_dir.iterdir():
-            arcname = f"{APP_NAME}-{version}/{item.name}"
-            tar.add(item, arcname=arcname, recursive=True)
-            print(f"  Added: {arcname}")
+        for item in temp_dir.iterdir():
+            tar.add(item, arcname=item.name, recursive=True)
+            print(f"  Added: {item.name}")
+
+    # Cleanup temp directory
+    shutil.rmtree(temp_dir)
 
     size_mb = archive_path.stat().st_size / (1024 * 1024)
     print(f"Archive created: {archive_path} ({size_mb:.1f} MB)")
@@ -463,6 +519,10 @@ def build_binary_tar_gz(*, platform_tag: str) -> None:
         # Create README
         print("\n5. Creating README...")
         _create_readme(venv_dir, version, platform_tag)
+
+        # Reorganize bin directory for Homebrew
+        # print("\n6. Reorganizing bin/ directory for Homebrew compatibility...")
+        # _reorganize_bin_directory(venv_dir)
 
         # Prune bytecode
         print("\n6. Pruning bytecode files...")
