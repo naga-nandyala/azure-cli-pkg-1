@@ -41,10 +41,6 @@ resources:
     type: github
     endpoint: github.com_naga-nandyala
     name: naga-nandyala/homebrew-mycli-app
-  pipelines:
-  - pipeline: tarball-build
-    source: macos-tarball-build
-    trigger: none
 
 variables:
   # Disable CodeQL and other auto-injection tasks
@@ -101,7 +97,7 @@ stages:
         pipeline: 'macos-tarball-build'
         runVersion: 'specific'
         runId: '$(TarballBuildId)'
-        artifact: 'azure-cli-tarball-macos-arm64'
+        artifact: 'tarball-arm64'
         path: '$(Pipeline.Workspace)/arm64'
     
     - task: DownloadPipelineArtifact@2
@@ -112,7 +108,7 @@ stages:
         pipeline: 'macos-tarball-build'
         runVersion: 'specific'
         runId: '$(TarballBuildId)'
-        artifact: 'azure-cli-tarball-macos-x86_64'
+        artifact: 'tarball-x86_64'
         path: '$(Pipeline.Workspace)/x86_64'
     
     - bash: |
