@@ -830,6 +830,167 @@ stages:
         echo "✅ Cleanup complete"
       displayName: 'Cleanup'
       condition: always()
+  
+  - job: TestX86_64
+    displayName: 'Test x86_64 installation on Intel'
+    pool:
+      vmImage: 'macos-13'  # Intel-based runner
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo "======================================"
+        echo "  System Information"
+        echo "======================================"
+        echo ""
+        
+        echo "macOS Version:"
+        sw_vers
+        echo ""
+        
+        echo "Architecture:"
+        uname -m
+        echo ""
+        
+        echo "Homebrew Version:"
+        brew --version
+        echo ""
+      displayName: 'Show system info'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Remove Pre-installed Azure CLI"
+        echo "======================================"
+        echo ""
+        
+        if command -v az &> /dev/null; then
+          echo "Found pre-installed Azure CLI, removing..."
+          
+          # Try Homebrew uninstall first
+          if brew list azure-cli &> /dev/null; then
+            brew uninstall azure-cli --force
+          fi
+          
+          # Clean up any remaining files
+          sudo rm -rf /usr/local/bin/az
+          sudo rm -rf /usr/local/libexec/az
+          
+          echo "✅ Cleanup complete"
+        else
+          echo "✅ No pre-installed Azure CLI"
+        fi
+        echo ""
+      displayName: 'Remove pre-installed CLI'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Install via Homebrew (x86_64)"
+        echo "======================================"
+        echo ""
+        
+        # Add tap
+        echo "Adding tap: $(HomebrewTapRepo)"
+        brew tap $(HomebrewTapRepo)
+        
+        # Install formula
+        echo ""
+        echo "Installing: $(FormulaName)"
+        brew install $(FormulaName)
+        
+        echo ""
+        echo "✅ Installation complete"
+      displayName: 'Install via Homebrew'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Verify Installation (x86_64)"
+        echo "======================================"
+        echo ""
+        
+        # Check az command exists
+        if ! command -v az &> /dev/null; then
+          echo "❌ az command not found in PATH"
+          exit 1
+        fi
+        
+        echo "✅ az command found"
+        echo ""
+        
+        # Get version
+        echo "Azure CLI Version:"
+        az version --output table
+        echo ""
+        
+        # Check Python location
+        PYTHON_LOC=$(az version --output json | python3 -c "import sys, json; print(json.load(sys.stdin)['python-location'])" 2>/dev/null || echo "unknown")
+        echo "Python Location: $PYTHON_LOC"
+        
+        # Verify it's using bundled Python
+        if [[ "$PYTHON_LOC" == *"Cellar"* ]] || [[ "$PYTHON_LOC" == *"libexec"* ]]; then
+          echo "✅ Using bundled Python (self-contained)"
+        else
+          echo "⚠️  Warning: May be using system Python"
+        fi
+        echo ""
+        
+        # Check version matches
+        INSTALLED_VERSION=$(az version --output json | python3 -c "import sys, json; print(json.load(sys.stdin)['azure-cli'])" 2>/dev/null || echo "unknown")
+        echo "Installed version: $INSTALLED_VERSION"
+        echo "Expected version: $(AzureCliVersion)"
+        
+        if [ "$INSTALLED_VERSION" = "$(AzureCliVersion)" ]; then
+          echo "✅ Version matches expected"
+        else
+          echo "❌ Version mismatch!"
+          exit 1
+        fi
+        
+      displayName: 'Verify installation'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Test Basic Commands (x86_64)"
+        echo "======================================"
+        echo ""
+        
+        # Test version command
+        echo "Test: az --version"
+        az --version
+        echo "✅ Version command works"
+        echo ""
+        
+        # Test help command
+        echo "Test: az --help"
+        az --help > /dev/null
+        echo "✅ Help command works"
+        echo ""
+        
+        echo "✅ All basic tests passed for x86_64!"
+      displayName: 'Test basic commands'
+    
+    - bash: |
+        echo "======================================"
+        echo "  x86_64 Installation Test Summary"
+        echo "======================================"
+        echo ""
+        echo "✅ Azure CLI x86_64 Installation Successful!"
+        echo ""
+        echo "Version: $(AzureCliVersion)"
+        echo "Formula: $(FormulaName)"
+        echo "Architecture: x86_64 (Intel)"
+        echo "Test Runner: macos-13"
+        echo ""
+      displayName: 'Test summary'
+    
+    - bash: |
+        brew uninstall $(FormulaName) 2>/dev/null || true
+        echo "✅ Cleanup complete"
+      displayName: 'Cleanup'
+      condition: always()
 
 # ============================================================================
 # STAGE 5: RELEASE SUMMARY
