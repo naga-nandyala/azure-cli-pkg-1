@@ -13,7 +13,7 @@ parameters:
   - name: TarballBuildId
     displayName: 'Tarball Build ID (from macos-tarball-build pipeline)'
     type: string
-    default: '289814'
+    default: '289882'
   - name: GitHubRepo
     displayName: 'GitHub Repository (owner/repo)'
     type: string
