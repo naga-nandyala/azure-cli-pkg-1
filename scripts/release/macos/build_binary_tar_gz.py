@@ -189,7 +189,28 @@ def _create_virtualenv(venv_dir: Path, staging_dir: Path, platform_tag: str) -> 
     python_bin = python_root / "bin" / "python3"
 
     print(f"Creating virtual environment at {venv_dir}")
-    _run([str(python_bin), "-m", "venv", str(venv_dir)])
+
+    # Determine if we need Rosetta 2 for cross-architecture execution
+    host_arch = platform.machine().lower()
+    target_is_x86 = "x86_64" in platform_tag
+    target_is_arm = "arm64" in platform_tag
+
+    # Build the command based on architecture compatibility
+    if host_arch == "arm64" and target_is_x86:
+        # Cross-build: ARM64 host → x86_64 target (need Rosetta 2)
+        print("Using Rosetta 2 to execute x86_64 Python on ARM64 host")
+        venv_cmd = ["arch", "-x86_64", str(python_bin), "-m", "venv", str(venv_dir)]
+    elif host_arch == "x86_64" and target_is_arm:
+        # Cross-build: x86_64 host → ARM64 target (cannot execute)
+        raise BuildError(
+            "Cannot build ARM64 on x86_64 host - ARM64 Python cannot execute on Intel Mac. "
+            "Please use an Apple Silicon (ARM64) runner for ARM64 builds."
+        )
+    else:
+        # Native build: architectures match
+        venv_cmd = [str(python_bin), "-m", "venv", str(venv_dir)]
+
+    _run(venv_cmd)
 
     python_path = _virtualenv_python(venv_dir)
 
