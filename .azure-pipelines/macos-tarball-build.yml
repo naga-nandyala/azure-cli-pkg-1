@@ -49,7 +49,7 @@ stages:
   - job: BuildARM64
     displayName: 'Build Tarball (ARM64)'
     pool:
-      vmImage: 'macOS-14'  # Apple Silicon (ARM64)
+      vmImage: 'macOS-15-arm64'  # Apple Silicon (ARM64) - limited public preview
     
     variables:
       ARCH: 'arm64'
