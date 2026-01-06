@@ -118,17 +118,20 @@ stages:
     - bash: |
         echo "=== Verifying ARM64 Package ==="
         cd dist/macos_pkg
-        VERSION="$(CLI_VERSION)"
         
-        PKG_FILE="azure-cli-${VERSION}-$(PLATFORM_TAG).pkg"
-        SHA_FILE="${PKG_FILE}.sha256"
+        # Find the PKG file (version is embedded in filename)
+        PKG_FILE=$(ls azure-cli-*-$(PLATFORM_TAG).pkg 2>/dev/null | head -1)
         
-        if [ -f "$PKG_FILE" ]; then
-          echo "  ✅ PKG: $PKG_FILE ($(du -h "$PKG_FILE" | cut -f1))"
-        else
-          echo "  ❌ PKG missing: $PKG_FILE"
+        if [ -z "$PKG_FILE" ]; then
+          echo "  ❌ No PKG file found matching pattern: azure-cli-*-$(PLATFORM_TAG).pkg"
+          echo "  Available files:"
+          ls -la
           exit 1
         fi
+        
+        SHA_FILE="${PKG_FILE}.sha256"
+        
+        echo "  ✅ PKG: $PKG_FILE ($(du -h "$PKG_FILE" | cut -f1))"
         
         if [ -f "$SHA_FILE" ]; then
           echo "  ✅ SHA256: $(cat "$SHA_FILE" | cut -d' ' -f1)"
@@ -227,17 +230,20 @@ stages:
     - bash: |
         echo "=== Verifying x86_64 Package ==="
         cd dist/macos_pkg
-        VERSION="$(CLI_VERSION)"
         
-        PKG_FILE="azure-cli-${VERSION}-$(PLATFORM_TAG).pkg"
-        SHA_FILE="${PKG_FILE}.sha256"
+        # Find the PKG file (version is embedded in filename)
+        PKG_FILE=$(ls azure-cli-*-$(PLATFORM_TAG).pkg 2>/dev/null | head -1)
         
-        if [ -f "$PKG_FILE" ]; then
-          echo "  ✅ PKG: $PKG_FILE ($(du -h "$PKG_FILE" | cut -f1))"
-        else
-          echo "  ❌ PKG missing: $PKG_FILE"
+        if [ -z "$PKG_FILE" ]; then
+          echo "  ❌ No PKG file found matching pattern: azure-cli-*-$(PLATFORM_TAG).pkg"
+          echo "  Available files:"
+          ls -la
           exit 1
         fi
+        
+        SHA_FILE="${PKG_FILE}.sha256"
+        
+        echo "  ✅ PKG: $PKG_FILE ($(du -h "$PKG_FILE" | cut -f1))"
         
         if [ -f "$SHA_FILE" ]; then
           echo "  ✅ SHA256: $(cat "$SHA_FILE" | cut -d' ' -f1)"

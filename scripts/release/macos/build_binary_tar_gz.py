@@ -319,8 +319,9 @@ def _create_launcher_script(venv_dir: Path) -> None:
     launcher_script = """#!/usr/bin/env bash
 set -euo pipefail
 
-# Get the absolute path to this script's directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Get the real path to this script (following symlinks)
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || greadlink -f "${BASH_SOURCE[0]}" 2>/dev/null || python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 VENV_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Set Python home for relocatable installation
