@@ -181,6 +181,22 @@ def _create_virtualenv(venv_dir: Path, staging_dir: Path, platform_tag: str) -> 
     python_bin = python_root / "bin" / "python3"
 
     print(f"Creating virtual environment at {venv_dir}")
+
+    # Check for architecture compatibility before attempting to execute Python
+    import subprocess
+
+    host_arch = subprocess.check_output(["uname", "-m"], text=True).strip().lower()
+    target_is_arm = "arm64" in platform_tag
+    target_is_x86 = "x86_64" in platform_tag
+
+    if host_arch == "x86_64" and target_is_arm:
+        raise BuildError(
+            f"Cannot build ARM64 on Intel (x86_64) host.\\n"
+            f"ARM64 Python binaries cannot execute on Intel Macs.\\n"
+            f"Please use an Apple Silicon (ARM64) runner for ARM64 builds.\\n"
+            f"Current host: {host_arch}, Target: {platform_tag}"
+        )
+
     _run([str(python_bin), "-m", "venv", str(venv_dir)])
 
     python_path = _virtualenv_python(venv_dir)

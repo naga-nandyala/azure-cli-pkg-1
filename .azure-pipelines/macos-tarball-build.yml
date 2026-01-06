@@ -49,7 +49,7 @@ stages:
   - job: BuildARM64
     displayName: 'Build Tarball (ARM64)'
     pool:
-      vmImage: 'macos-latest'  # Apple Silicon (macOS-15)
+      vmImage: 'macOS-14'  # Apple Silicon (ARM64)
     
     variables:
       ARCH: 'arm64'
@@ -144,11 +144,11 @@ stages:
         targetPath: '$(Build.SourcesDirectory)/dist/binary_tar_gz'
         artifactName: 'tarball-arm64'
   
-  # Build x86_64 tarball on Apple Silicon (cross-build)
+  # Build x86_64 tarball on Intel (native build)
   - job: BuildX86_64
     displayName: 'Build Tarball (x86_64)'
     pool:
-      vmImage: 'macos-latest'  # Apple Silicon (macOS-15)
+      vmImage: 'macos-latest'  # Currently Intel - native x86_64 build
     
     variables:
       ARCH: 'x86_64'
