@@ -1,0 +1,146 @@
+# Test Pipeline - Check macOS Runner Architectures
+# This pipeline tests what architecture each macOS runner image provides
+
+trigger: none # Manual trigger only
+
+name: test-macos-runners-$(Date:yyyyMMdd)-$(Rev:r)
+
+jobs:
+- job: TestMacOSLatest
+  displayName: 'Test macOS-latest'
+  pool:
+    vmImage: 'macOS-latest'
+  
+  steps:
+  - bash: |
+      echo "========================================"
+      echo "macOS-latest Runner Info"
+      echo "========================================"
+      echo "Architecture: $(uname -m)"
+      echo "OS Version: $(sw_vers -productVersion)"
+      echo "OS Build: $(sw_vers -buildVersion)"
+      echo "Hostname: $(hostname)"
+      echo ""
+      echo "Rosetta 2 available:"
+      if arch -x86_64 /bin/bash -c "echo 'Yes'" 2>/dev/null; then
+        echo "  ✅ Yes (can run x86_64 on ARM64)"
+      else
+        echo "  ❌ No (Intel-only or Rosetta not installed)"
+      fi
+      echo ""
+      echo "Python info:"
+      python3 --version
+      echo "Python architecture: $(python3 -c 'import platform; print(platform.machine())')"
+    displayName: 'Check macOS-latest'
+
+- job: TestMacOS14
+  displayName: 'Test macOS-14'
+  pool:
+    vmImage: 'macOS-14'
+  
+  steps:
+  - bash: |
+      echo "========================================"
+      echo "macOS-14 Runner Info"
+      echo "========================================"
+      echo "Architecture: $(uname -m)"
+      echo "OS Version: $(sw_vers -productVersion)"
+      echo "OS Build: $(sw_vers -buildVersion)"
+      echo "Hostname: $(hostname)"
+      echo ""
+      echo "Rosetta 2 available:"
+      if arch -x86_64 /bin/bash -c "echo 'Yes'" 2>/dev/null; then
+        echo "  ✅ Yes (can run x86_64 on ARM64)"
+      else
+        echo "  ❌ No (Intel-only or Rosetta not installed)"
+      fi
+      echo ""
+      echo "Python info:"
+      python3 --version
+      echo "Python architecture: $(python3 -c 'import platform; print(platform.machine())')"
+    displayName: 'Check macOS-14'
+
+- job: TestMacOS15
+  displayName: 'Test macOS-15'
+  pool:
+    vmImage: 'macOS-15'
+  
+  steps:
+  - bash: |
+      echo "========================================"
+      echo "macOS-15 Runner Info"
+      echo "========================================"
+      echo "Architecture: $(uname -m)"
+      echo "OS Version: $(sw_vers -productVersion)"
+      echo "OS Build: $(sw_vers -buildVersion)"
+      echo "Hostname: $(hostname)"
+      echo ""
+      echo "Rosetta 2 available:"
+      if arch -x86_64 /bin/bash -c "echo 'Yes'" 2>/dev/null; then
+        echo "  ✅ Yes (can run x86_64 on ARM64)"
+      else
+        echo "  ❌ No (Intel-only or Rosetta not installed)"
+      fi
+      echo ""
+      echo "Python info:"
+      python3 --version
+      echo "Python architecture: $(python3 -c 'import platform; print(platform.machine())')"
+    displayName: 'Check macOS-15'
+
+- job: TestMacOS13
+  displayName: 'Test macOS-13'
+  pool:
+    vmImage: 'macOS-13'
+  
+  steps:
+  - bash: |
+      echo "========================================"
+      echo "macOS-13 Runner Info"
+      echo "========================================"
+      echo "Architecture: $(uname -m)"
+      echo "OS Version: $(sw_vers -productVersion)"
+      echo "OS Build: $(sw_vers -buildVersion)"
+      echo "Hostname: $(hostname)"
+      echo ""
+      echo "Rosetta 2 available:"
+      if arch -x86_64 /bin/bash -c "echo 'Yes'" 2>/dev/null; then
+        echo "  ✅ Yes (can run x86_64 on ARM64)"
+      else
+        echo "  ❌ No (Intel-only or Rosetta not installed)"
+      fi
+      echo ""
+      echo "Python info:"
+      python3 --version
+      echo "Python architecture: $(python3 -c 'import platform; print(platform.machine())')"
+    displayName: 'Check macOS-13'
+
+- job: Summary
+  displayName: 'Print Summary'
+  dependsOn:
+  - TestMacOSLatest
+  - TestMacOS14
+  - TestMacOS15
+  - TestMacOS13
+  condition: always()
+  pool:
+    vmImage: 'ubuntu-latest'
+  
+  steps:
+  - bash: |
+      echo "=========================================="
+      echo "macOS Runner Architecture Test Complete"
+      echo "=========================================="
+      echo ""
+      echo "Check the logs above to see:"
+      echo "  - Architecture (arm64 or x86_64)"
+      echo "  - macOS version"
+      echo "  - Rosetta 2 availability"
+      echo ""
+      echo "Key findings:"
+      echo "  - arm64 = Apple Silicon (M1/M2/M3)"
+      echo "  - x86_64 = Intel"
+      echo "  - Rosetta 2 = Can run x86_64 on ARM64"
+      echo ""
+      echo "Use this information to choose the right"
+      echo "vmImage for your builds."
+    displayName: 'Summary'
