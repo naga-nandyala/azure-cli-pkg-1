@@ -77,15 +77,16 @@ CLI_EXECUTABLE_NAME = "az"
 PYTHON_VERSION = "3.13.11"
 
 
-def _get_python_standalone_url(platform_tag: str) -> str:
-    """Get the appropriate Python standalone URL for the target platform."""
-    # Extract architecture from platform tag (e.g., "macos-arm64" -> "arm64")
-    if "arm64" in platform_tag:
+def _get_python_standalone_url() -> str:
+    """Get the appropriate Python standalone URL for the current architecture."""
+    arch = platform.machine().lower()
+
+    if arch in ("arm64", "aarch64"):
         arch_tag = "aarch64"
-    elif "x86_64" in platform_tag:
+    elif arch in ("x86_64", "amd64"):
         arch_tag = "x86_64"
     else:
-        raise BuildError(f"Unsupported platform tag: {platform_tag}")
+        raise BuildError(f"Unsupported architecture: {arch}")
 
     return (
         f"https://github.com/astral-sh/python-build-standalone/releases/download/20251217/"
@@ -162,24 +163,17 @@ def _ensure_clean(paths: Iterable[Path]) -> None:
                 print(f"Removed file: {path}")
 
 
-def _create_virtualenv(venv_dir: Path, staging_dir: Path, platform_tag: str) -> Path:
+def _create_virtualenv(venv_dir: Path, staging_dir: Path) -> Path:
     """Create a virtual environment using python-build-standalone (relocatable Python)."""
     _ensure_clean([venv_dir])
 
-    # Download python-build-standalone for target architecture
+    # Download python-build-standalone
     python_root = staging_dir / "python"
     python_root.mkdir(parents=True, exist_ok=True)
 
-    python_url = _get_python_standalone_url(platform_tag)
-
-    # Extract target architecture from platform tag
-    target_arch = "ARM64" if "arm64" in platform_tag else "Intel (x86_64)"
-    host_arch = platform.machine().lower()
-
-    print(f"Downloading relocatable Python {PYTHON_VERSION} for {target_arch}...")
-    print(f"Host architecture: {host_arch}")
-    print(f"Target platform: {platform_tag}")
-
+    python_url = _get_python_standalone_url()
+    arch = platform.machine().lower()
+    print(f"Downloading relocatable Python {PYTHON_VERSION} for {arch}...")
     tarball = staging_dir / "python.tar.gz"
     urllib.request.urlretrieve(python_url, tarball)
 
@@ -189,28 +183,7 @@ def _create_virtualenv(venv_dir: Path, staging_dir: Path, platform_tag: str) -> 
     python_bin = python_root / "bin" / "python3"
 
     print(f"Creating virtual environment at {venv_dir}")
-
-    # Determine if we need Rosetta 2 for cross-architecture execution
-    host_arch = platform.machine().lower()
-    target_is_x86 = "x86_64" in platform_tag
-    target_is_arm = "arm64" in platform_tag
-
-    # Build the command based on architecture compatibility
-    if host_arch == "arm64" and target_is_x86:
-        # Cross-build: ARM64 host → x86_64 target (need Rosetta 2)
-        print("Using Rosetta 2 to execute x86_64 Python on ARM64 host")
-        venv_cmd = ["arch", "-x86_64", str(python_bin), "-m", "venv", str(venv_dir)]
-    elif host_arch == "x86_64" and target_is_arm:
-        # Cross-build: x86_64 host → ARM64 target (cannot execute)
-        raise BuildError(
-            "Cannot build ARM64 on x86_64 host - ARM64 Python cannot execute on Intel Mac. "
-            "Please use an Apple Silicon (ARM64) runner for ARM64 builds."
-        )
-    else:
-        # Native build: architectures match
-        venv_cmd = [str(python_bin), "-m", "venv", str(venv_dir)]
-
-    _run(venv_cmd)
+    _run([str(python_bin), "-m", "venv", str(venv_dir)])
 
     python_path = _virtualenv_python(venv_dir)
 
@@ -527,9 +500,9 @@ def build_binary_tar_gz(*, platform_tag: str) -> None:
 
         print(f"\nTemporary directory: {tmp_dir}")
 
-        # Create virtual environment with python-build-standalone for target platform
+        # Create virtual environment with python-build-standalone
         print("\n1. Creating virtual environment...")
-        python_path = _create_virtualenv(venv_dir, staging_dir, platform_tag)
+        python_path = _create_virtualenv(venv_dir, staging_dir)
 
         # Install Azure CLI
         print("\n2. Installing Azure CLI and dependencies...")

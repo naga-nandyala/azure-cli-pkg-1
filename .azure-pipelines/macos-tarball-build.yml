@@ -49,9 +49,7 @@ stages:
   - job: BuildARM64
     displayName: 'Build Tarball (ARM64)'
     pool:
-      vmImage: 'macos-14'  # Try macos-14 for ARM64
-      demands:
-      - Agent.OSArchitecture -equals ARM64
+      vmImage: 'macos-latest'  # Apple Silicon (macOS-15)
     
     variables:
       ARCH: 'arm64'
@@ -78,17 +76,6 @@ stages:
         echo "##vso[task.setvariable variable=CLI_VERSION]$VERSION"
       displayName: 'Auto-detect version from code'
     
-    - bash: |
-        ARCH=$(uname -m)
-        echo "Runner architecture: $ARCH"
-        if [ "$ARCH" != "arm64" ]; then
-          echo "##[error]❌ ARM64 build requires Apple Silicon runner (arm64), but got: $ARCH"
-          echo "##[error]This indicates Azure DevOps is using Intel runners instead of ARM64"
-          exit 1
-        fi
-        echo "✅ Correct runner architecture (arm64)"
-      displayName: 'Verify ARM64 runner'
-    
     - bash: python -m pip install --upgrade pip setuptools wheel
       displayName: 'Upgrade pip'
     
@@ -99,10 +86,10 @@ stages:
         echo "========================================"
         echo "Building macOS ARM64 Tarball"
         echo "========================================"
-        echo "Host: $(uname -m)"
+        echo "Host: $(uname -m) (Apple Silicon)"
         echo "Python: $(python --version)"
         echo "Version: $(CLI_VERSION)"
-        echo "Target: ARM64 (native on Apple Silicon)"
+        echo "Target: ARM64 (native)"
         echo ""
         
         python scripts/release/macos/build_binary_tar_gz.py --platform-tag $(PLATFORM_TAG)
@@ -157,13 +144,11 @@ stages:
         targetPath: '$(Build.SourcesDirectory)/dist/binary_tar_gz'
         artifactName: 'tarball-arm64'
   
-  # Build x86_64 tarball on Apple Silicon (cross-build via Rosetta 2)
+  # Build x86_64 tarball on Apple Silicon (cross-build)
   - job: BuildX86_64
     displayName: 'Build Tarball (x86_64)'
     pool:
-      vmImage: 'macos-14'  # Try macos-14 for ARM64 (will cross-build x86_64)
-      demands:
-      - Agent.OSArchitecture -equals ARM64
+      vmImage: 'macos-latest'  # Apple Silicon (macOS-15)
     
     variables:
       ARCH: 'x86_64'
@@ -190,17 +175,6 @@ stages:
         echo "##vso[task.setvariable variable=CLI_VERSION]$VERSION"
       displayName: 'Auto-detect version from code'
     
-    - bash: |
-        ARCH=$(uname -m)
-        echo "Runner architecture: $ARCH"
-        if [ "$ARCH" != "arm64" ]; then
-          echo "##[error]❌ x86_64 cross-build requires Apple Silicon runner (arm64) with Rosetta 2, but got: $ARCH"
-          echo "##[error]This indicates Azure DevOps is using Intel runners instead of ARM64"
-          exit 1
-        fi
-        echo "✅ Correct runner architecture (arm64) - will use Rosetta 2 for x86_64"
-      displayName: 'Verify ARM64 runner (for Rosetta 2)'
-    
     - bash: python -m pip install --upgrade pip setuptools wheel
       displayName: 'Upgrade pip'
     
@@ -211,10 +185,10 @@ stages:
         echo "========================================"
         echo "Building macOS x86_64 Tarball"
         echo "========================================"
-        echo "Host: $(uname -m)"
+        echo "Host: $(uname -m) (Apple Silicon)"
         echo "Python: $(python --version)"
         echo "Version: $(CLI_VERSION)"
-        echo "Target: x86_64 (cross-build via Rosetta 2 on ARM64)"
+        echo "Target: x86_64 (cross-build)"
         echo ""
         
         python scripts/release/macos/build_binary_tar_gz.py --platform-tag $(PLATFORM_TAG)
@@ -448,36 +422,25 @@ stages:
     
     steps:
     - bash: |
-        echo "# Azure CLI macOS Tarball Build Summary"
+        echo "========================================"
+        echo "TARBALL BUILD SUMMARY"
+        echo "========================================"
         echo ""
-        echo "## Configuration"
-        echo "- **Version**: Auto-detected from azure-cli-core"
-        echo "- **Python**: 3.13.11 (self-contained)"
-        echo "- **Structure**: libexec (Python isolation)"
-        echo "- **Runner**: macos-latest (Apple Silicon)"
-        echo "- **Create Release**: ${{ parameters.CreateGitHubRelease }}"
+        echo "Pipeline: $(Build.DefinitionName)"
+        echo "Build: $(Build.BuildNumber)"
+        echo "Status: ${{ dependencies.BuildTarball.result }}"
         echo ""
-        echo "## Build Status"
-        echo "- **macOS ARM64 (Apple Silicon)**: ✅ Built"
-        echo "- **macOS x86_64 (Intel)**: ✅ Built (cross-build)"
+        echo "Artifacts:"
+        echo "  - tarball-arm64"
+        echo "  - tarball-x86_64"
         echo ""
-        echo "## Artifacts"
-        echo "- tarball-arm64 (azure-cli-VERSION-macos-arm64.tar.gz + SHA256)"
-        echo "- tarball-x86_64 (azure-cli-VERSION-macos-x86_64.tar.gz + SHA256)"
+        echo "Next Steps:"
+        echo "  1. Download artifacts from pipeline"
+        echo "  2. Verify SHA256 checksums"
+        echo "  3. Test with Homebrew formula"
+        echo "  4. Create GitHub release (if enabled)"
         echo ""
-        echo "## Package Features"
-        echo "- ✅ Self-contained Python runtime (no dependencies)"
-        echo "- ✅ libexec structure prevents Python conflicts"
-        echo "- ✅ No .pyc bytecode files (clean distribution)"
-        echo "- ✅ Size: ~54MB compressed, ~400MB installed"
-        echo "- ✅ SHA256 checksums included"
-        echo "- ✅ No code signing needed (Homebrew distribution)"
-        echo ""
-        echo "## Next Steps"
-        echo "1. Download artifacts from this pipeline"
-        echo "2. Verify SHA256 checksums"
-        echo "3. Run macos-tarball-release-complete pipeline to:"
-        echo "   - Create GitHub release"
-        echo "   - Update Homebrew formula"
-        echo "   - Test installation"
+        echo "Note: No code signing/notarization needed"
+        echo "Homebrew verifies integrity via SHA256"
+        echo "========================================"
       displayName: 'Print summary'
