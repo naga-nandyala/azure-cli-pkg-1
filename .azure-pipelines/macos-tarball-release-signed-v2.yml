@@ -190,6 +190,12 @@ stages:
       inputs:
         targetPath: '$(Pipeline.Workspace)/arm64-files-to-sign.txt'
         artifactName: 'arm64-files-to-sign-list'
+    
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish ARM64 original structure'
+      inputs:
+        targetPath: '$(Pipeline.Workspace)/arm64-original-structure.txt'
+        artifactName: 'arm64-original-structure'
   
   - job: DownloadAndExtractX86_64
     displayName: 'Download and extract x86_64 tarball'
@@ -287,6 +293,12 @@ stages:
       inputs:
         targetPath: '$(Pipeline.Workspace)/x86_64-files-to-sign.txt'
         artifactName: 'x86_64-files-to-sign-list'
+    
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish x86_64 original structure'
+      inputs:
+        targetPath: '$(Pipeline.Workspace)/x86_64-original-structure.txt'
+        artifactName: 'x86_64-original-structure'
 
 # ============================================================================
 # STAGE 2: SIGN ARM64 BINARIES WITH ESRP

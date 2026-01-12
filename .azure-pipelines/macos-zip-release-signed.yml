@@ -113,61 +113,73 @@ stages:
         targetPath: '$(Pipeline.Workspace)/arm64-tarball'
     
     - bash: |
-        echo "=== Converting ARM64 Tarball to ZIP ==="
-        cd $(Pipeline.Workspace)/arm64-tarball
+        set -e
+        echo "=== Converting ARM64 Tarball and Identifying Binaries ==="
         
-        TARBALL=$(ls azure-cli-*.tar.gz 2>/dev/null | grep -v '.sha256' | head -1)
+        TAR_FILE=$(find $(Pipeline.Workspace)/arm64-tarball -name "*.tar.gz" -type f | grep -v '.sha256' | head -1)
         
-        if [ -z "$TARBALL" ]; then
-          echo "❌ Tarball not found"
+        if [ -z "$TAR_FILE" ]; then
+          echo "❌ ARM64 tarball not found"
           exit 1
         fi
         
-        echo "Found tarball: $TARBALL"
-        echo "Size: $(du -h "$TARBALL" | cut -f1)"
+        echo "✅ Found tarball: $(basename $TAR_FILE)"
+        echo "   Size: $(du -h $TAR_FILE | cut -f1)"
         
         # Extract version from filename
-        VERSION=$(echo "$TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
-        echo "Detected version: $VERSION"
-        echo "##vso[task.setvariable variable=AzureCliVersion;isOutput=true]$VERSION"
-        echo "##vso[task.setvariable variable=ReleaseTag;isOutput=true]v${VERSION}-zip-tarball"
+        TAR_NAME=$(basename "$TAR_FILE")
+        VERSION=$(echo "$TAR_NAME" | sed -E 's/azure-cli-([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
         
-        # Create extraction directory
+        echo ""
+        echo "Detected Version: $VERSION"
+        echo "##vso[task.setvariable variable=AzureCliVersion;isOutput=true]$VERSION"
+        echo "##vso[task.setvariable variable=ReleaseTag;isOutput=true]v$VERSION-zip-tarball"
+        
+        # Extract tarball
         EXTRACT_DIR="$(Pipeline.Workspace)/arm64-extracted"
         mkdir -p "$EXTRACT_DIR"
         
-        # Extract tarball
         echo ""
-        echo "Extracting tarball to: $EXTRACT_DIR"
-        tar -xzf "$TARBALL" -C "$EXTRACT_DIR"
+        echo "Extracting tarball..."
+        tar -xzf "$TAR_FILE" -C "$EXTRACT_DIR"
         
-        # Create ZIP from extracted content
-        ZIP_DIR="$(Pipeline.Workspace)/arm64-zip"
-        mkdir -p "$ZIP_DIR"
-        
-        ZIP_NAME="azure-cli-${VERSION}-macos-arm64.zip"
         echo ""
-        echo "Creating ZIP: $ZIP_NAME"
+        echo "=== Extracted Structure ==="
+        ls -lh "$EXTRACT_DIR"
+        
+        # Find binaries to sign (use file command to identify Mach-O binaries)
+        echo ""
+        echo "=== Finding Mach-O binaries to sign ==="
+        
+        FILES_TO_SIGN="$(Pipeline.Workspace)/arm64-files-to-sign.txt"
+        
         cd "$EXTRACT_DIR"
-        zip -r -q "$ZIP_DIR/$ZIP_NAME" .
+        find . -type f | while read filepath; do
+          filetype=$(file -b "$filepath")
+          if echo "$filetype" | grep -q -i "Mach-O"; then
+            echo "$filepath"
+          fi
+        done | sort -u > "$FILES_TO_SIGN"
         
-        # Generate SHA256 for ZIP
-        cd "$ZIP_DIR"
-        shasum -a 256 "$ZIP_NAME" > "${ZIP_NAME}.sha256"
-        
+        echo "Total Mach-O binaries: $(wc -l < $FILES_TO_SIGN)"
         echo ""
-        echo "✅ ARM64 tarball converted to ZIP"
-        echo "ZIP: $ZIP_NAME ($(du -h "$ZIP_NAME" | cut -f1))"
-      displayName: 'Convert ARM64 tarball to ZIP'
+        echo "Binaries to sign:"
+        cat "$FILES_TO_SIGN"
+        
+      displayName: 'Convert ARM64 tarball and identify binaries'
       name: ConvertARM64
     
-    - publish: $(Pipeline.Workspace)/arm64-extracted
-      artifact: arm64-extracted-content
-      displayName: 'Publish ARM64 extracted content'
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish ARM64 extracted contents'
+      inputs:
+        targetPath: '$(Pipeline.Workspace)/arm64-extracted'
+        artifact: 'arm64-unsigned-binaries'
     
-    - publish: $(Pipeline.Workspace)/arm64-zip
-      artifact: arm64-original-zip
-      displayName: 'Publish ARM64 ZIP'
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish ARM64 file list'
+      inputs:
+        targetPath: '$(Pipeline.Workspace)/arm64-files-to-sign.txt'
+        artifact: 'arm64-files-to-sign-list'
   
   - job: ConvertX86_64
     displayName: 'Download x86_64 tarball and convert to ZIP'
@@ -189,58 +201,68 @@ stages:
         targetPath: '$(Pipeline.Workspace)/x86_64-tarball'
     
     - bash: |
-        echo "=== Converting x86_64 Tarball to ZIP ==="
-        cd $(Pipeline.Workspace)/x86_64-tarball
+        set -e
+        echo "=== Converting x86_64 Tarball and Identifying Binaries ==="
         
-        TARBALL=$(ls azure-cli-*.tar.gz 2>/dev/null | grep -v '.sha256' | head -1)
+        TAR_FILE=$(find $(Pipeline.Workspace)/x86_64-tarball -name "*.tar.gz" -type f | grep -v '.sha256' | head -1)
         
-        if [ -z "$TARBALL" ]; then
-          echo "❌ Tarball not found"
+        if [ -z "$TAR_FILE" ]; then
+          echo "❌ x86_64 tarball not found"
           exit 1
         fi
         
-        echo "Found tarball: $TARBALL"
-        echo "Size: $(du -h "$TARBALL" | cut -f1)"
+        echo "✅ Found tarball: $(basename $TAR_FILE)"
+        echo "   Size: $(du -h $TAR_FILE | cut -f1)"
         
-        # Extract version from filename
-        VERSION=$(echo "$TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+        # Extract version
+        TAR_NAME=$(basename "$TAR_FILE")
+        VERSION=$(echo "$TAR_NAME" | sed -E 's/azure-cli-([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
         echo "Detected version: $VERSION"
         
-        # Create extraction directory
+        # Extract tarball
         EXTRACT_DIR="$(Pipeline.Workspace)/x86_64-extracted"
         mkdir -p "$EXTRACT_DIR"
         
-        # Extract tarball
         echo ""
-        echo "Extracting tarball to: $EXTRACT_DIR"
-        tar -xzf "$TARBALL" -C "$EXTRACT_DIR"
+        echo "Extracting tarball..."
+        tar -xzf "$TAR_FILE" -C "$EXTRACT_DIR"
         
-        # Create ZIP from extracted content
-        ZIP_DIR="$(Pipeline.Workspace)/x86_64-zip"
-        mkdir -p "$ZIP_DIR"
-        
-        ZIP_NAME="azure-cli-${VERSION}-macos-x86_64.zip"
         echo ""
-        echo "Creating ZIP: $ZIP_NAME"
+        echo "=== Extracted Structure ==="
+        ls -lh "$EXTRACT_DIR"
+        
+        # Find binaries to sign (use file command to identify Mach-O binaries)
+        echo ""
+        echo "=== Finding Mach-O binaries to sign ==="
+        
+        FILES_TO_SIGN="$(Pipeline.Workspace)/x86_64-files-to-sign.txt"
+        
         cd "$EXTRACT_DIR"
-        zip -r -q "$ZIP_DIR/$ZIP_NAME" .
+        find . -type f | while read filepath; do
+          filetype=$(file -b "$filepath")
+          if echo "$filetype" | grep -q -i "Mach-O"; then
+            echo "$filepath"
+          fi
+        done | sort -u > "$FILES_TO_SIGN"
         
-        # Generate SHA256 for ZIP
-        cd "$ZIP_DIR"
-        shasum -a 256 "$ZIP_NAME" > "${ZIP_NAME}.sha256"
-        
+        echo "Total Mach-O binaries: $(wc -l < $FILES_TO_SIGN)"
         echo ""
-        echo "✅ x86_64 tarball converted to ZIP"
-        echo "ZIP: $ZIP_NAME ($(du -h "$ZIP_NAME" | cut -f1))"
-      displayName: 'Convert x86_64 tarball to ZIP'
+        echo "Binaries to sign:"
+        cat "$FILES_TO_SIGN"
+        
+      displayName: 'Convert x86_64 tarball and identify binaries'
     
-    - publish: $(Pipeline.Workspace)/x86_64-extracted
-      artifact: x86_64-extracted-content
-      displayName: 'Publish x86_64 extracted content'
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish x86_64 extracted contents'
+      inputs:
+        targetPath: '$(Pipeline.Workspace)/x86_64-extracted'
+        artifact: 'x86_64-unsigned-binaries'
     
-    - publish: $(Pipeline.Workspace)/x86_64-zip
-      artifact: x86_64-original-zip
-      displayName: 'Publish x86_64 ZIP'
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish x86_64 file list'
+      inputs:
+        targetPath: '$(Pipeline.Workspace)/x86_64-files-to-sign.txt'
+        artifact: 'x86_64-files-to-sign-list'
 
 # ============================================================================
 # STAGE 2: SIGN ARM64 BINARIES WITH ESRP
@@ -258,63 +280,72 @@ stages:
     steps:
     - checkout: none
     
-    - download: current
-      artifact: arm64-extracted-content
-      displayName: 'Download ARM64 extracted content'
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download ARM64 unsigned binaries'
+      inputs:
+        artifactName: 'arm64-unsigned-binaries'
+        targetPath: '$(Pipeline.Workspace)/arm64-unsigned-binaries'
     
-    - download: current
-      artifact: arm64-original-zip
-      displayName: 'Download ARM64 original ZIP'
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download ARM64 file list'
+      inputs:
+        artifactName: 'arm64-files-to-sign-list'
+        targetPath: '$(Pipeline.Workspace)'
     
     - pwsh: |
-        Write-Host "=== Preparing ARM64 Binaries for ESRP Signing ==="
+        Write-Host "=== Preparing ARM64 binaries for ESRP signing ==="
+        Write-Host "NOTE: ESRP MacAppDeveloperSign requires ZIP archives"
         
-        $extractedDir = "$(Pipeline.Workspace)/arm64-extracted-content"
-        $signingDir = "$(Pipeline.Workspace)/binaries-to-sign"
-        New-Item -ItemType Directory -Path $signingDir -Force | Out-Null
+        $unsignedDir = "$(Pipeline.Workspace)/arm64-unsigned-binaries"
+        $fileListPath = "$(Pipeline.Workspace)/arm64-files-to-sign.txt"
+        $toBeSignedDir = "$(Pipeline.Workspace)/toBeSigned"
         
-        Write-Host "Searching for Mach-O binaries in: $extractedDir"
+        New-Item -ItemType Directory -Path $toBeSignedDir -Force | Out-Null
         
-        # Find all Mach-O binaries (using file command would be better, but on Windows we'll use extensions and paths)
-        $binaryPaths = @(
-          "bin/python*",
-          "bin/pip*",
-          "bin/az",
-          "libexec/bin/*"
-        )
+        $filesToSign = Get-Content $fileListPath
+        Write-Host "Files to sign: $($filesToSign.Count)"
         
-        $count = 0
-        foreach ($pattern in $binaryPaths) {
-          $fullPattern = Join-Path $extractedDir $pattern
-          $files = Get-ChildItem -Path $fullPattern -File -ErrorAction SilentlyContinue
+        Write-Host ""
+        Write-Host "Creating individual ZIP files for each binary..."
+        
+        $zippedCount = 0
+        $fileMapping = @{}
+        
+        foreach ($relPath in $filesToSign) {
+          $relPath = $relPath.TrimStart('.', '/')
+          $sourcePath = Join-Path $unsignedDir $relPath
           
-          foreach ($file in $files) {
-            # Skip .bat, .ps1, .sh, .py files
-            if ($file.Extension -in @('.bat', '.ps1', '.sh', '.py', '.pyc', '.txt', '.md')) {
-              continue
+          if (Test-Path $sourcePath) {
+            $flatName = $relPath -replace '[/\\]', '__'
+            $zipName = "$flatName.zip"
+            $zipPath = Join-Path $toBeSignedDir $zipName
+            
+            $fileName = Split-Path $sourcePath -Leaf
+            Compress-Archive -Path $sourcePath -DestinationPath $zipPath -Force
+            
+            $fileMapping[$zipName] = @{
+              "OriginalPath" = $relPath
+              "FileName" = $fileName
             }
             
-            $relativePath = $file.FullName.Substring($extractedDir.Length + 1)
-            $targetDir = Join-Path $signingDir (Split-Path $relativePath -Parent)
-            New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+            $zippedCount++
             
-            Copy-Item -Path $file.FullName -Destination (Join-Path $signingDir $relativePath) -Force
-            $count++
-            Write-Host "  ✅ $relativePath"
+            if ($zippedCount -le 10) {
+              Write-Host "  ✓ $relPath -> $zipName"
+            }
           }
         }
         
         Write-Host ""
-        Write-Host "Total binaries prepared for signing: $count"
+        Write-Host "✅ Created $zippedCount ZIP files"
         
-        if ($count -eq 0) {
-          Write-Error "❌ No binaries found to sign"
-          exit 1
-        }
-      displayName: 'Prepare binaries for signing'
+        $mappingPath = "$(Pipeline.Workspace)/arm64-file-mapping.json"
+        $fileMapping | ConvertTo-Json | Set-Content $mappingPath
+        
+      displayName: 'Prepare ARM64 binaries for signing (ZIP)'
     
     - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
-      displayName: 'ESRP - Sign ARM64 binaries'
+      displayName: 'ESRP - Sign ARM64 macOS binaries'
       inputs:
         ConnectedServiceName: 'ame_esrp_connection'
         AppRegistrationClientId: '$(ESRPAppClientId)'
@@ -322,8 +353,8 @@ stages:
         AuthAKVName: '$(ESRPKVName)'
         AuthCertName: '$(ESRPAuthCertName)'
         AuthSignCertName: '$(ESRPSignCertName)'
-        FolderPath: '$(Pipeline.Workspace)/binaries-to-sign'
-        Pattern: '**'
+        FolderPath: '$(Pipeline.Workspace)/toBeSigned'
+        Pattern: '*.zip'
         signConfigType: 'inlineSignParams'
         inlineOperation: |
           [
@@ -332,45 +363,72 @@ stages:
               "OperationCode": "MacAppDeveloperSign",
               "ToolName": "sign",
               "ToolVersion": "1.0",
-              "Parameters": {}
+              "Parameters": {
+                "Hardening": "--options=runtime"
+              }
             }
           ]
-        SessionTimeout: '60'
+        SessionTimeout: '120'
         MaxConcurrency: '50'
         MaxRetryAttempts: '5'
     
     - pwsh: |
-        Write-Host "=== Copying Signed Binaries Back ==="
+        Write-Host "=== Extracting signed ARM64 binaries from ZIPs ==="
         
-        $signedDir = "$(Pipeline.Workspace)/binaries-to-sign"
-        $extractedDir = "$(Pipeline.Workspace)/arm64-extracted-content"
-        $outputDir = "$(Build.ArtifactStagingDirectory)/arm64-signed-content"
+        $signedZipsDir = "$(Pipeline.Workspace)/toBeSigned"
+        $outputDir = "$(Pipeline.Workspace)/arm64-signed-binaries"
+        $mappingPath = "$(Pipeline.Workspace)/arm64-file-mapping.json"
         
-        # Copy entire extracted content
-        Write-Host "Copying extracted content to output..."
-        Copy-Item -Path $extractedDir -Destination $outputDir -Recurse -Force
+        $fileMapping = Get-Content $mappingPath | ConvertFrom-Json
         
-        # Overwrite with signed binaries
-        Write-Host "Overwriting with signed binaries..."
-        $signedFiles = Get-ChildItem -Path $signedDir -Recurse -File
+        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
         
-        $count = 0
-        foreach ($signedFile in $signedFiles) {
-          $relativePath = $signedFile.FullName.Substring($signedDir.Length + 1)
-          $targetPath = Join-Path $outputDir $relativePath
+        $extractedCount = 0
+        foreach ($property in $fileMapping.PSObject.Properties) {
+          $zipName = $property.Name
+          $originalRelPath = $property.Value.OriginalPath
+          $fileName = $property.Value.FileName
           
-          Copy-Item -Path $signedFile.FullName -Destination $targetPath -Force
-          $count++
-          Write-Host "  ✅ $relativePath"
+          $zipPath = Join-Path $signedZipsDir $zipName
+          
+          if (Test-Path $zipPath) {
+            $tempExtractDir = Join-Path $env:TEMP "extract-$extractedCount"
+            New-Item -ItemType Directory -Path $tempExtractDir -Force | Out-Null
+            
+            Expand-Archive -Path $zipPath -DestinationPath $tempExtractDir -Force
+            
+            $signedFile = Join-Path $tempExtractDir $fileName
+            
+            if (Test-Path $signedFile) {
+              $targetPath = Join-Path $outputDir $originalRelPath
+              $targetDir = Split-Path $targetPath -Parent
+              
+              if (-not (Test-Path $targetDir)) {
+                New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+              }
+              
+              Copy-Item -Path $signedFile -Destination $targetPath -Force
+              $extractedCount++
+              
+              if ($extractedCount -le 10) {
+                Write-Host "  ✓ $zipName -> $originalRelPath"
+              }
+            }
+            
+            Remove-Item -Path $tempExtractDir -Recurse -Force -ErrorAction SilentlyContinue
+          }
         }
         
         Write-Host ""
-        Write-Host "✅ Copied $count signed binaries"
-      displayName: 'Merge signed binaries'
+        Write-Host "✅ Extracted $extractedCount signed binaries"
+        
+      displayName: 'Extract signed ARM64 binaries from ZIPs'
     
-    - publish: $(Build.ArtifactStagingDirectory)/arm64-signed-content
-      artifact: arm64-signed-content
-      displayName: 'Publish ARM64 signed content'
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish ARM64 signed binaries'
+      inputs:
+        targetPath: '$(Pipeline.Workspace)/arm64-signed-binaries'
+        artifact: 'arm64-signed'
 
 # ============================================================================
 # STAGE 3: SIGN X86_64 BINARIES WITH ESRP
