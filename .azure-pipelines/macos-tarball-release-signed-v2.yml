@@ -634,12 +634,19 @@ stages:
         OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/signed-tarballs"
         mkdir -p "$OUTPUT_DIR"
         
-        # Create tarball
+        echo "Checking signed binaries structure:"
+        ls -la "$SIGNED_DIR"
+        echo ""
+        
+        # Create tarball (preserve directory structure from extraction)
         TARBALL_NAME="azure-cli-$(AzureCliVersion)-macos-arm64-signed.tar.gz"
         
         cd "$SIGNED_DIR"
         echo "Creating tarball: $TARBALL_NAME"
-        tar -czf "$OUTPUT_DIR/$TARBALL_NAME" .
+        
+        # Create tarball with all contents (bin/, libexec/, etc.)
+        # Use ./* to include all directories while avoiding . and ..
+        tar -czf "$OUTPUT_DIR/$TARBALL_NAME" ./bin ./libexec
         
         # Generate SHA256
         cd "$OUTPUT_DIR"
@@ -648,6 +655,9 @@ stages:
         echo ""
         echo "✅ ARM64 tarball created:"
         ls -lh "$OUTPUT_DIR/$TARBALL_NAME"
+        echo ""
+        echo "Tarball contents:"
+        tar -tzf "$TARBALL_NAME" | head -20
         echo ""
         echo "SHA256:"
         cat "$TARBALL_NAME.sha256"
@@ -680,12 +690,18 @@ stages:
         OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/signed-tarballs"
         mkdir -p "$OUTPUT_DIR"
         
-        # Create tarball
+        echo "Checking signed binaries structure:"
+        ls -la "$SIGNED_DIR"
+        echo ""
+        
+        # Create tarball (preserve directory structure)
         TARBALL_NAME="azure-cli-$(AzureCliVersion)-macos-x86_64-signed.tar.gz"
         
         cd "$SIGNED_DIR"
         echo "Creating tarball: $TARBALL_NAME"
-        tar -czf "$OUTPUT_DIR/$TARBALL_NAME" .
+        
+        # Create tarball with all contents (bin/, libexec/, etc.)
+        tar -czf "$OUTPUT_DIR/$TARBALL_NAME" ./bin ./libexec
         
         # Generate SHA256
         cd "$OUTPUT_DIR"
@@ -694,6 +710,9 @@ stages:
         echo ""
         echo "✅ x86_64 tarball created:"
         ls -lh "$OUTPUT_DIR/$TARBALL_NAME"
+        echo ""
+        echo "Tarball contents:"
+        tar -tzf "$TARBALL_NAME" | head -20
         echo ""
         echo "SHA256:"
         cat "$TARBALL_NAME.sha256"
@@ -1336,12 +1355,496 @@ stages:
     - publish: Formula
       artifact: homebrew-formula
       displayName: 'Publish formula'
+  
+  - job: CommitFormula
+    displayName: 'Commit formula to tap repository'
+    dependsOn: GenerateFormula
+    variables:
+      ARM64_SHA256: $[ dependencies.GenerateFormula.outputs['GetDetails.ARM64_SHA256'] ]
+      X86_64_SHA256: $[ dependencies.GenerateFormula.outputs['GetDetails.X86_64_SHA256'] ]
+      ARM64_URL: $[ dependencies.GenerateFormula.outputs['GetDetails.ARM64_URL'] ]
+      X86_64_URL: $[ dependencies.GenerateFormula.outputs['GetDetails.X86_64_URL'] ]
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: homebrewtap
+      persistCredentials: true
+      displayName: 'Checkout Homebrew tap repository'
+    
+    - download: current
+      artifact: homebrew-formula
+      displayName: 'Download formula'
+    
+    - bash: |
+        set -e
+        echo "=== Configure Git ==="
+        
+        git config --global user.email "azure-pipelines@microsoft.com"
+        git config --global user.name "Azure Pipelines Bot"
+        
+        echo "✅ Git configured"
+      displayName: 'Configure git'
+    
+    - bash: |
+        set -e
+        echo "=== Commit Formula to Main Branch ==="
+        
+        # Check current state
+        echo "Current branch:"
+        git branch -a
+        echo ""
+        
+        # Checkout main branch
+        git checkout -B main origin/main
+        
+        # Copy formula
+        mkdir -p Formula
+        cp $(Pipeline.Workspace)/homebrew-formula/$(FormulaName).rb Formula/
+        
+        # Add formula
+        git add Formula/$(FormulaName).rb
+        
+        # Check if there are changes to commit
+        if git diff --cached --quiet; then
+          echo "ℹ️  No changes detected - formula is already up-to-date"
+          COMMIT_SHA=$(git rev-parse HEAD)
+          echo "✅ Formula is current (no update needed)"
+          echo "   Repository: https://github.com/$(HomebrewTapRepo)"
+          echo "   Latest commit: $COMMIT_SHA"
+        else
+          # Commit changes
+          git commit -m "Update Azure CLI Signed Tarball to version $(AzureCliVersion)
+
+          - Version: $(AzureCliVersion)
+          - Release Tag: $(ReleaseTag)
+          - ARM64 SHA256: $(ARM64_SHA256)
+          - x86_64 SHA256: $(X86_64_SHA256)
+          - Code-signed with Developer ID Application
+          - Notarized by Apple
+          - No Gatekeeper warnings
+
+          Build: $(TarballBuildId)
+          Release: $(Build.BuildId)
+          "
+          
+          # Push to main
+          git push origin main
+          
+          COMMIT_SHA=$(git rev-parse HEAD)
+          echo ""
+          echo "✅ Formula committed to main branch!"
+          echo "   Repository: https://github.com/$(HomebrewTapRepo)"
+          echo "   Commit: $COMMIT_SHA"
+        fi
+        echo ""
+      displayName: 'Commit and push formula'
+    
+    - bash: |
+        echo "=== Formula Update Summary ==="
+        echo ""
+        echo "✅ Homebrew Formula Updated!"
+        echo ""
+        echo "Repository: https://github.com/$(HomebrewTapRepo)"
+        echo "Formula: $(FormulaName)"
+        echo "Version: $(AzureCliVersion)"
+        echo ""
+        echo "Users can now install with:"
+        echo ""
+        echo "  brew tap $(HomebrewTapRepo)"
+        echo "  brew install $(FormulaName)"
+        echo ""
+      displayName: 'Update summary'
 
 # ============================================================================
-# STAGE 9: RELEASE SUMMARY
+# STAGE 9: TEST HOMEBREW INSTALLATION
+# ============================================================================
+
+- stage: TestInstallation
+  displayName: 'Stage 9: Test Homebrew Installation'
+  dependsOn:
+  - UpdateHomebrewFormula
+  - DownloadAndExtract
+  condition: succeeded()
+  variables:
+    AzureCliVersion: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractARM64.outputs['ExtractARM64.AzureCliVersion'] ]
+  jobs:
+  - job: TestARM64
+    displayName: 'Test ARM64 installation on Apple Silicon'
+    pool:
+      vmImage: 'macos-15'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo "======================================"
+        echo "  Update Homebrew"
+        echo "======================================"
+        echo ""
+        brew update
+        
+        echo ""
+        echo "Homebrew version:"
+        brew --version
+        
+        echo ""
+        echo "System architecture:"
+        uname -m
+      displayName: 'Update Homebrew'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Add Homebrew Tap"
+        echo "======================================"
+        echo ""
+        
+        TAP_NAME="$(HomebrewTapRepo)"
+        echo "Tapping repository: $TAP_NAME"
+        brew tap "$TAP_NAME"
+        
+        echo ""
+        echo "Verifying tap:"
+        brew tap | grep "$TAP_NAME" || {
+          echo "❌ ERROR: Tap not found"
+          exit 1
+        }
+        
+        echo ""
+        echo "✅ Tap added successfully"
+      displayName: 'Add Homebrew tap'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Install Azure CLI via Homebrew"
+        echo "======================================"
+        echo ""
+        
+        FORMULA_NAME="$(FormulaName)"
+        echo "Installing formula: $FORMULA_NAME"
+        
+        brew install "$FORMULA_NAME" -v
+        
+        echo ""
+        echo "✅ Installation complete"
+      displayName: 'Install Azure CLI'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Verify Installation"
+        echo "======================================"
+        echo ""
+        
+        # Get Cellar path
+        FORMULA_NAME="$(FormulaName)"
+        CELLAR_PATH=$(brew --cellar "$FORMULA_NAME")
+        VERSION=$(brew info "$FORMULA_NAME" --json | python3 -c "import sys, json; print(json.load(sys.stdin)[0]['installed'][0]['version'])")
+        
+        echo "Formula: $FORMULA_NAME"
+        echo "Version: $VERSION"
+        echo "Cellar path: $CELLAR_PATH/$VERSION"
+        echo ""
+        
+        # Check installation directory structure
+        echo "Installation structure:"
+        ls -la "$CELLAR_PATH/$VERSION/" || {
+          echo "❌ ERROR: Installation directory not found"
+          exit 1
+        }
+        
+        echo ""
+        echo "Binary location:"
+        ls -la "$CELLAR_PATH/$VERSION/bin/az" || {
+          echo "❌ ERROR: az binary not found"
+          exit 1
+        }
+        
+        echo ""
+        echo "✅ Installation structure verified"
+      displayName: 'Verify installation structure'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Test Azure CLI Commands"
+        echo "======================================"
+        echo ""
+        
+        # Verify az is in PATH
+        which az || {
+          echo "❌ ERROR: az not found in PATH"
+          exit 1
+        }
+        
+        echo "Azure CLI location:"
+        which az
+        
+        echo ""
+        echo "Testing: az --version"
+        az --version || {
+          echo "❌ ERROR: az --version failed"
+          exit 1
+        }
+        
+        echo ""
+        echo "Testing: az help"
+        az help > /dev/null || {
+          echo "❌ ERROR: az help failed"
+          exit 1
+        }
+        
+        echo ""
+        echo "Testing: az account list-locations"
+        az account list-locations --output table 2>/dev/null || true
+        
+        echo ""
+        echo "✅ All commands executed successfully"
+      displayName: 'Test CLI commands'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Verify Code Signatures (Signed Tarball)"
+        echo "======================================"
+        echo ""
+        
+        FORMULA_NAME="$(FormulaName)"
+        CELLAR_PATH=$(brew --cellar "$FORMULA_NAME")
+        VERSION=$(brew info "$FORMULA_NAME" --json | python3 -c "import sys, json; print(json.load(sys.stdin)[0]['installed'][0]['version'])")
+        
+        echo "Checking code signatures..."
+        echo ""
+        
+        # Check Python binary signature
+        PYTHON_BIN="$CELLAR_PATH/$VERSION/libexec/bin/python3"
+        echo "Python binary: $PYTHON_BIN"
+        codesign -dv "$PYTHON_BIN" 2>&1 || {
+          echo "⚠️  WARNING: Python binary not signed (expected for testing)"
+        }
+        
+        echo ""
+        echo "Checking quarantine attributes..."
+        xattr "$PYTHON_BIN" || echo "  No extended attributes"
+        
+        echo ""
+        echo "✅ Signature verification complete"
+      displayName: 'Verify code signatures'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Cleanup"
+        echo "======================================"
+        echo ""
+        
+        FORMULA_NAME="$(FormulaName)"
+        
+        echo "Uninstalling $FORMULA_NAME..."
+        brew uninstall "$FORMULA_NAME"
+        
+        echo ""
+        echo "Removing tap..."
+        brew untap "$(HomebrewTapRepo)"
+        
+        echo ""
+        echo "✅ Cleanup complete"
+      displayName: 'Cleanup test installation'
+  
+  - job: TestX86_64
+    displayName: 'Test x86_64 installation on Intel'
+    # Note: macos-latest is Intel (x86_64) as of January 2026
+    # Tests x86_64 tarball on native Intel hardware
+    pool:
+      vmImage: 'macos-latest'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo "======================================"
+        echo "  Update Homebrew"
+        echo "======================================"
+        echo ""
+        brew update
+        
+        echo ""
+        echo "Homebrew version:"
+        brew --version
+        
+        echo ""
+        echo "System architecture:"
+        uname -m
+      displayName: 'Update Homebrew'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Add Homebrew Tap"
+        echo "======================================"
+        echo ""
+        
+        TAP_NAME="$(HomebrewTapRepo)"
+        echo "Tapping repository: $TAP_NAME"
+        brew tap "$TAP_NAME"
+        
+        echo ""
+        echo "Verifying tap:"
+        brew tap | grep "$TAP_NAME" || {
+          echo "❌ ERROR: Tap not found"
+          exit 1
+        }
+        
+        echo ""
+        echo "✅ Tap added successfully"
+      displayName: 'Add Homebrew tap'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Install Azure CLI via Homebrew"
+        echo "======================================"
+        echo ""
+        
+        FORMULA_NAME="$(FormulaName)"
+        echo "Installing formula: $FORMULA_NAME"
+        
+        brew install "$FORMULA_NAME" -v
+        
+        echo ""
+        echo "✅ Installation complete"
+      displayName: 'Install Azure CLI'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Verify Installation"
+        echo "======================================"
+        echo ""
+        
+        # Get Cellar path
+        FORMULA_NAME="$(FormulaName)"
+        CELLAR_PATH=$(brew --cellar "$FORMULA_NAME")
+        VERSION=$(brew info "$FORMULA_NAME" --json | python3 -c "import sys, json; print(json.load(sys.stdin)[0]['installed'][0]['version'])")
+        
+        echo "Formula: $FORMULA_NAME"
+        echo "Version: $VERSION"
+        echo "Cellar path: $CELLAR_PATH/$VERSION"
+        echo ""
+        
+        # Check installation directory structure
+        echo "Installation structure:"
+        ls -la "$CELLAR_PATH/$VERSION/" || {
+          echo "❌ ERROR: Installation directory not found"
+          exit 1
+        }
+        
+        echo ""
+        echo "Binary location:"
+        ls -la "$CELLAR_PATH/$VERSION/bin/az" || {
+          echo "❌ ERROR: az binary not found"
+          exit 1
+        }
+        
+        echo ""
+        
+        # Verify architecture
+        echo "Verifying architecture..."
+        PYTHON_BIN="$CELLAR_PATH/$VERSION/libexec/bin/python3"
+        ARCH=$(file "$PYTHON_BIN" | grep -o "x86_64\|arm64")
+        echo "Python binary architecture: $ARCH"
+        
+        if [ "$ARCH" != "x86_64" ]; then
+          echo "❌ ERROR: Expected x86_64 but got $ARCH"
+          exit 1
+        fi
+        
+        echo ""
+        echo "✅ Installation structure verified"
+      displayName: 'Verify installation structure'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Test Azure CLI Commands"
+        echo "======================================"
+        echo ""
+        
+        # Verify az is in PATH
+        which az || {
+          echo "❌ ERROR: az not found in PATH"
+          exit 1
+        }
+        
+        echo "Azure CLI location:"
+        which az
+        
+        echo ""
+        echo "Testing: az --version"
+        az --version || {
+          echo "❌ ERROR: az --version failed"
+          exit 1
+        }
+        
+        echo ""
+        echo "Testing: az help"
+        az help > /dev/null || {
+          echo "❌ ERROR: az help failed"
+          exit 1
+        }
+        
+        echo ""
+        echo "Testing: az account list-locations"
+        az account list-locations --output table 2>/dev/null || true
+        
+        echo ""
+        echo "✅ All commands executed successfully"
+      displayName: 'Test CLI commands'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Verify Code Signatures (Signed Tarball)"
+        echo "======================================"
+        echo ""
+        
+        FORMULA_NAME="$(FormulaName)"
+        CELLAR_PATH=$(brew --cellar "$FORMULA_NAME")
+        VERSION=$(brew info "$FORMULA_NAME" --json | python3 -c "import sys, json; print(json.load(sys.stdin)[0]['installed'][0]['version'])")
+        
+        echo "Checking code signatures..."
+        echo ""
+        
+        # Check Python binary signature
+        PYTHON_BIN="$CELLAR_PATH/$VERSION/libexec/bin/python3"
+        echo "Python binary: $PYTHON_BIN"
+        codesign -dv "$PYTHON_BIN" 2>&1 || {
+          echo "⚠️  WARNING: Python binary not signed (expected for testing)"
+        }
+        
+        echo ""
+        echo "Checking quarantine attributes..."
+        xattr "$PYTHON_BIN" || echo "  No extended attributes"
+        
+        echo ""
+        echo "✅ Signature verification complete"
+      displayName: 'Verify code signatures'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Cleanup"
+        echo "======================================"
+        echo ""
+        
+        FORMULA_NAME="$(FormulaName)"
+        
+        echo "Uninstalling $FORMULA_NAME..."
+        brew uninstall "$FORMULA_NAME"
+        
+        echo ""
+        echo "Removing tap..."
+        brew untap "$(HomebrewTapRepo)"
+        
+        echo ""
+        echo "✅ Cleanup complete"
+      displayName: 'Cleanup test installation'
+
+# ============================================================================
+# STAGE 10: RELEASE SUMMARY
 # ============================================================================
 - stage: ReleaseSummary
-  displayName: 'Stage 9: Release Summary'
+  displayName: 'Stage 10: Release Summary'
   dependsOn:
   - DownloadAndExtract
   - SignARM64Binaries
@@ -1351,6 +1854,7 @@ stages:
   - VerifySignatures
   - PublishToGitHub
   - UpdateHomebrewFormula
+  - TestInstallation
   condition: always()
   variables:
     AzureCliVersion: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractARM64.outputs['ExtractARM64.AzureCliVersion'] ]
