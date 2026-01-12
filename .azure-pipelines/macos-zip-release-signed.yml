@@ -446,63 +446,72 @@ stages:
     steps:
     - checkout: none
     
-    - download: current
-      artifact: x86_64-extracted-content
-      displayName: 'Download x86_64 extracted content'
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download x86_64 unsigned binaries'
+      inputs:
+        artifactName: 'x86_64-unsigned-binaries'
+        targetPath: '$(Pipeline.Workspace)/x86_64-unsigned-binaries'
     
-    - download: current
-      artifact: x86_64-original-zip
-      displayName: 'Download x86_64 original ZIP'
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download x86_64 file list'
+      inputs:
+        artifactName: 'x86_64-files-to-sign-list'
+        targetPath: '$(Pipeline.Workspace)'
     
     - pwsh: |
-        Write-Host "=== Preparing x86_64 Binaries for ESRP Signing ==="
+        Write-Host "=== Preparing x86_64 binaries for ESRP signing ==="
+        Write-Host "NOTE: ESRP MacAppDeveloperSign requires ZIP archives"
         
-        $extractedDir = "$(Pipeline.Workspace)/x86_64-extracted-content"
-        $signingDir = "$(Pipeline.Workspace)/binaries-to-sign"
-        New-Item -ItemType Directory -Path $signingDir -Force | Out-Null
+        $unsignedDir = "$(Pipeline.Workspace)/x86_64-unsigned-binaries"
+        $fileListPath = "$(Pipeline.Workspace)/x86_64-files-to-sign.txt"
+        $toBeSignedDir = "$(Pipeline.Workspace)/toBeSigned"
         
-        Write-Host "Searching for Mach-O binaries in: $extractedDir"
+        New-Item -ItemType Directory -Path $toBeSignedDir -Force | Out-Null
         
-        # Find all Mach-O binaries
-        $binaryPaths = @(
-          "bin/python*",
-          "bin/pip*",
-          "bin/az",
-          "libexec/bin/*"
-        )
+        $filesToSign = Get-Content $fileListPath
+        Write-Host "Files to sign: $($filesToSign.Count)"
         
-        $count = 0
-        foreach ($pattern in $binaryPaths) {
-          $fullPattern = Join-Path $extractedDir $pattern
-          $files = Get-ChildItem -Path $fullPattern -File -ErrorAction SilentlyContinue
+        Write-Host ""
+        Write-Host "Creating individual ZIP files for each binary..."
+        
+        $zippedCount = 0
+        $fileMapping = @{}
+        
+        foreach ($relPath in $filesToSign) {
+          $relPath = $relPath.TrimStart('.', '/')
+          $sourcePath = Join-Path $unsignedDir $relPath
           
-          foreach ($file in $files) {
-            # Skip script files
-            if ($file.Extension -in @('.bat', '.ps1', '.sh', '.py', '.pyc', '.txt', '.md')) {
-              continue
+          if (Test-Path $sourcePath) {
+            $flatName = $relPath -replace '[/\\]', '__'
+            $zipName = "$flatName.zip"
+            $zipPath = Join-Path $toBeSignedDir $zipName
+            
+            $fileName = Split-Path $sourcePath -Leaf
+            Compress-Archive -Path $sourcePath -DestinationPath $zipPath -Force
+            
+            $fileMapping[$zipName] = @{
+              "OriginalPath" = $relPath
+              "FileName" = $fileName
             }
             
-            $relativePath = $file.FullName.Substring($extractedDir.Length + 1)
-            $targetDir = Join-Path $signingDir (Split-Path $relativePath -Parent)
-            New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+            $zippedCount++
             
-            Copy-Item -Path $file.FullName -Destination (Join-Path $signingDir $relativePath) -Force
-            $count++
-            Write-Host "  ✅ $relativePath"
+            if ($zippedCount -le 10) {
+              Write-Host "  ✓ $relPath -> $zipName"
+            }
           }
         }
         
         Write-Host ""
-        Write-Host "Total binaries prepared for signing: $count"
+        Write-Host "✅ Created $zippedCount ZIP files"
         
-        if ($count -eq 0) {
-          Write-Error "❌ No binaries found to sign"
-          exit 1
-        }
-      displayName: 'Prepare binaries for signing'
+        $mappingPath = "$(Pipeline.Workspace)/x86_64-file-mapping.json"
+        $fileMapping | ConvertTo-Json | Set-Content $mappingPath
+        
+      displayName: 'Prepare x86_64 binaries for signing (ZIP)'
     
     - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
-      displayName: 'ESRP - Sign x86_64 binaries'
+      displayName: 'ESRP - Sign x86_64 macOS binaries'
       inputs:
         ConnectedServiceName: 'ame_esrp_connection'
         AppRegistrationClientId: '$(ESRPAppClientId)'
@@ -510,8 +519,8 @@ stages:
         AuthAKVName: '$(ESRPKVName)'
         AuthCertName: '$(ESRPAuthCertName)'
         AuthSignCertName: '$(ESRPSignCertName)'
-        FolderPath: '$(Pipeline.Workspace)/binaries-to-sign'
-        Pattern: '**'
+        FolderPath: '$(Pipeline.Workspace)/toBeSigned'
+        Pattern: '*.zip'
         signConfigType: 'inlineSignParams'
         inlineOperation: |
           [
@@ -520,45 +529,72 @@ stages:
               "OperationCode": "MacAppDeveloperSign",
               "ToolName": "sign",
               "ToolVersion": "1.0",
-              "Parameters": {}
+              "Parameters": {
+                "Hardening": "--options=runtime"
+              }
             }
           ]
-        SessionTimeout: '60'
+        SessionTimeout: '120'
         MaxConcurrency: '50'
         MaxRetryAttempts: '5'
     
     - pwsh: |
-        Write-Host "=== Copying Signed Binaries Back ==="
+        Write-Host "=== Extracting signed x86_64 binaries from ZIPs ==="
         
-        $signedDir = "$(Pipeline.Workspace)/binaries-to-sign"
-        $extractedDir = "$(Pipeline.Workspace)/x86_64-extracted-content"
-        $outputDir = "$(Build.ArtifactStagingDirectory)/x86_64-signed-content"
+        $signedZipsDir = "$(Pipeline.Workspace)/toBeSigned"
+        $outputDir = "$(Pipeline.Workspace)/x86_64-signed-binaries"
+        $mappingPath = "$(Pipeline.Workspace)/x86_64-file-mapping.json"
         
-        # Copy entire extracted content
-        Write-Host "Copying extracted content to output..."
-        Copy-Item -Path $extractedDir -Destination $outputDir -Recurse -Force
+        $fileMapping = Get-Content $mappingPath | ConvertFrom-Json
         
-        # Overwrite with signed binaries
-        Write-Host "Overwriting with signed binaries..."
-        $signedFiles = Get-ChildItem -Path $signedDir -Recurse -File
+        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
         
-        $count = 0
-        foreach ($signedFile in $signedFiles) {
-          $relativePath = $signedFile.FullName.Substring($signedDir.Length + 1)
-          $targetPath = Join-Path $outputDir $relativePath
+        $extractedCount = 0
+        foreach ($property in $fileMapping.PSObject.Properties) {
+          $zipName = $property.Name
+          $originalRelPath = $property.Value.OriginalPath
+          $fileName = $property.Value.FileName
           
-          Copy-Item -Path $signedFile.FullName -Destination $targetPath -Force
-          $count++
-          Write-Host "  ✅ $relativePath"
+          $zipPath = Join-Path $signedZipsDir $zipName
+          
+          if (Test-Path $zipPath) {
+            $tempExtractDir = Join-Path $env:TEMP "extract-$extractedCount"
+            New-Item -ItemType Directory -Path $tempExtractDir -Force | Out-Null
+            
+            Expand-Archive -Path $zipPath -DestinationPath $tempExtractDir -Force
+            
+            $signedFile = Join-Path $tempExtractDir $fileName
+            
+            if (Test-Path $signedFile) {
+              $targetPath = Join-Path $outputDir $originalRelPath
+              $targetDir = Split-Path $targetPath -Parent
+              
+              if (-not (Test-Path $targetDir)) {
+                New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+              }
+              
+              Copy-Item -Path $signedFile -Destination $targetPath -Force
+              $extractedCount++
+              
+              if ($extractedCount -le 10) {
+                Write-Host "  ✓ $zipName -> $originalRelPath"
+              }
+            }
+            
+            Remove-Item -Path $tempExtractDir -Recurse -Force -ErrorAction SilentlyContinue
+          }
         }
         
         Write-Host ""
-        Write-Host "✅ Copied $count signed binaries"
-      displayName: 'Merge signed binaries'
+        Write-Host "✅ Extracted $extractedCount signed binaries"
+        
+      displayName: 'Extract signed x86_64 binaries from ZIPs'
     
-    - publish: $(Build.ArtifactStagingDirectory)/x86_64-signed-content
-      artifact: x86_64-signed-content
-      displayName: 'Publish x86_64 signed content'
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish x86_64 signed binaries'
+      inputs:
+        targetPath: '$(Pipeline.Workspace)/x86_64-signed-binaries'
+        artifact: 'x86_64-signed'
 
 # ============================================================================
 # STAGE 4: REPACKAGE SIGNED ZIPS
