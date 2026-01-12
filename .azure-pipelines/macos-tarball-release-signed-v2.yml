@@ -748,9 +748,8 @@ stages:
       displayName: 'Download ARM64 signed tarball'
     
     - pwsh: |
-        Write-Host "=== Preparing ARM64 Signed Binaries for Apple Notarization ==="
-        Write-Host "NOTE: Apple notarization requires ZIP format"
-        Write-Host "We must extract the tarball and ZIP the actual signed binaries"
+        Write-Host "=== Preparing ARM64 Signed Tarball for Apple Notarization ==="
+        Write-Host "NOTE: Apple notarization requires ZIP format, not tar.gz"
         
         $tarballDir = "$(Pipeline.Workspace)/arm64-signed-tarball"
         $tarball = Get-ChildItem -Path $tarballDir -Filter "*-signed.tar.gz" -File | Select-Object -First 1
@@ -762,34 +761,18 @@ stages:
         
         Write-Host "✅ Found signed tarball: $($tarball.Name)"
         
-        # Extract tarball to temporary directory
-        $extractDir = "$(Pipeline.Workspace)/arm64-extracted"
-        New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
-        
-        Write-Host ""
-        Write-Host "Extracting tarball..."
-        tar -xzf $tarball.FullName -C $extractDir
-        
-        Write-Host "Extracted contents:"
-        Get-ChildItem -Path $extractDir -Recurse | Select-Object -First 10 | ForEach-Object { Write-Host "  $($_.FullName)" }
-        
-        # Create ZIP from extracted contents (not the tar.gz file itself)
+        # Create ZIP for notarization (Apple requirement)
         $zipName = $tarball.Name -replace '\.tar\.gz$', '.zip'
         $zipPath = "$(Pipeline.Workspace)/$zipName"
         
         Write-Host ""
-        Write-Host "Creating ZIP for notarization from extracted binaries..."
-        # ZIP the actual directories (bin/ and libexec/), not the tar.gz
-        Push-Location $extractDir
-        Compress-Archive -Path * -DestinationPath $zipPath -Force
-        Pop-Location
+        Write-Host "Creating ZIP for notarization..."
+        Compress-Archive -Path $tarball.FullName -DestinationPath $zipPath -Force
         
         Write-Host "✅ ZIP created: $zipName"
         Write-Host "   Size: $([math]::Round((Get-Item $zipPath).Length / 1MB, 2)) MB"
-        Write-Host ""
-        Write-Host "This ZIP contains the actual signed binaries that Apple will index"
         
-      displayName: 'Extract and prepare ARM64 for notarization (create ZIP from binaries)'
+      displayName: 'Prepare ARM64 tarball for notarization (create ZIP)'
     
     - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
       displayName: 'ESRP - Notarize ARM64 tarball with Apple'
@@ -860,9 +843,7 @@ stages:
       displayName: 'Download x86_64 signed tarball'
     
     - pwsh: |
-        Write-Host "=== Preparing x86_64 Signed Binaries for Apple Notarization ==="
-        Write-Host "NOTE: Apple notarization requires ZIP format"
-        Write-Host "We must extract the tarball and ZIP the actual signed binaries"
+        Write-Host "=== Preparing x86_64 Signed Tarball for Apple Notarization ==="
         
         $tarballDir = "$(Pipeline.Workspace)/x86_64-signed-tarball"
         $tarball = Get-ChildItem -Path $tarballDir -Filter "*-signed.tar.gz" -File | Select-Object -First 1
@@ -874,34 +855,17 @@ stages:
         
         Write-Host "✅ Found signed tarball: $($tarball.Name)"
         
-        # Extract tarball to temporary directory
-        $extractDir = "$(Pipeline.Workspace)/x86_64-extracted"
-        New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
-        
-        Write-Host ""
-        Write-Host "Extracting tarball..."
-        tar -xzf $tarball.FullName -C $extractDir
-        
-        Write-Host "Extracted contents:"
-        Get-ChildItem -Path $extractDir -Recurse | Select-Object -First 10 | ForEach-Object { Write-Host "  $($_.FullName)" }
-        
-        # Create ZIP from extracted contents (not the tar.gz file itself)
+        # Create ZIP for notarization
         $zipName = $tarball.Name -replace '\.tar\.gz$', '.zip'
         $zipPath = "$(Pipeline.Workspace)/$zipName"
         
         Write-Host ""
-        Write-Host "Creating ZIP for notarization from extracted binaries..."
-        # ZIP the actual directories (bin/ and libexec/), not the tar.gz
-        Push-Location $extractDir
-        Compress-Archive -Path * -DestinationPath $zipPath -Force
-        Pop-Location
+        Write-Host "Creating ZIP for notarization..."
+        Compress-Archive -Path $tarball.FullName -DestinationPath $zipPath -Force
         
         Write-Host "✅ ZIP created: $zipName"
-        Write-Host "   Size: $([math]::Round((Get-Item $zipPath).Length / 1MB, 2)) MB"
-        Write-Host ""
-        Write-Host "This ZIP contains the actual signed binaries that Apple will index"
         
-      displayName: 'Extract and prepare x86_64 for notarization (create ZIP from binaries)'
+      displayName: 'Prepare x86_64 tarball for notarization (create ZIP)'
     
     - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
       displayName: 'ESRP - Notarize x86_64 tarball with Apple'
