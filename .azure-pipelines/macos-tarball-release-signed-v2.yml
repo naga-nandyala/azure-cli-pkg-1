@@ -139,6 +139,16 @@ stages:
         EXTRACT_DIR="$(Pipeline.Workspace)/arm64-extracted"
         mkdir -p "$EXTRACT_DIR"
         
+        # Capture original tarball structure for verification
+        echo ""
+        echo "=== Original Tarball Structure ==="
+        tar -tzf "$TAR_FILE" | head -30
+        
+        # Save full structure for later comparison
+        tar -tzf "$TAR_FILE" | sort > "$(Pipeline.Workspace)/arm64-original-structure.txt"
+        echo "Saved original structure to: arm64-original-structure.txt"
+        echo "Total files/dirs: $(wc -l < $(Pipeline.Workspace)/arm64-original-structure.txt)"
+        
         echo ""
         echo "Extracting tarball..."
         tar -xzf "$TAR_FILE" -C "$EXTRACT_DIR"
@@ -233,6 +243,16 @@ stages:
         echo ""
         echo "=== Extracted Structure ==="
         ls -lh "$EXTRACT_DIR"
+        
+        # Capture original tarball structure for verification
+        echo ""
+        echo "=== Original Tarball Structure ==="
+        tar -tzf "$TAR_FILE" | head -30
+        
+        # Save full structure for later comparison
+        tar -tzf "$TAR_FILE" | sort > "$(Pipeline.Workspace)/x86_64-original-structure.txt"
+        echo "Saved original structure to: x86_64-original-structure.txt"
+        echo "Total files/dirs: $(wc -l < $(Pipeline.Workspace)/x86_64-original-structure.txt)"
         
         # Find binaries to sign
         echo ""
@@ -626,6 +646,12 @@ stages:
         artifactName: 'arm64-signed-binaries'
         targetPath: '$(Pipeline.Workspace)/arm64-signed'
     
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download ARM64 original structure'
+      inputs:
+        artifactName: 'arm64-original-structure'
+        targetPath: '$(Pipeline.Workspace)'
+    
     - bash: |
         set -e
         echo "=== Repackaging ARM64 Tarball with Signed Binaries ==="
@@ -638,14 +664,26 @@ stages:
         ls -la "$SIGNED_DIR"
         echo ""
         
-        # Create tarball (preserve directory structure from extraction)
+        # Recreate bin directory with symlink (not included in signed artifacts)
+        if [ ! -d "$SIGNED_DIR/bin" ]; then
+          echo "Recreating bin/ directory structure..."
+          mkdir -p "$SIGNED_DIR/bin"
+          ln -sf ../libexec/bin/az "$SIGNED_DIR/bin/az"
+          echo "✅ Created bin/az symlink"
+        fi
+        
+        echo ""
+        echo "Final structure:"
+        ls -la "$SIGNED_DIR"
+        echo ""
+        
+        # Create tarball (preserve directory structure)
         TARBALL_NAME="azure-cli-$(AzureCliVersion)-macos-arm64-signed.tar.gz"
         
         cd "$SIGNED_DIR"
         echo "Creating tarball: $TARBALL_NAME"
         
-        # Create tarball with all contents (bin/, libexec/, etc.)
-        # Use ./* to include all directories while avoiding . and ..
+        # Create tarball with bin/ and libexec/
         tar -czf "$OUTPUT_DIR/$TARBALL_NAME" ./bin ./libexec
         
         # Generate SHA256
@@ -661,6 +699,32 @@ stages:
         echo ""
         echo "SHA256:"
         cat "$TARBALL_NAME.sha256"
+        
+        # Verify structure matches original
+        echo ""
+        echo "=== Verifying Tarball Structure ==="
+        tar -tzf "$OUTPUT_DIR/$TARBALL_NAME" | sort > "$OUTPUT_DIR/signed-structure.txt"
+        
+        # Download original structure for comparison
+        if [ -f "$(Pipeline.Workspace)/arm64-original-structure.txt" ]; then
+          echo "Comparing with original structure..."
+          echo ""
+          echo "Original entries: $(wc -l < $(Pipeline.Workspace)/arm64-original-structure.txt)"
+          echo "Signed entries: $(wc -l < $OUTPUT_DIR/signed-structure.txt)"
+          
+          echo ""
+          echo "Structure differences (if any):"
+          diff -u "$(Pipeline.Workspace)/arm64-original-structure.txt" "$OUTPUT_DIR/signed-structure.txt" || true
+          
+          echo ""
+          if diff -q "$(Pipeline.Workspace)/arm64-original-structure.txt" "$OUTPUT_DIR/signed-structure.txt" > /dev/null; then
+            echo "✅ Structure matches original perfectly!"
+          else
+            echo "⚠️  Structure differs from original - review above diff"
+          fi
+        else
+          echo "⚠️  Original structure file not found for comparison"
+        fi
         
       displayName: 'Create ARM64 signed tarball'
     
@@ -682,6 +746,12 @@ stages:
         artifactName: 'x86_64-signed-binaries'
         targetPath: '$(Pipeline.Workspace)/x86_64-signed'
     
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download x86_64 original structure'
+      inputs:
+        artifactName: 'x86_64-original-structure'
+        targetPath: '$(Pipeline.Workspace)'
+    
     - bash: |
         set -e
         echo "=== Repackaging x86_64 Tarball with Signed Binaries ==="
@@ -694,13 +764,26 @@ stages:
         ls -la "$SIGNED_DIR"
         echo ""
         
+        # Recreate bin directory with symlink (not included in signed artifacts)
+        if [ ! -d "$SIGNED_DIR/bin" ]; then
+          echo "Recreating bin/ directory structure..."
+          mkdir -p "$SIGNED_DIR/bin"
+          ln -sf ../libexec/bin/az "$SIGNED_DIR/bin/az"
+          echo "✅ Created bin/az symlink"
+        fi
+        
+        echo ""
+        echo "Final structure:"
+        ls -la "$SIGNED_DIR"
+        echo ""
+        
         # Create tarball (preserve directory structure)
         TARBALL_NAME="azure-cli-$(AzureCliVersion)-macos-x86_64-signed.tar.gz"
         
         cd "$SIGNED_DIR"
         echo "Creating tarball: $TARBALL_NAME"
         
-        # Create tarball with all contents (bin/, libexec/, etc.)
+        # Create tarball with bin/ and libexec/
         tar -czf "$OUTPUT_DIR/$TARBALL_NAME" ./bin ./libexec
         
         # Generate SHA256
@@ -716,6 +799,32 @@ stages:
         echo ""
         echo "SHA256:"
         cat "$TARBALL_NAME.sha256"
+        
+        # Verify structure matches original
+        echo ""
+        echo "=== Verifying Tarball Structure ==="
+        tar -tzf "$OUTPUT_DIR/$TARBALL_NAME" | sort > "$OUTPUT_DIR/signed-structure.txt"
+        
+        # Download original structure for comparison
+        if [ -f "$(Pipeline.Workspace)/x86_64-original-structure.txt" ]; then
+          echo "Comparing with original structure..."
+          echo ""
+          echo "Original entries: $(wc -l < $(Pipeline.Workspace)/x86_64-original-structure.txt)"
+          echo "Signed entries: $(wc -l < $OUTPUT_DIR/signed-structure.txt)"
+          
+          echo ""
+          echo "Structure differences (if any):"
+          diff -u "$(Pipeline.Workspace)/x86_64-original-structure.txt" "$OUTPUT_DIR/signed-structure.txt" || true
+          
+          echo ""
+          if diff -q "$(Pipeline.Workspace)/x86_64-original-structure.txt" "$OUTPUT_DIR/signed-structure.txt" > /dev/null; then
+            echo "✅ Structure matches original perfectly!"
+          else
+            echo "⚠️  Structure differs from original - review above diff"
+          fi
+        else
+          echo "⚠️  Original structure file not found for comparison"
+        fi
         
       displayName: 'Create x86_64 signed tarball'
     

@@ -17,7 +17,7 @@ parameters:
   - name: TarballBuildId
     displayName: 'Tarball Build ID (from macos-tarball-build pipeline)'
     type: string
-    default: ''
+    default: '289882'
   - name: BundleId
     displayName: 'Bundle ID for signing/notarization'
     type: string
