@@ -1,6 +1,6 @@
 # Azure CLI - Complete macOS ZIP Release Pipeline with ESRP Signing
 # This pipeline performs:
-# 1. Download ZIPs from build pipeline
+# 1. Download tar.gz from build pipeline and convert to ZIP
 # 2. Extract ZIP contents
 # 3. Sign all Mach-O binaries with ESRP (Developer ID Application certificate)
 # 4. Repackage signed ZIP
@@ -14,8 +14,8 @@
 trigger: none # Manual trigger only
 
 parameters:
-  - name: ZipBuildId
-    displayName: 'ZIP Build ID (from macos-zip-build pipeline)'
+  - name: TarballBuildId
+    displayName: 'Tarball Build ID (from macos-tarball-build pipeline)'
     type: string
     default: ''
   - name: BundleId
@@ -71,8 +71,8 @@ variables:
     value: none
   - name: skipNugetSecurityAnalysis
     value: true
-  - name: ZipBuildId
-    value: ${{ parameters.ZipBuildId }}
+  - name: TarballBuildId
+    value: ${{ parameters.TarballBuildId }}
   - name: BundleId
     value: ${{ parameters.BundleId }}
   - name: GitHubRepo
@@ -88,13 +88,13 @@ name: zip-signed-release-$(Build.BuildId)
 
 stages:
 # ============================================================================
-# STAGE 1: DOWNLOAD AND EXTRACT ZIPS
+# STAGE 1: DOWNLOAD TARBALLS AND CONVERT TO ZIP
 # ============================================================================
-- stage: DownloadAndExtract
-  displayName: 'Stage 1: Download and Extract ZIPs'
+- stage: DownloadAndConvert
+  displayName: 'Stage 1: Download Tarballs and Convert to ZIP'
   jobs:
-  - job: DownloadAndExtractARM64
-    displayName: 'Download and extract ARM64 ZIP'
+  - job: ConvertARM64
+    displayName: 'Download ARM64 tarball and convert to ZIP'
     pool:
       vmImage: 'macos-latest'
     
@@ -102,32 +102,32 @@ stages:
     - checkout: none
     
     - task: DownloadPipelineArtifact@2
-      displayName: 'Download ARM64 ZIP artifact'
+      displayName: 'Download ARM64 tarball artifact'
       inputs:
         buildType: 'specific'
         project: '$(System.TeamProjectId)'
         definition: '$(System.DefinitionId)'
         buildVersionToDownload: 'specific'
-        buildId: '$(ZipBuildId)'
-        artifactName: 'zip-arm64'
-        targetPath: '$(Pipeline.Workspace)/arm64-zip'
+        buildId: '$(TarballBuildId)'
+        artifactName: 'tarball-arm64'
+        targetPath: '$(Pipeline.Workspace)/arm64-tarball'
     
     - bash: |
-        echo "=== Extracting ARM64 ZIP ==="
-        cd $(Pipeline.Workspace)/arm64-zip
+        echo "=== Converting ARM64 Tarball to ZIP ==="
+        cd $(Pipeline.Workspace)/arm64-tarball
         
-        ZIP=$(ls azure-cli-*.zip 2>/dev/null | grep -v '.sha256' | head -1)
+        TARBALL=$(ls azure-cli-*.tar.gz 2>/dev/null | grep -v '.sha256' | head -1)
         
-        if [ -z "$ZIP" ]; then
-          echo "❌ ZIP not found"
+        if [ -z "$TARBALL" ]; then
+          echo "❌ Tarball not found"
           exit 1
         fi
         
-        echo "Found ZIP: $ZIP"
-        echo "Size: $(du -h "$ZIP" | cut -f1)"
+        echo "Found tarball: $TARBALL"
+        echo "Size: $(du -h "$TARBALL" | cut -f1)"
         
         # Extract version from filename
-        VERSION=$(echo "$ZIP" | grep -oP 'azure-cli-\K[0-9]+\.[0-9]+\.[0-9]+')
+        VERSION=$(echo "$TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
         echo "Detected version: $VERSION"
         echo "##vso[task.setvariable variable=AzureCliVersion;isOutput=true]$VERSION"
         echo "##vso[task.setvariable variable=ReleaseTag;isOutput=true]v${VERSION}-zip-tarball"
@@ -136,17 +136,30 @@ stages:
         EXTRACT_DIR="$(Pipeline.Workspace)/arm64-extracted"
         mkdir -p "$EXTRACT_DIR"
         
-        # Extract ZIP
+        # Extract tarball
         echo ""
-        echo "Extracting to: $EXTRACT_DIR"
-        unzip -q "$ZIP" -d "$EXTRACT_DIR"
+        echo "Extracting tarball to: $EXTRACT_DIR"
+        tar -xzf "$TARBALL" -C "$EXTRACT_DIR"
+        
+        # Create ZIP from extracted content
+        ZIP_DIR="$(Pipeline.Workspace)/arm64-zip"
+        mkdir -p "$ZIP_DIR"
+        
+        ZIP_NAME="azure-cli-${VERSION}-macos-arm64.zip"
+        echo ""
+        echo "Creating ZIP: $ZIP_NAME"
+        cd "$EXTRACT_DIR"
+        zip -r -q "$ZIP_DIR/$ZIP_NAME" .
+        
+        # Generate SHA256 for ZIP
+        cd "$ZIP_DIR"
+        shasum -a 256 "$ZIP_NAME" > "${ZIP_NAME}.sha256"
         
         echo ""
-        echo "✅ ARM64 ZIP extracted"
-        echo "Contents:"
-        ls -la "$EXTRACT_DIR"
-      displayName: 'Extract ARM64 ZIP'
-      name: ExtractARM64
+        echo "✅ ARM64 tarball converted to ZIP"
+        echo "ZIP: $ZIP_NAME ($(du -h "$ZIP_NAME" | cut -f1))"
+      displayName: 'Convert ARM64 tarball to ZIP'
+      name: ConvertARM64
     
     - publish: $(Pipeline.Workspace)/arm64-extracted
       artifact: arm64-extracted-content
@@ -154,10 +167,10 @@ stages:
     
     - publish: $(Pipeline.Workspace)/arm64-zip
       artifact: arm64-original-zip
-      displayName: 'Publish ARM64 original ZIP'
+      displayName: 'Publish ARM64 ZIP'
   
-  - job: DownloadAndExtractX86_64
-    displayName: 'Download and extract x86_64 ZIP'
+  - job: ConvertX86_64
+    displayName: 'Download x86_64 tarball and convert to ZIP'
     pool:
       vmImage: 'macos-latest'
     
@@ -165,44 +178,61 @@ stages:
     - checkout: none
     
     - task: DownloadPipelineArtifact@2
-      displayName: 'Download x86_64 ZIP artifact'
+      displayName: 'Download x86_64 tarball artifact'
       inputs:
         buildType: 'specific'
         project: '$(System.TeamProjectId)'
         definition: '$(System.DefinitionId)'
         buildVersionToDownload: 'specific'
-        buildId: '$(ZipBuildId)'
-        artifactName: 'zip-x86_64'
-        targetPath: '$(Pipeline.Workspace)/x86_64-zip'
+        buildId: '$(TarballBuildId)'
+        artifactName: 'tarball-x86_64'
+        targetPath: '$(Pipeline.Workspace)/x86_64-tarball'
     
     - bash: |
-        echo "=== Extracting x86_64 ZIP ==="
-        cd $(Pipeline.Workspace)/x86_64-zip
+        echo "=== Converting x86_64 Tarball to ZIP ==="
+        cd $(Pipeline.Workspace)/x86_64-tarball
         
-        ZIP=$(ls azure-cli-*.zip 2>/dev/null | grep -v '.sha256' | head -1)
+        TARBALL=$(ls azure-cli-*.tar.gz 2>/dev/null | grep -v '.sha256' | head -1)
         
-        if [ -z "$ZIP" ]; then
-          echo "❌ ZIP not found"
+        if [ -z "$TARBALL" ]; then
+          echo "❌ Tarball not found"
           exit 1
         fi
         
-        echo "Found ZIP: $ZIP"
-        echo "Size: $(du -h "$ZIP" | cut -f1)"
+        echo "Found tarball: $TARBALL"
+        echo "Size: $(du -h "$TARBALL" | cut -f1)"
+        
+        # Extract version from filename
+        VERSION=$(echo "$TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+        echo "Detected version: $VERSION"
         
         # Create extraction directory
         EXTRACT_DIR="$(Pipeline.Workspace)/x86_64-extracted"
         mkdir -p "$EXTRACT_DIR"
         
-        # Extract ZIP
+        # Extract tarball
         echo ""
-        echo "Extracting to: $EXTRACT_DIR"
-        unzip -q "$ZIP" -d "$EXTRACT_DIR"
+        echo "Extracting tarball to: $EXTRACT_DIR"
+        tar -xzf "$TARBALL" -C "$EXTRACT_DIR"
+        
+        # Create ZIP from extracted content
+        ZIP_DIR="$(Pipeline.Workspace)/x86_64-zip"
+        mkdir -p "$ZIP_DIR"
+        
+        ZIP_NAME="azure-cli-${VERSION}-macos-x86_64.zip"
+        echo ""
+        echo "Creating ZIP: $ZIP_NAME"
+        cd "$EXTRACT_DIR"
+        zip -r -q "$ZIP_DIR/$ZIP_NAME" .
+        
+        # Generate SHA256 for ZIP
+        cd "$ZIP_DIR"
+        shasum -a 256 "$ZIP_NAME" > "${ZIP_NAME}.sha256"
         
         echo ""
-        echo "✅ x86_64 ZIP extracted"
-        echo "Contents:"
-        ls -la "$EXTRACT_DIR"
-      displayName: 'Extract x86_64 ZIP'
+        echo "✅ x86_64 tarball converted to ZIP"
+        echo "ZIP: $ZIP_NAME ($(du -h "$ZIP_NAME" | cut -f1))"
+      displayName: 'Convert x86_64 tarball to ZIP'
     
     - publish: $(Pipeline.Workspace)/x86_64-extracted
       artifact: x86_64-extracted-content
@@ -210,14 +240,14 @@ stages:
     
     - publish: $(Pipeline.Workspace)/x86_64-zip
       artifact: x86_64-original-zip
-      displayName: 'Publish x86_64 original ZIP'
+      displayName: 'Publish x86_64 ZIP'
 
 # ============================================================================
 # STAGE 2: SIGN ARM64 BINARIES WITH ESRP
 # ============================================================================
 - stage: SignARM64Binaries
   displayName: 'Stage 2: Sign ARM64 Binaries with ESRP'
-  dependsOn: DownloadAndExtract
+  dependsOn: DownloadAndConvert
   condition: succeeded()
   jobs:
   - job: SignARM64
@@ -347,7 +377,7 @@ stages:
 # ============================================================================
 - stage: SignX86_64Binaries
   displayName: 'Stage 3: Sign x86_64 Binaries with ESRP'
-  dependsOn: DownloadAndExtract
+  dependsOn: DownloadAndConvert
   condition: succeeded()
   jobs:
   - job: SignX86_64
@@ -480,10 +510,10 @@ stages:
   dependsOn:
   - SignARM64Binaries
   - SignX86_64Binaries
-  - DownloadAndExtract
+  - DownloadAndConvert
   condition: succeeded()
   variables:
-    AzureCliVersion: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractARM64.outputs['ExtractARM64.AzureCliVersion'] ]
+    AzureCliVersion: $[ stageDependencies.DownloadAndConvert.ConvertARM64.outputs['ConvertARM64.AzureCliVersion'] ]
   jobs:
   - job: RepackageARM64
     displayName: 'Repackage ARM64 ZIP (macOS)'
@@ -572,10 +602,10 @@ stages:
   displayName: 'Stage 5: Notarize ZIPs with Apple via ESRP'
   dependsOn:
   - RepackageZips
-  - DownloadAndExtract
+  - DownloadAndConvert
   condition: succeeded()
   variables:
-    AzureCliVersion: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractARM64.outputs['ExtractARM64.AzureCliVersion'] ]
+    AzureCliVersion: $[ stageDependencies.DownloadAndConvert.ConvertARM64.outputs['ConvertARM64.AzureCliVersion'] ]
   jobs:
   - job: NotarizeARM64
     displayName: 'Notarize ARM64 ZIP (ESRP on Windows)'
@@ -941,11 +971,11 @@ stages:
   displayName: 'Stage 7: Publish to GitHub Release'
   dependsOn:
   - VerifySignatures
-  - DownloadAndExtract
+  - DownloadAndConvert
   condition: succeeded()
   variables:
-    AzureCliVersion: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractARM64.outputs['ExtractARM64.AzureCliVersion'] ]
-    ReleaseTag: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractARM64.outputs['ExtractARM64.ReleaseTag'] ]
+    AzureCliVersion: $[ stageDependencies.DownloadAndConvert.ConvertARM64.outputs['ConvertARM64.AzureCliVersion'] ]
+    ReleaseTag: $[ stageDependencies.DownloadAndConvert.ConvertARM64.outputs['ConvertARM64.ReleaseTag'] ]
   jobs:
   - job: ConsolidateAndRelease
     displayName: 'Consolidate ZIPs and create GitHub release'
@@ -1080,7 +1110,7 @@ stages:
 - stage: ReleaseSummary
   displayName: 'Stage 8: Release Summary'
   dependsOn:
-  - DownloadAndExtract
+  - DownloadAndConvert
   - SignARM64Binaries
   - SignX86_64Binaries
   - RepackageZips
@@ -1089,8 +1119,8 @@ stages:
   - PublishToGitHub
   condition: always()
   variables:
-    AzureCliVersion: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractARM64.outputs['ExtractARM64.AzureCliVersion'] ]
-    ReleaseTag: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractARM64.outputs['ExtractARM64.ReleaseTag'] ]
+    AzureCliVersion: $[ stageDependencies.DownloadAndConvert.ConvertARM64.outputs['ConvertARM64.AzureCliVersion'] ]
+    ReleaseTag: $[ stageDependencies.DownloadAndConvert.ConvertARM64.outputs['ConvertARM64.ReleaseTag'] ]
   jobs:
   - job: PrintSummary
     displayName: 'Print Release Summary'
