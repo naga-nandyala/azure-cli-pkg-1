@@ -352,7 +352,8 @@ stages:
 # ============================================================================
 - stage: PrepareForNotarization
   displayName: 'Stage 3: Prepare Binary-Only ZIPs for Notarization'
-  dependsOn: SignARM64Binaries
+  dependsOn:
+  - SignARM64Binaries
   - DownloadAndConvert
   condition: succeeded()
   variables:
