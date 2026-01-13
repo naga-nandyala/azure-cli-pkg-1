@@ -664,39 +664,63 @@ stages:
         artifactName: 'arm64-original-structure'
         targetPath: '$(Pipeline.Workspace)'
     
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download ARM64 unsigned (complete) content'
+      inputs:
+        artifactName: 'arm64-unsigned-binaries'
+        targetPath: '$(Pipeline.Workspace)/arm64-original'
+    
     - bash: |
         set -e
         echo "=== Repackaging ARM64 Tarball with Signed Binaries ==="
         
+        ORIGINAL_DIR="$(Pipeline.Workspace)/arm64-original"
         SIGNED_DIR="$(Pipeline.Workspace)/arm64-signed"
+        MERGED_DIR="$(Pipeline.Workspace)/arm64-merged"
         OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/signed-tarballs"
         mkdir -p "$OUTPUT_DIR"
         
-        echo "Checking signed binaries structure:"
-        ls -la "$SIGNED_DIR"
+        echo "Original content structure:"
+        echo "  Files: $(find "$ORIGINAL_DIR" -type f | wc -l)"
+        echo "  Size: $(du -sh "$ORIGINAL_DIR" | cut -f1)"
         echo ""
         
-        # Recreate bin directory with symlink (not included in signed artifacts)
-        if [ ! -d "$SIGNED_DIR/bin" ]; then
-          echo "Recreating bin/ directory structure..."
-          mkdir -p "$SIGNED_DIR/bin"
-          ln -sf ../libexec/bin/az "$SIGNED_DIR/bin/az"
-          echo "✅ Created bin/az symlink"
-        fi
-        
-        echo ""
-        echo "Final structure:"
-        ls -la "$SIGNED_DIR"
+        echo "Signed binaries:"
+        echo "  Files: $(find "$SIGNED_DIR" -type f | wc -l)"
         echo ""
         
-        # Create tarball (preserve directory structure)
+        # Copy complete original content
+        echo "Copying complete original content..."
+        cp -R "$ORIGINAL_DIR" "$MERGED_DIR"
+        
+        # Replace unsigned binaries with signed versions
+        echo "Replacing unsigned binaries with signed versions..."
+        cd "$SIGNED_DIR"
+        find . -type f | while read signed_file; do
+          target_file="$MERGED_DIR/$signed_file"
+          
+          if [ -f "$target_file" ]; then
+            cp "$signed_file" "$target_file"
+            echo "  ✓ Replaced: $signed_file"
+          else
+            echo "  ⚠️  Warning: $signed_file not found in original"
+          fi
+        done
+        
+        echo ""
+        echo "Merged content:"
+        echo "  Files: $(find "$MERGED_DIR" -type f | wc -l)"
+        echo "  Size: $(du -sh "$MERGED_DIR" | cut -f1)"
+        echo ""
+        
+        # Create tarball from merged content
         TARBALL_NAME="azure-cli-$(AzureCliVersion)-macos-arm64-signed.tar.gz"
         
-        cd "$SIGNED_DIR"
+        cd "$MERGED_DIR"
         echo "Creating tarball: $TARBALL_NAME"
         
-        # Create tarball with bin/ and libexec/
-        tar -czf "$OUTPUT_DIR/$TARBALL_NAME" ./bin ./libexec
+        # Create tarball with complete structure
+        tar -czf "$OUTPUT_DIR/$TARBALL_NAME" .
         
         # Generate SHA256
         cd "$OUTPUT_DIR"
@@ -764,39 +788,63 @@ stages:
         artifactName: 'x86_64-original-structure'
         targetPath: '$(Pipeline.Workspace)'
     
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download x86_64 unsigned (complete) content'
+      inputs:
+        artifactName: 'x86_64-unsigned-binaries'
+        targetPath: '$(Pipeline.Workspace)/x86_64-original'
+    
     - bash: |
         set -e
         echo "=== Repackaging x86_64 Tarball with Signed Binaries ==="
         
+        ORIGINAL_DIR="$(Pipeline.Workspace)/x86_64-original"
         SIGNED_DIR="$(Pipeline.Workspace)/x86_64-signed"
+        MERGED_DIR="$(Pipeline.Workspace)/x86_64-merged"
         OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/signed-tarballs"
         mkdir -p "$OUTPUT_DIR"
         
-        echo "Checking signed binaries structure:"
-        ls -la "$SIGNED_DIR"
+        echo "Original content structure:"
+        echo "  Files: $(find "$ORIGINAL_DIR" -type f | wc -l)"
+        echo "  Size: $(du -sh "$ORIGINAL_DIR" | cut -f1)"
         echo ""
         
-        # Recreate bin directory with symlink (not included in signed artifacts)
-        if [ ! -d "$SIGNED_DIR/bin" ]; then
-          echo "Recreating bin/ directory structure..."
-          mkdir -p "$SIGNED_DIR/bin"
-          ln -sf ../libexec/bin/az "$SIGNED_DIR/bin/az"
-          echo "✅ Created bin/az symlink"
-        fi
-        
-        echo ""
-        echo "Final structure:"
-        ls -la "$SIGNED_DIR"
+        echo "Signed binaries:"
+        echo "  Files: $(find "$SIGNED_DIR" -type f | wc -l)"
         echo ""
         
-        # Create tarball (preserve directory structure)
+        # Copy complete original content
+        echo "Copying complete original content..."
+        cp -R "$ORIGINAL_DIR" "$MERGED_DIR"
+        
+        # Replace unsigned binaries with signed versions
+        echo "Replacing unsigned binaries with signed versions..."
+        cd "$SIGNED_DIR"
+        find . -type f | while read signed_file; do
+          target_file="$MERGED_DIR/$signed_file"
+          
+          if [ -f "$target_file" ]; then
+            cp "$signed_file" "$target_file"
+            echo "  ✓ Replaced: $signed_file"
+          else
+            echo "  ⚠️  Warning: $signed_file not found in original"
+          fi
+        done
+        
+        echo ""
+        echo "Merged content:"
+        echo "  Files: $(find "$MERGED_DIR" -type f | wc -l)"
+        echo "  Size: $(du -sh "$MERGED_DIR" | cut -f1)"
+        echo ""
+        
+        # Create tarball from merged content
         TARBALL_NAME="azure-cli-$(AzureCliVersion)-macos-x86_64-signed.tar.gz"
         
-        cd "$SIGNED_DIR"
+        cd "$MERGED_DIR"
         echo "Creating tarball: $TARBALL_NAME"
         
-        # Create tarball with bin/ and libexec/
-        tar -czf "$OUTPUT_DIR/$TARBALL_NAME" ./bin ./libexec
+        # Create tarball with complete structure
+        tar -czf "$OUTPUT_DIR/$TARBALL_NAME" .
         
         # Generate SHA256
         cd "$OUTPUT_DIR"

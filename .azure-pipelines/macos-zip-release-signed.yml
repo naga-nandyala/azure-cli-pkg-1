@@ -1198,10 +1198,231 @@ stages:
         addChangeLog: false
 
 # ============================================================================
-# STAGE 8: RELEASE SUMMARY
+# STAGE 8: UPDATE HOMEBREW FORMULA
+# ============================================================================
+- stage: UpdateHomebrewFormula
+  displayName: 'Stage 8: Update Homebrew Formula'
+  dependsOn:
+  - PublishToGitHub
+  - DownloadAndConvert
+  condition: succeeded()
+  variables:
+    AzureCliVersion: $[ stageDependencies.DownloadAndConvert.ConvertARM64.outputs['ConvertARM64.AzureCliVersion'] ]
+    ReleaseTag: $[ stageDependencies.DownloadAndConvert.ConvertARM64.outputs['ConvertARM64.ReleaseTag'] ]
+  jobs:
+  - job: GenerateFormula
+    displayName: 'Generate Homebrew formula'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: arm64-notarized-zip
+    
+    - download: current
+      artifact: x86_64-notarized-zip
+    
+    - bash: |
+        set -e
+        echo "=== Get ZIP Details ==="
+        
+        ARM64_ZIP=$(find $(Pipeline.Workspace)/arm64-notarized-zip -name "*-notarized.zip" -type f | head -1)
+        X86_64_ZIP=$(find $(Pipeline.Workspace)/x86_64-notarized-zip -name "*-notarized.zip" -type f | head -1)
+        
+        ARM64_NAME=$(basename "$ARM64_ZIP")
+        X86_64_NAME=$(basename "$X86_64_ZIP")
+        
+        ARM64_SHA256=$(cat "${ARM64_ZIP}.sha256" | awk '{print $1}')
+        X86_64_SHA256=$(cat "${X86_64_ZIP}.sha256" | awk '{print $1}')
+        
+        ARM64_URL="https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/$ARM64_NAME"
+        X86_64_URL="https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/$X86_64_NAME"
+        
+        echo "ARM64: $ARM64_URL"
+        echo "SHA256: $ARM64_SHA256"
+        echo ""
+        echo "x86_64: $X86_64_URL"
+        echo "SHA256: $X86_64_SHA256"
+        
+        # Export variables
+        echo "##vso[task.setvariable variable=ARM64_SHA256;isOutput=true]$ARM64_SHA256"
+        echo "##vso[task.setvariable variable=X86_64_SHA256;isOutput=true]$X86_64_SHA256"
+        echo "##vso[task.setvariable variable=ARM64_URL;isOutput=true]$ARM64_URL"
+        echo "##vso[task.setvariable variable=X86_64_URL;isOutput=true]$X86_64_URL"
+        
+      name: GetDetails
+      displayName: 'Get ZIP URLs and SHA256'
+    
+    - bash: |
+        set -e
+        echo "=== Generate Homebrew Formula ==="
+        
+        mkdir -p Formula
+        
+        cat > Formula/$(FormulaName).rb <<'FORMULA_END'
+        class AzureCliZipSigned < Formula
+          desc "Microsoft Azure CLI - Code-Signed & Notarized ZIP"
+          homepage "https://learn.microsoft.com/cli/azure/"
+          version "$(AzureCliVersion)"
+          
+          on_arm do
+            url "$(GetDetails.ARM64_URL)"
+            sha256 "$(GetDetails.ARM64_SHA256)"
+          end
+          
+          on_intel do
+            url "$(GetDetails.X86_64_URL)"
+            sha256 "$(GetDetails.X86_64_SHA256)"
+          end
+          
+          def install
+            # Install signed and notarized ZIP
+            prefix.install Dir["*"]
+            chmod 0755, bin/"az"
+          end
+          
+          test do
+            system "#{bin}/az", "--version"
+          end
+          
+          def caveats
+            <<~EOS
+              Azure CLI Signed ZIP has been installed!
+              
+              ✅ All binaries are code-signed with Apple Developer ID
+              ✅ Notarized by Apple - No Gatekeeper warnings
+              
+              Installation Details:
+                • Executable: #{bin}/az
+                • Runtime: #{prefix}/libexec/az/
+                • Python: Bundled Python 3.13.11
+              
+              This is a fully code-signed and notarized distribution.
+              No quarantine issues with browser downloads!
+              
+              To get started:
+                az login
+                az account list
+            EOS
+          end
+        end
+        FORMULA_END
+        
+        echo "✅ Formula generated"
+        cat Formula/$(FormulaName).rb
+        
+      displayName: 'Generate formula'
+    
+    - publish: Formula
+      artifact: homebrew-formula
+      displayName: 'Publish formula'
+  
+  - job: CommitFormula
+    displayName: 'Commit formula to tap repository'
+    dependsOn: GenerateFormula
+    variables:
+      ARM64_SHA256: $[ dependencies.GenerateFormula.outputs['GetDetails.ARM64_SHA256'] ]
+      X86_64_SHA256: $[ dependencies.GenerateFormula.outputs['GetDetails.X86_64_SHA256'] ]
+      ARM64_URL: $[ dependencies.GenerateFormula.outputs['GetDetails.ARM64_URL'] ]
+      X86_64_URL: $[ dependencies.GenerateFormula.outputs['GetDetails.X86_64_URL'] ]
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: homebrewtap
+      persistCredentials: true
+      displayName: 'Checkout Homebrew tap repository'
+    
+    - download: current
+      artifact: homebrew-formula
+      displayName: 'Download formula'
+    
+    - bash: |
+        set -e
+        echo "=== Configure Git ==="
+        
+        git config --global user.email "azure-pipelines@microsoft.com"
+        git config --global user.name "Azure Pipelines Bot"
+        
+        echo "✅ Git configured"
+      displayName: 'Configure git'
+    
+    - bash: |
+        set -e
+        echo "=== Commit Formula to Main Branch ==="
+        
+        # Check current state
+        echo "Current branch:"
+        git branch -a
+        echo ""
+        
+        # Checkout main branch
+        git checkout -B main origin/main
+        
+        # Copy formula
+        mkdir -p Formula
+        cp $(Pipeline.Workspace)/homebrew-formula/$(FormulaName).rb Formula/
+        
+        # Add formula
+        git add Formula/$(FormulaName).rb
+        
+        # Check if there are changes to commit
+        if git diff --cached --quiet; then
+          echo "ℹ️  No changes detected - formula is already up-to-date"
+          COMMIT_SHA=$(git rev-parse HEAD)
+          echo "✅ Formula is current (no update needed)"
+          echo "   Repository: https://github.com/$(HomebrewTapRepo)"
+          echo "   Latest commit: $COMMIT_SHA"
+        else
+          # Commit changes
+          git commit -m "Update Azure CLI Signed ZIP to version $(AzureCliVersion)
+
+          - Version: $(AzureCliVersion)
+          - Release Tag: $(ReleaseTag)
+          - ARM64 SHA256: $(ARM64_SHA256)
+          - x86_64 SHA256: $(X86_64_SHA256)
+          - Code-signed with Developer ID Application
+          - Notarized by Apple
+          - No Gatekeeper warnings
+
+          Build: $(TarballBuildId)
+          Release: $(Build.BuildId)
+          "
+          
+          # Push to main
+          git push origin main
+          
+          COMMIT_SHA=$(git rev-parse HEAD)
+          echo ""
+          echo "✅ Formula committed to main branch!"
+          echo "   Repository: https://github.com/$(HomebrewTapRepo)"
+          echo "   Commit: $COMMIT_SHA"
+        fi
+        echo ""
+      displayName: 'Commit and push formula'
+    
+    - bash: |
+        echo "=== Formula Update Summary ==="
+        echo ""
+        echo "✅ Homebrew Formula Updated!"
+        echo ""
+        echo "Repository: https://github.com/$(HomebrewTapRepo)"
+        echo "Formula: $(FormulaName)"
+        echo "Version: $(AzureCliVersion)"
+        echo ""
+        echo "Users can install with:"
+        echo "  brew tap $(HomebrewTapRepo)"
+        echo "  brew install $(FormulaName)"
+        echo ""
+      displayName: 'Print summary'
+
+# ============================================================================
+# STAGE 9: RELEASE SUMMARY
 # ============================================================================
 - stage: ReleaseSummary
-  displayName: 'Stage 8: Release Summary'
+  displayName: 'Stage 9: Release Summary'
   dependsOn:
   - DownloadAndConvert
   - SignARM64Binaries
@@ -1210,6 +1431,7 @@ stages:
   - NotarizeWithApple
   - VerifySignatures
   - PublishToGitHub
+  - UpdateHomebrewFormula
   condition: always()
   variables:
     AzureCliVersion: $[ stageDependencies.DownloadAndConvert.ConvertARM64.outputs['ConvertARM64.AzureCliVersion'] ]
