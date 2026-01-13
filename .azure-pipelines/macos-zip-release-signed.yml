@@ -1872,4 +1872,4 @@ stages:
         echo "  brew install $(FormulaName)"
         echo ""
         echo "============================================"
-      displayName: 'Print summaryx'
+      displayName: 'Print summary'
