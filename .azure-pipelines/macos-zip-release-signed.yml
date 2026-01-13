@@ -618,13 +618,13 @@ stages:
     - checkout: none
     
     - download: current
-      artifact: arm64-signed-content
-      displayName: 'Download ARM64 signed content'
+      artifact: arm64-signed
+      displayName: 'Download ARM64 signed binaries'
     
     - bash: |
         echo "=== Repackaging ARM64 Signed ZIP ==="
         
-        CONTENT_DIR="$(Pipeline.Workspace)/arm64-signed-content"
+        CONTENT_DIR="$(Pipeline.Workspace)/arm64-signed"
         OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/signed-zips"
         mkdir -p "$OUTPUT_DIR"
         
@@ -658,13 +658,13 @@ stages:
     - checkout: none
     
     - download: current
-      artifact: x86_64-signed-content
-      displayName: 'Download x86_64 signed content'
+      artifact: x86_64-signed
+      displayName: 'Download x86_64 signed binaries'
     
     - bash: |
         echo "=== Repackaging x86_64 Signed ZIP ==="
         
-        CONTENT_DIR="$(Pipeline.Workspace)/x86_64-signed-content"
+        CONTENT_DIR="$(Pipeline.Workspace)/x86_64-signed"
         OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/signed-zips"
         mkdir -p "$OUTPUT_DIR"
         
@@ -1166,8 +1166,7 @@ stages:
         - Version: $version
         - Build Pipeline: $(Build.DefinitionName)
         - Build ID: $(Build.BuildId)
-        - Build Date: $(Build.BuildDate)
-        - Source Build: $(ZipBuildId)
+        - Source Build: $(TarballBuildId)
         "@
         
         Set-Content -Path "$(Build.ArtifactStagingDirectory)/release-notes.md" -Value $releaseNotes
