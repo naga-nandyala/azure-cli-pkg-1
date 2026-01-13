@@ -180,89 +180,6 @@ stages:
       inputs:
         targetPath: '$(Pipeline.Workspace)/arm64-files-to-sign.txt'
         artifact: 'arm64-files-to-sign-list'
-  
-  - job: ConvertX86_64
-    displayName: 'Download x86_64 tarball and convert to ZIP'
-    pool:
-      vmImage: 'macos-latest'
-    
-    steps:
-    - checkout: none
-    
-    - task: DownloadPipelineArtifact@2
-      displayName: 'Download x86_64 tarball artifact'
-      inputs:
-        buildType: 'specific'
-        project: '$(System.TeamProjectId)'
-        definition: '$(System.DefinitionId)'
-        buildVersionToDownload: 'specific'
-        buildId: '$(TarballBuildId)'
-        artifactName: 'tarball-x86_64'
-        targetPath: '$(Pipeline.Workspace)/x86_64-tarball'
-    
-    - bash: |
-        set -e
-        echo "=== Converting x86_64 Tarball and Identifying Binaries ==="
-        
-        TAR_FILE=$(find $(Pipeline.Workspace)/x86_64-tarball -name "*.tar.gz" -type f | grep -v '.sha256' | head -1)
-        
-        if [ -z "$TAR_FILE" ]; then
-          echo "❌ x86_64 tarball not found"
-          exit 1
-        fi
-        
-        echo "✅ Found tarball: $(basename $TAR_FILE)"
-        echo "   Size: $(du -h $TAR_FILE | cut -f1)"
-        
-        # Extract version
-        TAR_NAME=$(basename "$TAR_FILE")
-        VERSION=$(echo "$TAR_NAME" | sed -E 's/azure-cli-([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
-        echo "Detected version: $VERSION"
-        
-        # Extract tarball
-        EXTRACT_DIR="$(Pipeline.Workspace)/x86_64-extracted"
-        mkdir -p "$EXTRACT_DIR"
-        
-        echo ""
-        echo "Extracting tarball..."
-        tar -xzf "$TAR_FILE" -C "$EXTRACT_DIR"
-        
-        echo ""
-        echo "=== Extracted Structure ==="
-        ls -lh "$EXTRACT_DIR"
-        
-        # Find binaries to sign (use file command to identify Mach-O binaries)
-        echo ""
-        echo "=== Finding Mach-O binaries to sign ==="
-        
-        FILES_TO_SIGN="$(Pipeline.Workspace)/x86_64-files-to-sign.txt"
-        
-        cd "$EXTRACT_DIR"
-        find . -type f | while read filepath; do
-          filetype=$(file -b "$filepath")
-          if echo "$filetype" | grep -q -i "Mach-O"; then
-            echo "$filepath"
-          fi
-        done | sort -u > "$FILES_TO_SIGN"
-        
-        echo "Total Mach-O binaries: $(wc -l < $FILES_TO_SIGN)"
-        echo ""
-        echo "Binaries to sign:"
-        cat "$FILES_TO_SIGN"
-        
-      displayName: 'Convert x86_64 tarball and identify binaries'
-    
-    - task: PublishPipelineArtifact@1
-      displayName: 'Publish x86_64 extracted contents'
-      inputs:
-        targetPath: '$(Pipeline.Workspace)/x86_64-extracted'
-        artifact: 'x86_64-unsigned-binaries'
-    
-    - task: PublishPipelineArtifact@1
-      displayName: 'Publish x86_64 file list'
-      inputs:
-        targetPath: '$(Pipeline.Workspace)/x86_64-files-to-sign.txt'
-        artifact: 'x86_64-files-to-sign-list'
 
 # ============================================================================
 # STAGE 2: SIGN ARM64 BINARIES WITH ESRP
@@ -431,179 +348,11 @@ stages:
         artifact: 'arm64-signed'
 
 # ============================================================================
-# STAGE 3: SIGN X86_64 BINARIES WITH ESRP
-# ============================================================================
-- stage: SignX86_64Binaries
-  displayName: 'Stage 3: Sign x86_64 Binaries with ESRP'
-  dependsOn: DownloadAndConvert
-  condition: succeeded()
-  jobs:
-  - job: SignX86_64
-    displayName: 'Sign x86_64 binaries using ESRP'
-    pool:
-      vmImage: 'windows-2022'
-    
-    steps:
-    - checkout: none
-    
-    - task: DownloadPipelineArtifact@2
-      displayName: 'Download x86_64 unsigned binaries'
-      inputs:
-        artifactName: 'x86_64-unsigned-binaries'
-        targetPath: '$(Pipeline.Workspace)/x86_64-unsigned-binaries'
-    
-    - task: DownloadPipelineArtifact@2
-      displayName: 'Download x86_64 file list'
-      inputs:
-        artifactName: 'x86_64-files-to-sign-list'
-        targetPath: '$(Pipeline.Workspace)'
-    
-    - pwsh: |
-        Write-Host "=== Preparing x86_64 binaries for ESRP signing ==="
-        Write-Host "NOTE: ESRP MacAppDeveloperSign requires ZIP archives"
-        
-        $unsignedDir = "$(Pipeline.Workspace)/x86_64-unsigned-binaries"
-        $fileListPath = "$(Pipeline.Workspace)/x86_64-files-to-sign.txt"
-        $toBeSignedDir = "$(Pipeline.Workspace)/toBeSigned"
-        
-        New-Item -ItemType Directory -Path $toBeSignedDir -Force | Out-Null
-        
-        $filesToSign = Get-Content $fileListPath
-        Write-Host "Files to sign: $($filesToSign.Count)"
-        
-        Write-Host ""
-        Write-Host "Creating individual ZIP files for each binary..."
-        
-        $zippedCount = 0
-        $fileMapping = @{}
-        
-        foreach ($relPath in $filesToSign) {
-          $relPath = $relPath.TrimStart('.', '/')
-          $sourcePath = Join-Path $unsignedDir $relPath
-          
-          if (Test-Path $sourcePath) {
-            $flatName = $relPath -replace '[/\\]', '__'
-            $zipName = "$flatName.zip"
-            $zipPath = Join-Path $toBeSignedDir $zipName
-            
-            $fileName = Split-Path $sourcePath -Leaf
-            Compress-Archive -Path $sourcePath -DestinationPath $zipPath -Force
-            
-            $fileMapping[$zipName] = @{
-              "OriginalPath" = $relPath
-              "FileName" = $fileName
-            }
-            
-            $zippedCount++
-            
-            if ($zippedCount -le 10) {
-              Write-Host "  ✓ $relPath -> $zipName"
-            }
-          }
-        }
-        
-        Write-Host ""
-        Write-Host "✅ Created $zippedCount ZIP files"
-        
-        $mappingPath = "$(Pipeline.Workspace)/x86_64-file-mapping.json"
-        $fileMapping | ConvertTo-Json | Set-Content $mappingPath
-        
-      displayName: 'Prepare x86_64 binaries for signing (ZIP)'
-    
-    - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
-      displayName: 'ESRP - Sign x86_64 macOS binaries'
-      inputs:
-        ConnectedServiceName: 'ame_esrp_connection'
-        AppRegistrationClientId: '$(ESRPAppClientId)'
-        AppRegistrationTenantId: '$(ESRPAppTenantId)'
-        AuthAKVName: '$(ESRPKVName)'
-        AuthCertName: '$(ESRPAuthCertName)'
-        AuthSignCertName: '$(ESRPSignCertName)'
-        FolderPath: '$(Pipeline.Workspace)/toBeSigned'
-        Pattern: '*.zip'
-        signConfigType: 'inlineSignParams'
-        inlineOperation: |
-          [
-            {
-              "KeyCode": "CP-401337-Apple",
-              "OperationCode": "MacAppDeveloperSign",
-              "ToolName": "sign",
-              "ToolVersion": "1.0",
-              "Parameters": {
-                "Hardening": "--options=runtime"
-              }
-            }
-          ]
-        SessionTimeout: '120'
-        MaxConcurrency: '50'
-        MaxRetryAttempts: '5'
-    
-    - pwsh: |
-        Write-Host "=== Extracting signed x86_64 binaries from ZIPs ==="
-        
-        $signedZipsDir = "$(Pipeline.Workspace)/toBeSigned"
-        $outputDir = "$(Pipeline.Workspace)/x86_64-signed-binaries"
-        $mappingPath = "$(Pipeline.Workspace)/x86_64-file-mapping.json"
-        
-        $fileMapping = Get-Content $mappingPath | ConvertFrom-Json
-        
-        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
-        
-        $extractedCount = 0
-        foreach ($property in $fileMapping.PSObject.Properties) {
-          $zipName = $property.Name
-          $originalRelPath = $property.Value.OriginalPath
-          $fileName = $property.Value.FileName
-          
-          $zipPath = Join-Path $signedZipsDir $zipName
-          
-          if (Test-Path $zipPath) {
-            $tempExtractDir = Join-Path $env:TEMP "extract-$extractedCount"
-            New-Item -ItemType Directory -Path $tempExtractDir -Force | Out-Null
-            
-            Expand-Archive -Path $zipPath -DestinationPath $tempExtractDir -Force
-            
-            $signedFile = Join-Path $tempExtractDir $fileName
-            
-            if (Test-Path $signedFile) {
-              $targetPath = Join-Path $outputDir $originalRelPath
-              $targetDir = Split-Path $targetPath -Parent
-              
-              if (-not (Test-Path $targetDir)) {
-                New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
-              }
-              
-              Copy-Item -Path $signedFile -Destination $targetPath -Force
-              $extractedCount++
-              
-              if ($extractedCount -le 10) {
-                Write-Host "  ✓ $zipName -> $originalRelPath"
-              }
-            }
-            
-            Remove-Item -Path $tempExtractDir -Recurse -Force -ErrorAction SilentlyContinue
-          }
-        }
-        
-        Write-Host ""
-        Write-Host "✅ Extracted $extractedCount signed binaries"
-        
-      displayName: 'Extract signed x86_64 binaries from ZIPs'
-    
-    - task: PublishPipelineArtifact@1
-      displayName: 'Publish x86_64 signed binaries'
-      inputs:
-        targetPath: '$(Pipeline.Workspace)/x86_64-signed-binaries'
-        artifact: 'x86_64-signed'
-
-# ============================================================================
-# STAGE 4: PREPARE BINARIES FOR NOTARIZATION
+# STAGE 3: PREPARE BINARIES FOR NOTARIZATION
 # ============================================================================
 - stage: PrepareForNotarization
-  displayName: 'Stage 4: Prepare Binary-Only ZIPs for Notarization'
-  dependsOn:
-  - SignARM64Binaries
-  - SignX86_64Binaries
+  displayName: 'Stage 3: Prepare Binary-Only ZIPs for Notarization'
+  dependsOn: SignARM64Binaries
   - DownloadAndConvert
   condition: succeeded()
   variables:
@@ -661,61 +410,9 @@ stages:
     - publish: $(Build.ArtifactStagingDirectory)/binaries-for-notarization
       artifact: arm64-binaries-for-notarization
       displayName: 'Publish ARM64 binaries for notarization'
-  
-  - job: PrepareX86_64
-    displayName: 'Prepare x86_64 Binaries (macOS)'
-    pool:
-      vmImage: 'macos-latest'
-    
-    steps:
-    - checkout: none
-    
-    - download: current
-      artifact: x86_64-signed
-      displayName: 'Download x86_64 signed binaries'
-    
-    - bash: |
-        echo "=== Creating x86_64 Binary-Only ZIP for Notarization ==="
-        echo "IMPORTANT: Excluding symlinks - ESRP requires only regular files"
-        
-        SIGNED_DIR="$(Pipeline.Workspace)/x86_64-signed"
-        OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/binaries-for-notarization"
-        
-        mkdir -p "$OUTPUT_DIR"
-        
-        VERSION="$(AzureCliVersion)"
-        ZIP_NAME="x86_64-signed-binaries.zip"
-        
-        echo "Step 1: Finding regular files (excluding symlinks)"
-        cd "$SIGNED_DIR"
-        
-        # Find only regular files (not symlinks) - ESRP rejects symlinks
-        TEMP_LIST=$(mktemp)
-        find . -type f ! -type l > "$TEMP_LIST"
-        
-        FILE_COUNT=$(wc -l < "$TEMP_LIST")
-        echo "Found $FILE_COUNT regular files to include"
-        
-        echo ""
-        echo "Step 2: Creating ZIP from regular files only (no symlinks)"
-        cat "$TEMP_LIST" | zip -q -@ "$OUTPUT_DIR/$ZIP_NAME"
-        rm -f "$TEMP_LIST"
-        
-        echo ""
-        echo "✅ x86_64 binary-only ZIP created for notarization"
-        ls -lh "$OUTPUT_DIR"
-        
-        echo ""
-        echo "Contents (binaries only, no symlinks):"
-        unzip -l "$OUTPUT_DIR/$ZIP_NAME" | head -20
-      displayName: 'Create x86_64 binary-only ZIP (exclude symlinks)'
-    
-    - publish: $(Build.ArtifactStagingDirectory)/binaries-for-notarization
-      artifact: x86_64-binaries-for-notarization
-      displayName: 'Publish x86_64 binaries for notarization'
 
 # ============================================================================
-# STAGE 5: NOTARIZE BINARIES WITH APPLE (ESRP)
+# STAGE 4: NOTARIZE BINARIES WITH APPLE (ESRP)
 # ============================================================================
 - stage: NotarizeWithApple
   displayName: 'Stage 5: Notarize Binaries with Apple via ESRP'
@@ -813,97 +510,15 @@ stages:
       artifact: arm64-notarized-binaries
       displayName: 'Publish ARM64 notarized binaries'
   
-  - job: NotarizeX86_64
-    displayName: 'Notarize x86_64 Binaries (ESRP on Windows)'
-    pool:
-      vmImage: 'windows-2022'
-    
-    steps:
-    - checkout: none
-    
-    - download: current
-      artifact: x86_64-binaries-for-notarization
-      displayName: 'Download x86_64 binary-only ZIP'
-    
-    - pwsh: |
-        Write-Host "=== Notarizing x86_64 Binaries (Binary-Only ZIP) ==="
-        
-        $zipDir = "$(Pipeline.Workspace)/x86_64-binaries-for-notarization"
-        $zip = Get-ChildItem -Path $zipDir -Filter "*.zip" -File | Select-Object -First 1
-        
-        if (-not $zip) {
-          Write-Error "❌ No binary ZIP found"
-          exit 1
-        }
-        
-        Write-Host "✅ Found binary-only ZIP: $($zip.Name)"
-        Write-Host "   Size: $([math]::Round((Get-Item $zip.FullName).Length / 1MB, 2)) MB"
-        
-      displayName: 'Verify x86_64 binary-only ZIP'
-    
-    - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
-      displayName: 'ESRP - Notarize x86_64 Binaries with Apple'
-      inputs:
-        ConnectedServiceName: 'ame_esrp_connection'
-        AppRegistrationClientId: '$(ESRPAppClientId)'
-        AppRegistrationTenantId: '$(ESRPAppTenantId)'
-        AuthAKVName: '$(ESRPKVName)'
-        AuthCertName: '$(ESRPAuthCertName)'
-        AuthSignCertName: '$(ESRPSignCertName)'
-        FolderPath: '$(Pipeline.Workspace)/x86_64-binaries-for-notarization'
-        Pattern: '*.zip'
-        signConfigType: 'inlineSignParams'
-        inlineOperation: |
-          [
-            {
-              "KeyCode": "CP-401337-Apple",
-              "OperationCode": "MacAppNotarize",
-              "ToolName": "sign",
-              "ToolVersion": "1.0",
-              "Parameters": {
-                "BundleId": "$(BundleId)"
-              }
-            }
-          ]
-        SessionTimeout: '60'
-        MaxConcurrency: '50'
-        MaxRetryAttempts: '5'
-    
-    - pwsh: |
-        Write-Host "=== Extracting Notarized x86_64 Binaries ==="
-        
-        $zipDir = "$(Pipeline.Workspace)/x86_64-binaries-for-notarization"
-        $outputDir = "$(Build.ArtifactStagingDirectory)/notarized-binaries"
-        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
-        
-        # Extract notarized binaries
-        $zip = Get-ChildItem -Path $zipDir -Filter "*.zip" -File | Select-Object -First 1
-        
-        if ($zip) {
-          Write-Host "Extracting: $($zip.Name)"
-          Expand-Archive -Path $zip.FullName -DestinationPath $outputDir -Force
-          
-          Write-Host "✅ x86_64 notarized binaries extracted"
-          Write-Host ""
-          Write-Host "Notarized binaries:"
-          Get-ChildItem $outputDir -Recurse -File | Select-Object -First 10 FullName
-        }
-        
-      displayName: 'Extract notarized x86_64 binaries'
-    
-    - publish: $(Build.ArtifactStagingDirectory)/notarized-binaries
-      artifact: x86_64-notarized-binaries
-      displayName: 'Publish x86_64 notarized binaries'
-  
   # NOTE: ZIP archives cannot be stapled (only PKG/DMG support stapling)
   # Notarization validation happens online via Apple's servers
   # Same approach as tar.gz archives
 
 # ============================================================================
-# STAGE 6: CREATE FINAL ZIPS (Notarized binaries + unsigned files)
+# STAGE 5: CREATE FINAL ZIPS (Notarized binaries + unsigned files)
 # ============================================================================
 - stage: CreateFinalZIPs
-  displayName: 'Stage 6: Create Final ZIPs with Notarized Binaries'
+  displayName: 'Stage 5: Create Final ZIPs with Notarized Binaries'
   dependsOn:
   - NotarizeWithApple
   - DownloadAndConvert
@@ -985,87 +600,12 @@ stages:
     - publish: $(Build.ArtifactStagingDirectory)/final-zips
       artifact: arm64-final-zip
       displayName: 'Publish final ARM64 ZIP'
-  
-  - job: CreateX86_64Final
-    displayName: 'Create Final x86_64 ZIP (macOS)'
-    pool:
-      vmImage: 'macos-latest'
-    
-    steps:
-    - checkout: none
-    
-    - download: current
-      artifact: x86_64-unsigned-binaries
-      displayName: 'Download x86_64 unsigned files (all files)'
-    
-    - download: current
-      artifact: x86_64-notarized-binaries
-      displayName: 'Download x86_64 notarized binaries'
-    
-    - bash: |
-        echo "=== Creating Final x86_64 ZIP with Notarized Binaries ==="
-        
-        UNSIGNED_DIR="$(Pipeline.Workspace)/x86_64-unsigned-binaries"
-        NOTARIZED_DIR="$(Pipeline.Workspace)/x86_64-notarized-binaries"
-        OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/final-zips"
-        TEMP_DIR="$(Agent.TempDirectory)/final-x86_64"
-        
-        mkdir -p "$OUTPUT_DIR"
-        mkdir -p "$TEMP_DIR"
-        
-        VERSION="$(AzureCliVersion)"
-        ZIP_NAME="azure-cli-${VERSION}-macos-x86_64-notarized.zip"
-        
-        echo "Step 1: Copy all unsigned files to temp directory"
-        cp -R "$UNSIGNED_DIR"/* "$TEMP_DIR/"
-        
-        echo "Step 2: Replace with notarized binaries"
-        cd "$NOTARIZED_DIR"
-        for notarized_file in $(find . -type f); do
-          rel_path="${notarized_file#./}"
-          target="$TEMP_DIR/$rel_path"
-          echo "  Replacing: $rel_path (notarized)"
-          cp "$notarized_file" "$target"
-        done
-        
-        echo "Step 3: Create symlink for bin/az (matching tarball structure)"
-        cd "$TEMP_DIR"
-        rm -f bin/az
-        ln -s ../libexec/bin/az bin/az
-        echo "✅ Symlink created: bin/az -> ../libexec/bin/az"
-        
-        echo "Step 4: Set executable permissions on all binaries"
-        chmod +x libexec/bin/az 2>/dev/null || true
-        find . -type f -name "python*" ! -name "*.pyc" ! -name "*.py" -exec chmod +x {} \; 2>/dev/null || true
-        find . -type f \( -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \; 2>/dev/null || true
-        echo "✅ Executable permissions set"
-        
-        echo "Step 5: Creating final ZIP with symlinks preserved (-y flag)"
-        cd "$TEMP_DIR"
-        zip -ry -q "$OUTPUT_DIR/$ZIP_NAME" .
-        
-        # Generate SHA256
-        cd "$OUTPUT_DIR"
-        shasum -a 256 "$ZIP_NAME" > "${ZIP_NAME}.sha256"
-        
-        echo ""
-        echo "✅ Final x86_64 ZIP created with notarized binaries and all files"
-        ls -lh "$OUTPUT_DIR"
-        
-        echo ""
-        echo "Contents verification:"
-        unzip -l "$OUTPUT_DIR/$ZIP_NAME" | head -30
-      displayName: 'Create final x86_64 ZIP'
-    
-    - publish: $(Build.ArtifactStagingDirectory)/final-zips
-      artifact: x86_64-final-zip
-      displayName: 'Publish final x86_64 ZIP'
 
 # ============================================================================
-# STAGE 7: VERIFY SIGNATURES AND NOTARIZATION
+# STAGE 6: VERIFY SIGNATURES AND NOTARIZATION
 # ============================================================================
 - stage: VerifySignatures
-  displayName: 'Stage 7: Verify Signatures and Notarization'
+  displayName: 'Stage 6: Verify Signatures and Notarization'
   dependsOn: CreateFinalZIPs
   condition: succeeded()
   jobs:
@@ -1119,63 +659,12 @@ stages:
         
         echo "✅ ARM64 verification complete"
       displayName: 'Verify ARM64'
-  
-  - job: VerifyX86_64
-    displayName: 'Verify x86_64 signatures and notarization'
-    pool:
-      vmImage: 'macos-latest'
-    
-    steps:
-    - checkout: none
-    
-    - download: current
-      artifact: x86_64-final-zip
-      displayName: 'Download x86_64 final ZIP'
-    
-    - bash: |
-        echo "=== Verifying x86_64 ZIP Signatures and Notarization ==="
-        
-        cd $(Pipeline.Workspace)/x86_64-final-zip
-        X86_64_ZIP=$(ls *-x86_64-notarized.zip 2>/dev/null | head -1)
-        
-        if [ -z "$X86_64_ZIP" ]; then
-          echo "❌ x86_64 ZIP not found"
-          exit 1
-        fi
-        
-        echo "Verifying: $X86_64_ZIP"
-        echo ""
-        
-        # Note: ZIP files cannot be stapled (only PKG/DMG)
-        # Notarization validated online by macOS
-        echo "1. ZIP notarization info:"
-        echo "   ✅ Notarized by Apple (online validation)"
-        echo "   ℹ️  Stapling not supported for ZIP archives"
-        echo ""
-        
-        # Extract and verify binary signatures
-        echo "2. Extracting ZIP to verify binary signatures..."
-        EXTRACT_DIR="verify-extract"
-        mkdir -p "$EXTRACT_DIR"
-        unzip -q "$X86_64_ZIP" -d "$EXTRACT_DIR"
-        
-        echo "3. Verifying binary signatures..."
-        for binary in "$EXTRACT_DIR/bin/python3" "$EXTRACT_DIR/bin/az"; do
-          if [ -f "$binary" ]; then
-            echo "   Checking: $(basename "$binary")"
-            codesign -vvv "$binary" 2>&1 | head -5
-            echo ""
-          fi
-        done
-        
-        echo "✅ x86_64 verification complete"
-      displayName: 'Verify x86_64'
 
 # ============================================================================
-# STAGE 8: PUBLISH TO GITHUB RELEASE
+# STAGE 7: PUBLISH TO GITHUB RELEASE
 # ============================================================================
 - stage: PublishToGitHub
-  displayName: 'Stage 8: Publish to GitHub Release'
+  displayName: 'Stage 7: Publish to GitHub Release'
   dependsOn:
   - VerifySignatures
   - DownloadAndConvert
@@ -1196,20 +685,14 @@ stages:
       artifact: arm64-final-zip
       displayName: 'Download ARM64 final ZIP'
     
-    - download: current
-      artifact: x86_64-final-zip
-      displayName: 'Download x86_64 final ZIP'
-    
     - bash: |
         echo "=== Preparing GitHub Release ==="
         
         mkdir -p release
         
-        # Copy final notarized ZIPs
+        # Copy final notarized ZIP (ARM64 only)
         cp $(Pipeline.Workspace)/arm64-final-zip/*.zip release/
         cp $(Pipeline.Workspace)/arm64-final-zip/*.sha256 release/
-        cp $(Pipeline.Workspace)/x86_64-final-zip/*.zip release/
-        cp $(Pipeline.Workspace)/x86_64-final-zip/*.sha256 release/
         
         echo ""
         echo "Release assets:"
@@ -1230,13 +713,6 @@ stages:
         ### ARM64 (Apple Silicon: M1, M2, M3, M4)
         ``````
         https://github.com/$(GitHubRepo)/releases/download/$releaseTag/azure-cli-${version}-macos-arm64-notarized.zip
-        ``````
-        
-        **SHA256:** See .sha256 file
-        
-        ### x86_64 (Intel Macs)
-        ``````
-        https://github.com/$(GitHubRepo)/releases/download/$releaseTag/azure-cli-${version}-macos-x86_64-notarized.zip
         ``````
         
         **SHA256:** See .sha256 file
@@ -1340,36 +816,24 @@ stages:
     - download: current
       artifact: arm64-final-zip
     
-    - download: current
-      artifact: x86_64-final-zip
-    
     - bash: |
         set -e
         echo "=== Get ZIP Details ==="
         
         ARM64_ZIP=$(find $(Pipeline.Workspace)/arm64-final-zip -name "*-notarized.zip" -type f | head -1)
-        X86_64_ZIP=$(find $(Pipeline.Workspace)/x86_64-final-zip -name "*-notarized.zip" -type f | head -1)
         
         ARM64_NAME=$(basename "$ARM64_ZIP")
-        X86_64_NAME=$(basename "$X86_64_ZIP")
         
         ARM64_SHA256=$(cat "${ARM64_ZIP}.sha256" | awk '{print $1}')
-        X86_64_SHA256=$(cat "${X86_64_ZIP}.sha256" | awk '{print $1}')
         
         ARM64_URL="https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/$ARM64_NAME"
-        X86_64_URL="https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/$X86_64_NAME"
         
         echo "ARM64: $ARM64_URL"
         echo "SHA256: $ARM64_SHA256"
-        echo ""
-        echo "x86_64: $X86_64_URL"
-        echo "SHA256: $X86_64_SHA256"
         
         # Export variables
         echo "##vso[task.setvariable variable=ARM64_SHA256;isOutput=true]$ARM64_SHA256"
-        echo "##vso[task.setvariable variable=X86_64_SHA256;isOutput=true]$X86_64_SHA256"
         echo "##vso[task.setvariable variable=ARM64_URL;isOutput=true]$ARM64_URL"
-        echo "##vso[task.setvariable variable=X86_64_URL;isOutput=true]$X86_64_URL"
         
       name: GetDetails
       displayName: 'Get ZIP URLs and SHA256'
@@ -1382,18 +846,13 @@ stages:
         
         cat > Formula/$(FormulaName).rb <<'FORMULA_END'
         class AzureCliZipSigned < Formula
-          desc "Microsoft Azure CLI - Code-Signed & Notarized ZIP"
+          desc "Microsoft Azure CLI - Code-Signed & Notarized ZIP (ARM64 only)"
           homepage "https://learn.microsoft.com/cli/azure/"
           version "$(AzureCliVersion)"
           
           on_arm do
             url "$(GetDetails.ARM64_URL)"
             sha256 "$(GetDetails.ARM64_SHA256)"
-          end
-          
-          on_intel do
-            url "$(GetDetails.X86_64_URL)"
-            sha256 "$(GetDetails.X86_64_SHA256)"
           end
           
           def install
@@ -1446,9 +905,7 @@ stages:
     dependsOn: GenerateFormula
     variables:
       ARM64_SHA256: $[ dependencies.GenerateFormula.outputs['GetDetails.ARM64_SHA256'] ]
-      X86_64_SHA256: $[ dependencies.GenerateFormula.outputs['GetDetails.X86_64_SHA256'] ]
       ARM64_URL: $[ dependencies.GenerateFormula.outputs['GetDetails.ARM64_URL'] ]
-      X86_64_URL: $[ dependencies.GenerateFormula.outputs['GetDetails.X86_64_URL'] ]
     pool:
       vmImage: 'ubuntu-latest'
     
@@ -1504,7 +961,6 @@ stages:
           - Version: $(AzureCliVersion)
           - Release Tag: $(ReleaseTag)
           - ARM64 SHA256: $(ARM64_SHA256)
-          - x86_64 SHA256: $(X86_64_SHA256)
           - Code-signed with Developer ID Application
           - Notarized by Apple
           - No Gatekeeper warnings
@@ -1686,151 +1142,15 @@ stages:
         echo "✅ Cleanup complete"
       displayName: 'Cleanup'
       condition: always()
-  
-  - job: TestX86_64
-    displayName: 'Test x86_64 ZIP installation on Intel'
-    pool:
-      vmImage: 'macos-13'  # Intel
-    
-    steps:
-    - checkout: none
-    
-    - bash: |
-        echo "======================================"
-        echo "  System Information"
-        echo "======================================"
-        echo "Architecture: $(uname -m)"
-        echo "macOS Version: $(sw_vers -productVersion)"
-        echo "Homebrew: $(brew --version | head -1)"
-        echo ""
-      displayName: 'System info'
-    
-    - bash: |
-        set -e
-        echo "======================================"
-        echo "  Add Homebrew Tap"
-        echo "======================================"
-        
-        brew tap $(HomebrewTapRepo)
-        
-        echo "✅ Tap added"
-        echo ""
-      displayName: 'Add Homebrew tap'
-    
-    - bash: |
-        set -e
-        echo "======================================"
-        echo "  Install Azure CLI from Formula"
-        echo "======================================"
-        
-        brew install --verbose $(FormulaName)
-        
-        echo ""
-        echo "✅ Installation complete"
-        echo ""
-      displayName: 'Install Azure CLI'
-    
-    - bash: |
-        set -e
-        echo "======================================"
-        echo "  Verify Installation"
-        echo "======================================"
-        echo ""
-        
-        # Verify az command exists
-        if ! command -v az &> /dev/null; then
-          echo "❌ az command not found in PATH"
-          exit 1
-        fi
-        
-        echo "✅ az command found: $(which az)"
-        echo ""
-        
-        # Check version
-        echo "Azure CLI Version:"
-        az --version
-        echo ""
-        
-        # Verify it's the signed ZIP version
-        EXPECTED_VERSION="$(AzureCliVersion)"
-        ACTUAL_VERSION=$(az --version | head -1 | awk '{print $2}')
-        
-        if [ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]; then
-          echo "❌ Version mismatch!"
-          echo "   Expected: $EXPECTED_VERSION"
-          echo "   Actual: $ACTUAL_VERSION"
-          exit 1
-        fi
-        
-        echo "✅ Version verified: $ACTUAL_VERSION"
-        echo ""
-      displayName: 'Verify installation'
-    
-    - bash: |
-        set -e
-        echo "======================================"
-        echo "  Test Azure CLI Commands"
-        echo "======================================"
-        echo ""
-        
-        # Test basic commands
-        echo "Testing: az help"
-        az help > /dev/null
-        echo "✅ az help"
-        echo ""
-        
-        echo "Testing: az version"
-        az version
-        echo "✅ az version"
-        echo ""
-        
-        echo "Testing: az find"
-        az find "vm" > /dev/null
-        echo "✅ az find"
-        echo ""
-        
-        echo "All commands executed successfully!"
-        echo ""
-      displayName: 'Test CLI commands'
-    
-    - bash: |
-        set -e
-        echo "======================================"
-        echo "  Verify Code Signature"
-        echo "======================================"
-        echo ""
-        
-        INSTALL_PATH=$(brew --prefix $(FormulaName))
-        echo "Installation path: $INSTALL_PATH"
-        echo ""
-        
-        # Check signature on python binary
-        PYTHON_BIN=$(find "$INSTALL_PATH" -name "python3" -type f | grep -E "libexec|bin" | head -1)
-        if [ -n "$PYTHON_BIN" ]; then
-          echo "Checking signature on: $PYTHON_BIN"
-          codesign -dvvv "$PYTHON_BIN" 2>&1 | head -10
-          echo ""
-          echo "✅ Binary is properly signed"
-        fi
-        echo ""
-      displayName: 'Verify signatures'
-    
-    - bash: |
-        brew uninstall $(FormulaName) || true
-        brew untap $(HomebrewTapRepo) || true
-        echo "✅ Cleanup complete"
-      displayName: 'Cleanup'
-      condition: always()
 
 # ============================================================================
-# STAGE 11: RELEASE SUMMARY
+# STAGE 9: RELEASE SUMMARY
 # ============================================================================
 - stage: ReleaseSummary
-  displayName: 'Stage 11: Release Summary'
+  displayName: 'Stage 9: Release Summary'
   dependsOn:
   - DownloadAndConvert
   - SignARM64Binaries
-  - SignX86_64Binaries  
   - NotarizeWithApple
   - VerifySignatures
   - PublishToGitHub
@@ -1849,23 +1169,22 @@ stages:
     steps:
     - bash: |
         echo "============================================"
-        echo "Azure CLI ZIP Release - COMPLETE"
+        echo "Azure CLI ZIP Release - COMPLETE (ARM64)"
         echo "============================================"
         echo ""
         echo "Version: $(AzureCliVersion)"
         echo "Release Tag: $(ReleaseTag)"
         echo ""
         echo "✅ All binaries code-signed"
-        echo "✅ ZIPs notarized by Apple"
+        echo "✅ ZIP notarized by Apple"
         echo "✅ Published to GitHub Releases"
         echo "✅ Homebrew formula updated"
-        echo "✅ Installation tested on ARM64 and x86_64"
+        echo "✅ Installation tested on ARM64"
         echo ""
         echo "🎉 NO GATEKEEPER WARNINGS FOR USERS! 🎉"
         echo ""
-        echo "Download URLs:"
+        echo "Download URL:"
         echo "  ARM64: https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/azure-cli-$(AzureCliVersion)-macos-arm64-notarized.zip"
-        echo "  x86_64: https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/azure-cli-$(AzureCliVersion)-macos-x86_64-notarized.zip"
         echo ""
         echo "Homebrew Installation:"
         echo "  brew tap $(HomebrewTapRepo)"
