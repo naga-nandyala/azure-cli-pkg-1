@@ -1511,8 +1511,7 @@ stages:
   dependsOn:
   - DownloadAndConvert
   - SignARM64Binaries
-  - SignX86_64Binaries
-  - RepackageZips
+  - SignX86_64Binaries  
   - NotarizeWithApple
   - VerifySignatures
   - PublishToGitHub
