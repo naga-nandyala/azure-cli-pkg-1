@@ -632,13 +632,187 @@ stages:
         artifactName: 'x86_64-signed-binaries'
 
 # ============================================================================
-# STAGE 4: REPACKAGE SIGNED TARBALLS
+# STAGE 4: NOTARIZE ARM64 SIGNED BINARIES
+# ============================================================================
+- stage: NotarizeARM64Binaries
+  displayName: 'Stage 4: Notarize ARM64 Signed Binaries'
+  dependsOn: SignARM64Binaries
+  condition: succeeded()
+  jobs:
+  - job: NotarizeARM64
+    displayName: 'Notarize ARM64 signed binaries (ESRP on Windows)'
+    pool:
+      vmImage: 'windows-2022'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: arm64-signed-binaries
+      displayName: 'Download ARM64 signed binaries'
+    
+    - pwsh: |
+        Write-Host "=== Preparing ARM64 Signed Binaries for Apple Notarization ==="
+        Write-Host "NOTE: Notarizing binaries BEFORE merging into complete tarball"
+        
+        $signedDir = "$(Pipeline.Workspace)/arm64-signed-binaries"
+        $zipPath = "$(Pipeline.Workspace)/arm64-signed-binaries.zip"
+        
+        # Count files
+        $fileCount = (Get-ChildItem -Path $signedDir -File -Recurse).Count
+        Write-Host "Files to notarize: $fileCount"
+        
+        Write-Host ""
+        Write-Host "Creating ZIP for notarization..."
+        Compress-Archive -Path "$signedDir/*" -DestinationPath $zipPath -Force
+        
+        Write-Host "✅ ZIP created: arm64-signed-binaries.zip"
+        Write-Host "   Size: $([math]::Round((Get-Item $zipPath).Length / 1MB, 2)) MB"
+        
+      displayName: 'Prepare ARM64 binaries for notarization (create ZIP)'
+    
+    - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
+      displayName: 'ESRP - Notarize ARM64 binaries with Apple'
+      inputs:
+        ConnectedServiceName: 'ame_esrp_connection'
+        AppRegistrationClientId: '$(ESRPAppClientId)'
+        AppRegistrationTenantId: '$(ESRPAppTenantId)'
+        AuthAKVName: '$(ESRPKVName)'
+        AuthCertName: '$(ESRPAuthCertName)'
+        AuthSignCertName: '$(ESRPSignCertName)'
+        FolderPath: '$(Pipeline.Workspace)'
+        Pattern: 'arm64-signed-binaries.zip'
+        signConfigType: 'inlineSignParams'
+        inlineOperation: |
+          [
+            {
+              "KeyCode": "CP-401337-Apple",
+              "OperationCode": "MacAppNotarize",
+              "ToolName": "sign",
+              "ToolVersion": "1.0",
+              "Parameters": {
+                "BundleId": "$(BundleId)"
+              }
+            }
+          ]
+        SessionTimeout: '60'
+        MaxConcurrency: '50'
+        MaxRetryAttempts: '5'
+    
+    - pwsh: |
+        Write-Host "=== Extracting Notarized ARM64 Binaries ==="
+        
+        $zipPath = "$(Pipeline.Workspace)/arm64-signed-binaries.zip"
+        $outputDir = "$(Build.ArtifactStagingDirectory)/arm64-notarized-binaries"
+        
+        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+        
+        Write-Host "Extracting notarized binaries from ZIP..."
+        Expand-Archive -Path $zipPath -DestinationPath $outputDir -Force
+        
+        $extractedCount = (Get-ChildItem -Path $outputDir -File -Recurse).Count
+        Write-Host "✅ Extracted $extractedCount notarized binaries"
+        
+      displayName: 'Extract notarized ARM64 binaries'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/arm64-notarized-binaries
+      artifact: arm64-notarized-binaries
+      displayName: 'Publish ARM64 notarized binaries'
+
+# ============================================================================
+# STAGE 5: NOTARIZE X86_64 SIGNED BINARIES
+# ============================================================================
+- stage: NotarizeX86_64Binaries
+  displayName: 'Stage 5: Notarize x86_64 Signed Binaries'
+  dependsOn: SignX86_64Binaries
+  condition: succeeded()
+  jobs:
+  - job: NotarizeX86_64
+    displayName: 'Notarize x86_64 signed binaries (ESRP on Windows)'
+    pool:
+      vmImage: 'windows-2022'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: x86_64-signed-binaries
+      displayName: 'Download x86_64 signed binaries'
+    
+    - pwsh: |
+        Write-Host "=== Preparing x86_64 Signed Binaries for Apple Notarization ==="
+        
+        $signedDir = "$(Pipeline.Workspace)/x86_64-signed-binaries"
+        $zipPath = "$(Pipeline.Workspace)/x86_64-signed-binaries.zip"
+        
+        $fileCount = (Get-ChildItem -Path $signedDir -File -Recurse).Count
+        Write-Host "Files to notarize: $fileCount"
+        
+        Write-Host ""
+        Write-Host "Creating ZIP for notarization..."
+        Compress-Archive -Path "$signedDir/*" -DestinationPath $zipPath -Force
+        
+        Write-Host "✅ ZIP created: x86_64-signed-binaries.zip"
+        Write-Host "   Size: $([math]::Round((Get-Item $zipPath).Length / 1MB, 2)) MB"
+        
+      displayName: 'Prepare x86_64 binaries for notarization (create ZIP)'
+    
+    - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
+      displayName: 'ESRP - Notarize x86_64 binaries with Apple'
+      inputs:
+        ConnectedServiceName: 'ame_esrp_connection'
+        AppRegistrationClientId: '$(ESRPAppClientId)'
+        AppRegistrationTenantId: '$(ESRPAppTenantId)'
+        AuthAKVName: '$(ESRPKVName)'
+        AuthCertName: '$(ESRPAuthCertName)'
+        AuthSignCertName: '$(ESRPSignCertName)'
+        FolderPath: '$(Pipeline.Workspace)'
+        Pattern: 'x86_64-signed-binaries.zip'
+        signConfigType: 'inlineSignParams'
+        inlineOperation: |
+          [
+            {
+              "KeyCode": "CP-401337-Apple",
+              "OperationCode": "MacAppNotarize",
+              "ToolName": "sign",
+              "ToolVersion": "1.0",
+              "Parameters": {
+                "BundleId": "$(BundleId)"
+              }
+            }
+          ]
+        SessionTimeout: '60'
+        MaxConcurrency: '50'
+        MaxRetryAttempts: '5'
+    
+    - pwsh: |
+        Write-Host "=== Extracting Notarized x86_64 Binaries ==="
+        
+        $zipPath = "$(Pipeline.Workspace)/x86_64-signed-binaries.zip"
+        $outputDir = "$(Build.ArtifactStagingDirectory)/x86_64-notarized-binaries"
+        
+        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+        
+        Write-Host "Extracting notarized binaries from ZIP..."
+        Expand-Archive -Path $zipPath -DestinationPath $outputDir -Force
+        
+        $extractedCount = (Get-ChildItem -Path $outputDir -File -Recurse).Count
+        Write-Host "✅ Extracted $extractedCount notarized binaries"
+        
+      displayName: 'Extract notarized x86_64 binaries'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/x86_64-notarized-binaries
+      artifact: x86_64-notarized-binaries
+      displayName: 'Publish x86_64 notarized binaries'
+
+# ============================================================================
+# STAGE 6: REPACKAGE TARBALLS WITH NOTARIZED BINARIES
 # ============================================================================
 - stage: RepackageTarballs
-  displayName: 'Stage 4: Repackage Signed Tarballs'
+  displayName: 'Stage 6: Repackage Tarballs with Notarized Binaries'
   dependsOn:
-  - SignARM64Binaries
-  - SignX86_64Binaries
+  - NotarizeARM64Binaries
+  - NotarizeX86_64Binaries
   - DownloadAndExtract
   condition: succeeded()
   variables:
@@ -653,9 +827,9 @@ stages:
     - checkout: none
     
     - task: DownloadPipelineArtifact@2
-      displayName: 'Download signed ARM64 binaries'
+      displayName: 'Download notarized ARM64 binaries'
       inputs:
-        artifactName: 'arm64-signed-binaries'
+        artifactName: 'arm64-notarized-binaries'
         targetPath: '$(Pipeline.Workspace)/arm64-signed'
     
     - task: DownloadPipelineArtifact@2
@@ -672,12 +846,12 @@ stages:
     
     - bash: |
         set -e
-        echo "=== Repackaging ARM64 Tarball with Signed Binaries ==="
+        echo "=== Repackaging ARM64 Tarball with Notarized Binaries ==="
         
         ORIGINAL_DIR="$(Pipeline.Workspace)/arm64-original"
         SIGNED_DIR="$(Pipeline.Workspace)/arm64-signed"
         MERGED_DIR="$(Pipeline.Workspace)/arm64-merged"
-        OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/signed-tarballs"
+        OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/notarized-tarballs"
         mkdir -p "$OUTPUT_DIR"
         
         echo "Original content structure:"
@@ -685,7 +859,7 @@ stages:
         echo "  Size: $(du -sh "$ORIGINAL_DIR" | cut -f1)"
         echo ""
         
-        echo "Signed binaries:"
+        echo "Notarized binaries:"
         echo "  Files: $(find "$SIGNED_DIR" -type f | wc -l)"
         echo ""
         
@@ -693,8 +867,8 @@ stages:
         echo "Copying complete original content..."
         cp -R "$ORIGINAL_DIR" "$MERGED_DIR"
         
-        # Replace unsigned binaries with signed versions
-        echo "Replacing unsigned binaries with signed versions..."
+        # Replace unsigned binaries with notarized versions
+        echo "Replacing unsigned binaries with notarized versions..."
         cd "$SIGNED_DIR"
         find . -type f | while read signed_file; do
           target_file="$MERGED_DIR/$signed_file"
@@ -714,7 +888,7 @@ stages:
         echo ""
         
         # Create tarball from merged content
-        TARBALL_NAME="azure-cli-$(AzureCliVersion)-macos-arm64-signed.tar.gz"
+        TARBALL_NAME="azure-cli-$(AzureCliVersion)-macos-arm64-notarized.tar.gz"
         
         cd "$MERGED_DIR"
         echo "Creating tarball: $TARBALL_NAME"
@@ -762,11 +936,11 @@ stages:
           echo "⚠️  Original structure file not found for comparison"
         fi
         
-      displayName: 'Create ARM64 signed tarball'
+      displayName: 'Repackage ARM64 tarball with notarized binaries'
     
-    - publish: $(Build.ArtifactStagingDirectory)/signed-tarballs
-      artifact: arm64-signed-tarball
-      displayName: 'Publish ARM64 signed tarball'
+    - publish: $(Build.ArtifactStagingDirectory)/notarized-tarballs
+      artifact: arm64-notarized-tarball
+      displayName: 'Publish ARM64 notarized tarball'
   
   - job: RepackageX86_64
     displayName: 'Repackage x86_64 tarball (macOS)'
@@ -777,9 +951,9 @@ stages:
     - checkout: none
     
     - task: DownloadPipelineArtifact@2
-      displayName: 'Download signed x86_64 binaries'
+      displayName: 'Download notarized x86_64 binaries'
       inputs:
-        artifactName: 'x86_64-signed-binaries'
+        artifactName: 'x86_64-notarized-binaries'
         targetPath: '$(Pipeline.Workspace)/x86_64-signed'
     
     - task: DownloadPipelineArtifact@2
@@ -796,12 +970,12 @@ stages:
     
     - bash: |
         set -e
-        echo "=== Repackaging x86_64 Tarball with Signed Binaries ==="
+        echo "=== Repackaging x86_64 Tarball with Notarized Binaries ==="
         
         ORIGINAL_DIR="$(Pipeline.Workspace)/x86_64-original"
         SIGNED_DIR="$(Pipeline.Workspace)/x86_64-signed"
         MERGED_DIR="$(Pipeline.Workspace)/x86_64-merged"
-        OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/signed-tarballs"
+        OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/notarized-tarballs"
         mkdir -p "$OUTPUT_DIR"
         
         echo "Original content structure:"
@@ -809,7 +983,7 @@ stages:
         echo "  Size: $(du -sh "$ORIGINAL_DIR" | cut -f1)"
         echo ""
         
-        echo "Signed binaries:"
+        echo "Notarized binaries:"
         echo "  Files: $(find "$SIGNED_DIR" -type f | wc -l)"
         echo ""
         
@@ -817,8 +991,8 @@ stages:
         echo "Copying complete original content..."
         cp -R "$ORIGINAL_DIR" "$MERGED_DIR"
         
-        # Replace unsigned binaries with signed versions
-        echo "Replacing unsigned binaries with signed versions..."
+        # Replace unsigned binaries with notarized versions
+        echo "Replacing unsigned binaries with notarized versions..."
         cd "$SIGNED_DIR"
         find . -type f | while read signed_file; do
           target_file="$MERGED_DIR/$signed_file"
@@ -838,7 +1012,7 @@ stages:
         echo ""
         
         # Create tarball from merged content
-        TARBALL_NAME="azure-cli-$(AzureCliVersion)-macos-x86_64-signed.tar.gz"
+        TARBALL_NAME="azure-cli-$(AzureCliVersion)-macos-x86_64-notarized.tar.gz"
         
         cd "$MERGED_DIR"
         echo "Creating tarball: $TARBALL_NAME"
@@ -886,216 +1060,18 @@ stages:
           echo "⚠️  Original structure file not found for comparison"
         fi
         
-      displayName: 'Create x86_64 signed tarball'
-    
-    - publish: $(Build.ArtifactStagingDirectory)/signed-tarballs
-      artifact: x86_64-signed-tarball
-      displayName: 'Publish x86_64 signed tarball'
-
-# ============================================================================
-# STAGE 5: NOTARIZE WITH APPLE (ESRP)
-# ============================================================================
-- stage: NotarizeWithApple
-  displayName: 'Stage 5: Notarize with Apple via ESRP'
-  dependsOn:
-  - RepackageTarballs
-  - DownloadAndExtract
-  condition: succeeded()
-  variables:
-    AzureCliVersion: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractARM64.outputs['ExtractARM64.AzureCliVersion'] ]
-  jobs:
-  - job: NotarizeARM64
-    displayName: 'Notarize ARM64 tarball (ESRP on Windows)'
-    pool:
-      vmImage: 'windows-2022'
-    
-    steps:
-    - checkout: none
-    
-    - download: current
-      artifact: arm64-signed-tarball
-      displayName: 'Download ARM64 signed tarball'
-    
-    - pwsh: |
-        Write-Host "=== Preparing ARM64 Signed Tarball for Apple Notarization ==="
-        Write-Host "NOTE: Apple notarization requires ZIP format, not tar.gz"
-        
-        $tarballDir = "$(Pipeline.Workspace)/arm64-signed-tarball"
-        $tarball = Get-ChildItem -Path $tarballDir -Filter "*-signed.tar.gz" -File | Select-Object -First 1
-        
-        if (-not $tarball) {
-          Write-Error "❌ No tarball found"
-          exit 1
-        }
-        
-        Write-Host "✅ Found signed tarball: $($tarball.Name)"
-        
-        # Create ZIP for notarization (Apple requirement)
-        $zipName = $tarball.Name -replace '\.tar\.gz$', '.zip'
-        $zipPath = "$(Pipeline.Workspace)/$zipName"
-        
-        Write-Host ""
-        Write-Host "Creating ZIP for notarization..."
-        Compress-Archive -Path $tarball.FullName -DestinationPath $zipPath -Force
-        
-        Write-Host "✅ ZIP created: $zipName"
-        Write-Host "   Size: $([math]::Round((Get-Item $zipPath).Length / 1MB, 2)) MB"
-        
-      displayName: 'Prepare ARM64 tarball for notarization (create ZIP)'
-    
-    - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
-      displayName: 'ESRP - Notarize ARM64 tarball with Apple'
-      inputs:
-        ConnectedServiceName: 'ame_esrp_connection'
-        AppRegistrationClientId: '$(ESRPAppClientId)'
-        AppRegistrationTenantId: '$(ESRPAppTenantId)'
-        AuthAKVName: '$(ESRPKVName)'
-        AuthCertName: '$(ESRPAuthCertName)'
-        AuthSignCertName: '$(ESRPSignCertName)'
-        FolderPath: '$(Pipeline.Workspace)'
-        Pattern: '*-signed.zip'
-        signConfigType: 'inlineSignParams'
-        inlineOperation: |
-          [
-            {
-              "KeyCode": "CP-401337-Apple",
-              "OperationCode": "MacAppNotarize",
-              "ToolName": "sign",
-              "ToolVersion": "1.0",
-              "Parameters": {
-                "BundleId": "$(BundleId)"
-              }
-            }
-          ]
-        SessionTimeout: '60'
-        MaxConcurrency: '50'
-        MaxRetryAttempts: '5'
-    
-    - pwsh: |
-        Write-Host "=== Collecting Notarized ARM64 Tarball ==="
-        
-        $tarballDir = "$(Pipeline.Workspace)/arm64-signed-tarball"
-        $outputDir = "$(Build.ArtifactStagingDirectory)/notarized-tarballs"
-        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
-        
-        # Copy original tarball (notarization embeds ticket in the ZIP, but we distribute the tar.gz)
-        $tarball = Get-ChildItem -Path $tarballDir -Filter "*-signed.tar.gz" -File | Select-Object -First 1
-        
-        if ($tarball) {
-          $notarizedName = $tarball.Name -replace '-signed\.tar\.gz$', '-notarized.tar.gz'
-          Copy-Item -Path $tarball.FullName -Destination "$outputDir/$notarizedName" -Force
-          
-          # Copy SHA256
-          if (Test-Path "$($tarball.FullName).sha256") {
-            Copy-Item -Path "$($tarball.FullName).sha256" -Destination "$outputDir/$notarizedName.sha256" -Force
-          }
-          
-          Write-Host "✅ ARM64 notarized tarball ready: $notarizedName"
-        }
-        
-      displayName: 'Collect notarized ARM64 tarball'
-    
-    - publish: $(Build.ArtifactStagingDirectory)/notarized-tarballs
-      artifact: arm64-notarized-tarball
-      displayName: 'Publish ARM64 notarized tarball'
-  
-  - job: NotarizeX86_64
-    displayName: 'Notarize x86_64 tarball (ESRP on Windows)'
-    pool:
-      vmImage: 'windows-2022'
-    
-    steps:
-    - checkout: none
-    
-    - download: current
-      artifact: x86_64-signed-tarball
-      displayName: 'Download x86_64 signed tarball'
-    
-    - pwsh: |
-        Write-Host "=== Preparing x86_64 Signed Tarball for Apple Notarization ==="
-        
-        $tarballDir = "$(Pipeline.Workspace)/x86_64-signed-tarball"
-        $tarball = Get-ChildItem -Path $tarballDir -Filter "*-signed.tar.gz" -File | Select-Object -First 1
-        
-        if (-not $tarball) {
-          Write-Error "❌ No tarball found"
-          exit 1
-        }
-        
-        Write-Host "✅ Found signed tarball: $($tarball.Name)"
-        
-        # Create ZIP for notarization
-        $zipName = $tarball.Name -replace '\.tar\.gz$', '.zip'
-        $zipPath = "$(Pipeline.Workspace)/$zipName"
-        
-        Write-Host ""
-        Write-Host "Creating ZIP for notarization..."
-        Compress-Archive -Path $tarball.FullName -DestinationPath $zipPath -Force
-        
-        Write-Host "✅ ZIP created: $zipName"
-        
-      displayName: 'Prepare x86_64 tarball for notarization (create ZIP)'
-    
-    - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
-      displayName: 'ESRP - Notarize x86_64 tarball with Apple'
-      inputs:
-        ConnectedServiceName: 'ame_esrp_connection'
-        AppRegistrationClientId: '$(ESRPAppClientId)'
-        AppRegistrationTenantId: '$(ESRPAppTenantId)'
-        AuthAKVName: '$(ESRPKVName)'
-        AuthCertName: '$(ESRPAuthCertName)'
-        AuthSignCertName: '$(ESRPSignCertName)'
-        FolderPath: '$(Pipeline.Workspace)'
-        Pattern: '*-signed.zip'
-        signConfigType: 'inlineSignParams'
-        inlineOperation: |
-          [
-            {
-              "KeyCode": "CP-401337-Apple",
-              "OperationCode": "MacAppNotarize",
-              "ToolName": "sign",
-              "ToolVersion": "1.0",
-              "Parameters": {
-                "BundleId": "$(BundleId)"
-              }
-            }
-          ]
-        SessionTimeout: '60'
-        MaxConcurrency: '50'
-        MaxRetryAttempts: '5'
-    
-    - pwsh: |
-        Write-Host "=== Collecting Notarized x86_64 Tarball ==="
-        
-        $tarballDir = "$(Pipeline.Workspace)/x86_64-signed-tarball"
-        $outputDir = "$(Build.ArtifactStagingDirectory)/notarized-tarballs"
-        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
-        
-        $tarball = Get-ChildItem -Path $tarballDir -Filter "*-signed.tar.gz" -File | Select-Object -First 1
-        
-        if ($tarball) {
-          $notarizedName = $tarball.Name -replace '-signed\.tar\.gz$', '-notarized.tar.gz'
-          Copy-Item -Path $tarball.FullName -Destination "$outputDir/$notarizedName" -Force
-          
-          if (Test-Path "$($tarball.FullName).sha256") {
-            Copy-Item -Path "$($tarball.FullName).sha256" -Destination "$outputDir/$notarizedName.sha256" -Force
-          }
-          
-          Write-Host "✅ x86_64 notarized tarball ready: $notarizedName"
-        }
-        
-      displayName: 'Collect notarized x86_64 tarball'
+      displayName: 'Repackage x86_64 tarball with notarized binaries'
     
     - publish: $(Build.ArtifactStagingDirectory)/notarized-tarballs
       artifact: x86_64-notarized-tarball
       displayName: 'Publish x86_64 notarized tarball'
 
 # ============================================================================
-# STAGE 6: VERIFY SIGNATURES (macOS)
+# STAGE 7: VERIFY SIGNATURES (macOS)
 # ============================================================================
 - stage: VerifySignatures
-  displayName: 'Stage 6: Verify Signatures and Notarization'
-  dependsOn: NotarizeWithApple
+  displayName: 'Stage 7: Verify Signatures and Notarization'
+  dependsOn: RepackageTarballs
   condition: succeeded()
   jobs:
   - job: VerifyARM64
@@ -2018,8 +1994,9 @@ stages:
   - DownloadAndExtract
   - SignARM64Binaries
   - SignX86_64Binaries
+  - NotarizeARM64Binaries
+  - NotarizeX86_64Binaries
   - RepackageTarballs
-  - NotarizeWithApple
   - VerifySignatures
   - PublishToGitHub
   - UpdateHomebrewFormula
