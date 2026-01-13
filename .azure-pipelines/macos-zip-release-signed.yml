@@ -624,6 +624,7 @@ stages:
     - bash: |
         echo "=== Creating ARM64 Binary-Only ZIP for Notarization ==="
         echo "Following tarball pipeline approach: BINARIES ONLY"
+        echo "IMPORTANT: Excluding symlinks - ESRP requires only regular files"
         
         SIGNED_DIR="$(Pipeline.Workspace)/arm64-signed"
         OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/binaries-for-notarization"
@@ -633,18 +634,29 @@ stages:
         VERSION="$(AzureCliVersion)"
         ZIP_NAME="arm64-signed-binaries.zip"
         
-        echo "Step 1: Creating ZIP from signed binaries ONLY"
+        echo "Step 1: Finding regular files (excluding symlinks)"
         cd "$SIGNED_DIR"
-        zip -r -q "$OUTPUT_DIR/$ZIP_NAME" .
+        
+        # Find only regular files (not symlinks) - ESRP rejects symlinks
+        TEMP_LIST=$(mktemp)
+        find . -type f ! -type l > "$TEMP_LIST"
+        
+        FILE_COUNT=$(wc -l < "$TEMP_LIST")
+        echo "Found $FILE_COUNT regular files to include"
+        
+        echo ""
+        echo "Step 2: Creating ZIP from regular files only (no symlinks)"
+        cat "$TEMP_LIST" | zip -q -@ "$OUTPUT_DIR/$ZIP_NAME"
+        rm -f "$TEMP_LIST"
         
         echo ""
         echo "✅ ARM64 binary-only ZIP created for notarization"
         ls -lh "$OUTPUT_DIR"
         
         echo ""
-        echo "Contents (binaries only):"
+        echo "Contents (binaries only, no symlinks):"
         unzip -l "$OUTPUT_DIR/$ZIP_NAME" | head -20
-      displayName: 'Create ARM64 binary-only ZIP'
+      displayName: 'Create ARM64 binary-only ZIP (exclude symlinks)'
     
     - publish: $(Build.ArtifactStagingDirectory)/binaries-for-notarization
       artifact: arm64-binaries-for-notarization
@@ -664,6 +676,7 @@ stages:
     
     - bash: |
         echo "=== Creating x86_64 Binary-Only ZIP for Notarization ==="
+        echo "IMPORTANT: Excluding symlinks - ESRP requires only regular files"
         
         SIGNED_DIR="$(Pipeline.Workspace)/x86_64-signed"
         OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/binaries-for-notarization"
@@ -673,18 +686,29 @@ stages:
         VERSION="$(AzureCliVersion)"
         ZIP_NAME="x86_64-signed-binaries.zip"
         
-        echo "Step 1: Creating ZIP from signed binaries ONLY"
+        echo "Step 1: Finding regular files (excluding symlinks)"
         cd "$SIGNED_DIR"
-        zip -r -q "$OUTPUT_DIR/$ZIP_NAME" .
+        
+        # Find only regular files (not symlinks) - ESRP rejects symlinks
+        TEMP_LIST=$(mktemp)
+        find . -type f ! -type l > "$TEMP_LIST"
+        
+        FILE_COUNT=$(wc -l < "$TEMP_LIST")
+        echo "Found $FILE_COUNT regular files to include"
+        
+        echo ""
+        echo "Step 2: Creating ZIP from regular files only (no symlinks)"
+        cat "$TEMP_LIST" | zip -q -@ "$OUTPUT_DIR/$ZIP_NAME"
+        rm -f "$TEMP_LIST"
         
         echo ""
         echo "✅ x86_64 binary-only ZIP created for notarization"
         ls -lh "$OUTPUT_DIR"
         
         echo ""
-        echo "Contents (binaries only):"
+        echo "Contents (binaries only, no symlinks):"
         unzip -l "$OUTPUT_DIR/$ZIP_NAME" | head -20
-      displayName: 'Create x86_64 binary-only ZIP'
+      displayName: 'Create x86_64 binary-only ZIP (exclude symlinks)'
     
     - publish: $(Build.ArtifactStagingDirectory)/binaries-for-notarization
       artifact: x86_64-binaries-for-notarization
