@@ -618,8 +618,8 @@ stages:
     - checkout: none
     
     - download: current
-      artifact: unsigned-binaries
-      displayName: 'Download original unsigned files'
+      artifact: arm64-unsigned-binaries
+      displayName: 'Download ARM64 original unsigned files'
     
     - download: current
       artifact: arm64-signed
@@ -628,7 +628,7 @@ stages:
     - bash: |
         echo "=== Repackaging ARM64 Signed ZIP ==="
         
-        UNSIGNED_DIR="$(Pipeline.Workspace)/unsigned-binaries/arm64"
+        UNSIGNED_DIR="$(Pipeline.Workspace)/arm64-unsigned-binaries"
         SIGNED_DIR="$(Pipeline.Workspace)/arm64-signed"
         OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/signed-zips"
         TEMP_DIR="$(Agent.TempDirectory)/repackage-arm64"
@@ -681,8 +681,8 @@ stages:
     - checkout: none
     
     - download: current
-      artifact: unsigned-binaries
-      displayName: 'Download original unsigned files'
+      artifact: x86_64-unsigned-binaries
+      displayName: 'Download x86_64 original unsigned files'
     
     - download: current
       artifact: x86_64-signed
@@ -691,7 +691,7 @@ stages:
     - bash: |
         echo "=== Repackaging x86_64 Signed ZIP ==="
         
-        UNSIGNED_DIR="$(Pipeline.Workspace)/unsigned-binaries/x86_64"
+        UNSIGNED_DIR="$(Pipeline.Workspace)/x86_64-unsigned-binaries"
         SIGNED_DIR="$(Pipeline.Workspace)/x86_64-signed"
         OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/signed-zips"
         TEMP_DIR="$(Agent.TempDirectory)/repackage-x86_64"
