@@ -683,7 +683,6 @@ stages:
         FolderPath: '$(Pipeline.Workspace)'
         Pattern: 'arm64-signed-binaries.zip'
         signConfigType: 'inlineSignParams'
-        signType: 'regularSigning'
         inlineOperation: |
           [
             {
@@ -770,7 +769,6 @@ stages:
         FolderPath: '$(Pipeline.Workspace)'
         Pattern: 'x86_64-signed-binaries.zip'
         signConfigType: 'inlineSignParams'
-        signType: 'regularSigning'
         inlineOperation: |
           [
             {

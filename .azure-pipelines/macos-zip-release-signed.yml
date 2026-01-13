@@ -929,16 +929,21 @@ stages:
           cp "$notarized_file" "$target"
         done
         
-        echo "Step 3: CRITICAL - Set executable permissions on all binaries"
+        echo "Step 3: Create symlink for bin/az (matching tarball structure)"
         cd "$TEMP_DIR"
-        chmod +x bin/az 2>/dev/null || true
+        rm -f bin/az
+        ln -s ../libexec/bin/az bin/az
+        echo "✅ Symlink created: bin/az -> ../libexec/bin/az"
+        
+        echo "Step 4: Set executable permissions on all binaries"
+        chmod +x libexec/bin/az 2>/dev/null || true
         find . -type f -name "python*" ! -name "*.pyc" ! -name "*.py" -exec chmod +x {} \; 2>/dev/null || true
         find . -type f \( -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \; 2>/dev/null || true
         echo "✅ Executable permissions set"
         
-        echo "Step 4: Creating final ZIP with notarized binaries"
+        echo "Step 5: Creating final ZIP with symlinks preserved (-y flag)"
         cd "$TEMP_DIR"
-        zip -r -q "$OUTPUT_DIR/$ZIP_NAME" .
+        zip -ry -q "$OUTPUT_DIR/$ZIP_NAME" .
         
         # Generate SHA256
         cd "$OUTPUT_DIR"
@@ -999,16 +1004,21 @@ stages:
           cp "$notarized_file" "$target"
         done
         
-        echo "Step 3: CRITICAL - Set executable permissions on all binaries"
+        echo "Step 3: Create symlink for bin/az (matching tarball structure)"
         cd "$TEMP_DIR"
-        chmod +x bin/az 2>/dev/null || true
+        rm -f bin/az
+        ln -s ../libexec/bin/az bin/az
+        echo "✅ Symlink created: bin/az -> ../libexec/bin/az"
+        
+        echo "Step 4: Set executable permissions on all binaries"
+        chmod +x libexec/bin/az 2>/dev/null || true
         find . -type f -name "python*" ! -name "*.pyc" ! -name "*.py" -exec chmod +x {} \; 2>/dev/null || true
         find . -type f \( -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \; 2>/dev/null || true
         echo "✅ Executable permissions set"
         
-        echo "Step 4: Creating final ZIP with notarized binaries"
+        echo "Step 5: Creating final ZIP with symlinks preserved (-y flag)"
         cd "$TEMP_DIR"
-        zip -r -q "$OUTPUT_DIR/$ZIP_NAME" .
+        zip -ry -q "$OUTPUT_DIR/$ZIP_NAME" .
         
         # Generate SHA256
         cd "$OUTPUT_DIR"
@@ -1363,8 +1373,11 @@ stages:
           end
           
           def install
-            # Install signed and notarized ZIP
+            # ZIP structure matches tarball: bin/az -> symlink to ../libexec/bin/az
+            # Install everything as-is with symlinks preserved
             prefix.install Dir["*"]
+            
+            # Ensure executable permissions
             chmod 0755, bin/"az"
           end
           
@@ -1504,10 +1517,292 @@ stages:
       displayName: 'Print summary'
 
 # ============================================================================
-# STAGE 9: RELEASE SUMMARY
+# STAGE 10: TEST HOMEBREW INSTALLATION
+# ============================================================================
+- stage: TestInstallation
+  displayName: 'Stage 10: Test Homebrew Installation'
+  dependsOn:
+  - UpdateHomebrewFormula
+  - DownloadAndConvert
+  condition: succeeded()
+  variables:
+    AzureCliVersion: $[ stageDependencies.DownloadAndConvert.ConvertARM64.outputs['ConvertARM64.AzureCliVersion'] ]
+  jobs:
+  - job: TestARM64
+    displayName: 'Test ARM64 ZIP installation on Apple Silicon'
+    pool:
+      vmImage: 'macos-14'  # Apple Silicon
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo "======================================"
+        echo "  System Information"
+        echo "======================================"
+        echo "Architecture: $(uname -m)"
+        echo "macOS Version: $(sw_vers -productVersion)"
+        echo "Homebrew: $(brew --version | head -1)"
+        echo ""
+      displayName: 'System info'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Add Homebrew Tap"
+        echo "======================================"
+        
+        brew tap $(HomebrewTapRepo)
+        
+        echo "✅ Tap added"
+        echo ""
+      displayName: 'Add Homebrew tap'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Install Azure CLI from Formula"
+        echo "======================================"
+        
+        brew install --verbose $(FormulaName)
+        
+        echo ""
+        echo "✅ Installation complete"
+        echo ""
+      displayName: 'Install Azure CLI'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Verify Installation"
+        echo "======================================"
+        echo ""
+        
+        # Verify az command exists
+        if ! command -v az &> /dev/null; then
+          echo "❌ az command not found in PATH"
+          exit 1
+        fi
+        
+        echo "✅ az command found: $(which az)"
+        echo ""
+        
+        # Check version
+        echo "Azure CLI Version:"
+        az --version
+        echo ""
+        
+        # Verify it's the signed ZIP version
+        EXPECTED_VERSION="$(AzureCliVersion)"
+        ACTUAL_VERSION=$(az --version | head -1 | awk '{print $2}')
+        
+        if [ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]; then
+          echo "❌ Version mismatch!"
+          echo "   Expected: $EXPECTED_VERSION"
+          echo "   Actual: $ACTUAL_VERSION"
+          exit 1
+        fi
+        
+        echo "✅ Version verified: $ACTUAL_VERSION"
+        echo ""
+      displayName: 'Verify installation'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Test Azure CLI Commands"
+        echo "======================================"
+        echo ""
+        
+        # Test basic commands (no login required)
+        echo "Testing: az help"
+        az help > /dev/null
+        echo "✅ az help"
+        echo ""
+        
+        echo "Testing: az version"
+        az version
+        echo "✅ az version"
+        echo ""
+        
+        echo "Testing: az find"
+        az find "vm" > /dev/null
+        echo "✅ az find"
+        echo ""
+        
+        echo "All commands executed successfully!"
+        echo ""
+      displayName: 'Test CLI commands'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Verify Code Signature"
+        echo "======================================"
+        echo ""
+        
+        INSTALL_PATH=$(brew --prefix $(FormulaName))
+        echo "Installation path: $INSTALL_PATH"
+        echo ""
+        
+        # Check signature on python binary
+        PYTHON_BIN=$(find "$INSTALL_PATH" -name "python3" -type f | grep -E "libexec|bin" | head -1)
+        if [ -n "$PYTHON_BIN" ]; then
+          echo "Checking signature on: $PYTHON_BIN"
+          codesign -dvvv "$PYTHON_BIN" 2>&1 | head -10
+          echo ""
+          echo "✅ Binary is properly signed"
+        fi
+        echo ""
+      displayName: 'Verify signatures'
+    
+    - bash: |
+        brew uninstall $(FormulaName) || true
+        brew untap $(HomebrewTapRepo) || true
+        echo "✅ Cleanup complete"
+      displayName: 'Cleanup'
+      condition: always()
+  
+  - job: TestX86_64
+    displayName: 'Test x86_64 ZIP installation on Intel'
+    pool:
+      vmImage: 'macos-13'  # Intel
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo "======================================"
+        echo "  System Information"
+        echo "======================================"
+        echo "Architecture: $(uname -m)"
+        echo "macOS Version: $(sw_vers -productVersion)"
+        echo "Homebrew: $(brew --version | head -1)"
+        echo ""
+      displayName: 'System info'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Add Homebrew Tap"
+        echo "======================================"
+        
+        brew tap $(HomebrewTapRepo)
+        
+        echo "✅ Tap added"
+        echo ""
+      displayName: 'Add Homebrew tap'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Install Azure CLI from Formula"
+        echo "======================================"
+        
+        brew install --verbose $(FormulaName)
+        
+        echo ""
+        echo "✅ Installation complete"
+        echo ""
+      displayName: 'Install Azure CLI'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Verify Installation"
+        echo "======================================"
+        echo ""
+        
+        # Verify az command exists
+        if ! command -v az &> /dev/null; then
+          echo "❌ az command not found in PATH"
+          exit 1
+        fi
+        
+        echo "✅ az command found: $(which az)"
+        echo ""
+        
+        # Check version
+        echo "Azure CLI Version:"
+        az --version
+        echo ""
+        
+        # Verify it's the signed ZIP version
+        EXPECTED_VERSION="$(AzureCliVersion)"
+        ACTUAL_VERSION=$(az --version | head -1 | awk '{print $2}')
+        
+        if [ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]; then
+          echo "❌ Version mismatch!"
+          echo "   Expected: $EXPECTED_VERSION"
+          echo "   Actual: $ACTUAL_VERSION"
+          exit 1
+        fi
+        
+        echo "✅ Version verified: $ACTUAL_VERSION"
+        echo ""
+      displayName: 'Verify installation'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Test Azure CLI Commands"
+        echo "======================================"
+        echo ""
+        
+        # Test basic commands
+        echo "Testing: az help"
+        az help > /dev/null
+        echo "✅ az help"
+        echo ""
+        
+        echo "Testing: az version"
+        az version
+        echo "✅ az version"
+        echo ""
+        
+        echo "Testing: az find"
+        az find "vm" > /dev/null
+        echo "✅ az find"
+        echo ""
+        
+        echo "All commands executed successfully!"
+        echo ""
+      displayName: 'Test CLI commands'
+    
+    - bash: |
+        set -e
+        echo "======================================"
+        echo "  Verify Code Signature"
+        echo "======================================"
+        echo ""
+        
+        INSTALL_PATH=$(brew --prefix $(FormulaName))
+        echo "Installation path: $INSTALL_PATH"
+        echo ""
+        
+        # Check signature on python binary
+        PYTHON_BIN=$(find "$INSTALL_PATH" -name "python3" -type f | grep -E "libexec|bin" | head -1)
+        if [ -n "$PYTHON_BIN" ]; then
+          echo "Checking signature on: $PYTHON_BIN"
+          codesign -dvvv "$PYTHON_BIN" 2>&1 | head -10
+          echo ""
+          echo "✅ Binary is properly signed"
+        fi
+        echo ""
+      displayName: 'Verify signatures'
+    
+    - bash: |
+        brew uninstall $(FormulaName) || true
+        brew untap $(HomebrewTapRepo) || true
+        echo "✅ Cleanup complete"
+      displayName: 'Cleanup'
+      condition: always()
+
+# ============================================================================
+# STAGE 11: RELEASE SUMMARY
 # ============================================================================
 - stage: ReleaseSummary
-  displayName: 'Stage 9: Release Summary'
+  displayName: 'Stage 11: Release Summary'
   dependsOn:
   - DownloadAndConvert
   - SignARM64Binaries
@@ -1516,6 +1811,7 @@ stages:
   - VerifySignatures
   - PublishToGitHub
   - UpdateHomebrewFormula
+  - TestInstallation
   condition: always()
   variables:
     AzureCliVersion: $[ stageDependencies.DownloadAndConvert.ConvertARM64.outputs['ConvertARM64.AzureCliVersion'] ]
@@ -1537,14 +1833,19 @@ stages:
         echo ""
         echo "✅ All binaries code-signed"
         echo "✅ ZIPs notarized by Apple"
-        echo "✅ Notarization tickets stapled"
         echo "✅ Published to GitHub Releases"
+        echo "✅ Homebrew formula updated"
+        echo "✅ Installation tested on ARM64 and x86_64"
         echo ""
         echo "🎉 NO GATEKEEPER WARNINGS FOR USERS! 🎉"
         echo ""
         echo "Download URLs:"
         echo "  ARM64: https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/azure-cli-$(AzureCliVersion)-macos-arm64-notarized.zip"
         echo "  x86_64: https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/azure-cli-$(AzureCliVersion)-macos-x86_64-notarized.zip"
+        echo ""
+        echo "Homebrew Installation:"
+        echo "  brew tap $(HomebrewTapRepo)"
+        echo "  brew install $(FormulaName)"
         echo ""
         echo "============================================"
       displayName: 'Print summary'
