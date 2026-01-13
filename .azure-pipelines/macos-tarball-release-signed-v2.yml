@@ -856,6 +856,7 @@ stages:
         
         echo "Original content structure:"
         echo "  Files: $(find "$ORIGINAL_DIR" -type f | wc -l)"
+        echo "  Symlinks: $(find "$ORIGINAL_DIR" -type l | wc -l)"
         echo "  Size: $(du -sh "$ORIGINAL_DIR" | cut -f1)"
         echo ""
         
@@ -863,19 +864,22 @@ stages:
         echo "  Files: $(find "$SIGNED_DIR" -type f | wc -l)"
         echo ""
         
-        # Copy complete original content
-        echo "Copying complete original content..."
-        cp -R "$ORIGINAL_DIR" "$MERGED_DIR"
+        # CRITICAL: Use rsync to preserve symlinks and permissions
+        echo "Copying complete original content (preserving symlinks)..."
+        rsync -a "$ORIGINAL_DIR/" "$MERGED_DIR/"
         
-        # Replace unsigned binaries with notarized versions
+        # Replace unsigned binaries with notarized versions (but not symlinks!)
         echo "Replacing unsigned binaries with notarized versions..."
         cd "$SIGNED_DIR"
         find . -type f | while read signed_file; do
           target_file="$MERGED_DIR/$signed_file"
           
-          if [ -f "$target_file" ]; then
+          # Only replace if target is a regular file (not a symlink)
+          if [ -f "$target_file" ] && [ ! -L "$target_file" ]; then
             cp "$signed_file" "$target_file"
             echo "  ✓ Replaced: $signed_file"
+          elif [ -L "$target_file" ]; then
+            echo "  ↷ Skipped (symlink): $signed_file"
           else
             echo "  ⚠️  Warning: $signed_file not found in original"
           fi
@@ -886,23 +890,27 @@ stages:
         echo "Setting executable permissions on binaries..."
         cd "$MERGED_DIR"
         
-        # Set execute permissions on wrapper scripts
-        chmod +x bin/az 2>/dev/null || true
-        
-        # Set execute permissions on Python executables
+        # Set execute permissions on Python executables (only real files, not symlinks)
         find libexec/bin -type f -name "python*" ! -name "*.pyc" ! -name "*.py" -exec chmod +x {} \; 2>/dev/null || true
         
         # Set execute permissions on all Mach-O binaries (dylibs, .so files)
         find . -type f \( -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \; 2>/dev/null || true
         
         echo ""
-        echo "Verifying permissions on critical files:"
+        echo "Verifying symlinks are preserved:"
         ls -l bin/az
-        ls -l libexec/bin/python* | head -3
+        ls -l libexec/bin/python 2>/dev/null || echo "  python -> (no symlink found)"
+        ls -l libexec/bin/python3.13 2>/dev/null || echo "  python3.13 -> (no symlink found)"
+        
+        echo ""
+        echo "Verifying permissions on actual executables:"
+        ls -l libexec/bin/python3 2>/dev/null || echo "  python3 (not found)"
+        ls -l libexec/bin/az 2>/dev/null || echo "  az (not found)"
         
         echo ""
         echo "Merged content:"
         echo "  Files: $(find "$MERGED_DIR" -type f | wc -l)"
+        echo "  Symlinks: $(find "$MERGED_DIR" -type l | wc -l)"
         echo "  Size: $(du -sh "$MERGED_DIR" | cut -f1)"
         echo ""
         
@@ -999,6 +1007,7 @@ stages:
         
         echo "Original content structure:"
         echo "  Files: $(find "$ORIGINAL_DIR" -type f | wc -l)"
+        echo "  Symlinks: $(find "$ORIGINAL_DIR" -type l | wc -l)"
         echo "  Size: $(du -sh "$ORIGINAL_DIR" | cut -f1)"
         echo ""
         
@@ -1006,19 +1015,22 @@ stages:
         echo "  Files: $(find "$SIGNED_DIR" -type f | wc -l)"
         echo ""
         
-        # Copy complete original content
-        echo "Copying complete original content..."
-        cp -R "$ORIGINAL_DIR" "$MERGED_DIR"
+        # CRITICAL: Use rsync to preserve symlinks and permissions
+        echo "Copying complete original content (preserving symlinks)..."
+        rsync -a "$ORIGINAL_DIR/" "$MERGED_DIR/"
         
-        # Replace unsigned binaries with notarized versions
+        # Replace unsigned binaries with notarized versions (but not symlinks!)
         echo "Replacing unsigned binaries with notarized versions..."
         cd "$SIGNED_DIR"
         find . -type f | while read signed_file; do
           target_file="$MERGED_DIR/$signed_file"
           
-          if [ -f "$target_file" ]; then
+          # Only replace if target is a regular file (not a symlink)
+          if [ -f "$target_file" ] && [ ! -L "$target_file" ]; then
             cp "$signed_file" "$target_file"
             echo "  ✓ Replaced: $signed_file"
+          elif [ -L "$target_file" ]; then
+            echo "  ↷ Skipped (symlink): $signed_file"
           else
             echo "  ⚠️  Warning: $signed_file not found in original"
           fi
@@ -1029,23 +1041,27 @@ stages:
         echo "Setting executable permissions on binaries..."
         cd "$MERGED_DIR"
         
-        # Set execute permissions on wrapper scripts
-        chmod +x bin/az 2>/dev/null || true
-        
-        # Set execute permissions on Python executables
+        # Set execute permissions on Python executables (only real files, not symlinks)
         find libexec/bin -type f -name "python*" ! -name "*.pyc" ! -name "*.py" -exec chmod +x {} \; 2>/dev/null || true
         
         # Set execute permissions on all Mach-O binaries (dylibs, .so files)
         find . -type f \( -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \; 2>/dev/null || true
         
         echo ""
-        echo "Verifying permissions on critical files:"
+        echo "Verifying symlinks are preserved:"
         ls -l bin/az
-        ls -l libexec/bin/python* | head -3
+        ls -l libexec/bin/python 2>/dev/null || echo "  python -> (no symlink found)"
+        ls -l libexec/bin/python3.13 2>/dev/null || echo "  python3.13 -> (no symlink found)"
+        
+        echo ""
+        echo "Verifying permissions on actual executables:"
+        ls -l libexec/bin/python3 2>/dev/null || echo "  python3 (not found)"
+        ls -l libexec/bin/az 2>/dev/null || echo "  az (not found)"
         
         echo ""
         echo "Merged content:"
         echo "  Files: $(find "$MERGED_DIR" -type f | wc -l)"
+        echo "  Symlinks: $(find "$MERGED_DIR" -type l | wc -l)"
         echo "  Size: $(du -sh "$MERGED_DIR" | cut -f1)"
         echo ""
         
