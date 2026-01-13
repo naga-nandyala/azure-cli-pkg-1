@@ -883,6 +883,25 @@ stages:
           fi
         done
         
+        # CRITICAL: Set executable permissions on all binaries
+        echo ""
+        echo "Setting executable permissions on binaries..."
+        cd "$MERGED_DIR"
+        
+        # Set execute permissions on wrapper scripts
+        chmod +x bin/az 2>/dev/null || true
+        
+        # Set execute permissions on Python executables
+        find libexec/bin -type f -name "python*" ! -name "*.pyc" ! -name "*.py" -exec chmod +x {} \; 2>/dev/null || true
+        
+        # Set execute permissions on all Mach-O binaries (dylibs, .so files)
+        find . -type f \( -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \; 2>/dev/null || true
+        
+        echo ""
+        echo "Verifying permissions on critical files:"
+        ls -l bin/az
+        ls -l libexec/bin/python* | head -3
+        
         echo ""
         echo "Merged content:"
         echo "  Files: $(find "$MERGED_DIR" -type f | wc -l)"
@@ -1006,6 +1025,25 @@ stages:
             echo "  ⚠️  Warning: $signed_file not found in original"
           fi
         done
+        
+        # CRITICAL: Set executable permissions on all binaries
+        echo ""
+        echo "Setting executable permissions on binaries..."
+        cd "$MERGED_DIR"
+        
+        # Set execute permissions on wrapper scripts
+        chmod +x bin/az 2>/dev/null || true
+        
+        # Set execute permissions on Python executables
+        find libexec/bin -type f -name "python*" ! -name "*.pyc" ! -name "*.py" -exec chmod +x {} \; 2>/dev/null || true
+        
+        # Set execute permissions on all Mach-O binaries (dylibs, .so files)
+        find . -type f \( -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \; 2>/dev/null || true
+        
+        echo ""
+        echo "Verifying permissions on critical files:"
+        ls -l bin/az
+        ls -l libexec/bin/python* | head -3
         
         echo ""
         echo "Merged content:"
