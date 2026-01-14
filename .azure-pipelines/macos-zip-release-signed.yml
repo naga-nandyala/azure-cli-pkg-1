@@ -1051,6 +1051,53 @@ stages:
       displayName: 'System info'
     
     - bash: |
+        echo "======================================"
+        echo "  Cleanup Existing Azure CLI"
+        echo "======================================"
+        echo ""
+        
+        # Check for existing az command
+        if command -v az &> /dev/null; then
+          echo "⚠️  Found existing az: $(which az)"
+          
+          # Try to uninstall via Homebrew first
+          if brew list azure-cli &> /dev/null; then
+            echo "   Removing Homebrew azure-cli..."
+            brew uninstall azure-cli || true
+          fi
+          
+          if brew list azure-cli-zip-signed &> /dev/null; then
+            echo "   Removing existing formula installation..."
+            brew uninstall azure-cli-zip-signed || true
+          fi
+          
+          # Remove common manual installation paths
+          if [ -d "$HOME/.local/azure-cli" ]; then
+            echo "   Removing ~/.local/azure-cli..."
+            rm -rf "$HOME/.local/azure-cli"
+          fi
+          
+          if [ -d "/usr/local/az" ]; then
+            echo "   Removing /usr/local/az..."
+            sudo rm -rf /usr/local/az || true
+          fi
+          
+          # Verify az is gone
+          if command -v az &> /dev/null; then
+            echo "   ⚠️  az still found at: $(which az)"
+            echo "   Removing from PATH manually..."
+            rm -f "$(which az)" || sudo rm -f "$(which az)" || true
+          fi
+        else
+          echo "✅ No existing az installation found"
+        fi
+        
+        echo ""
+        echo "✅ Cleanup complete"
+        echo ""
+      displayName: 'Cleanup existing Azure CLI'
+    
+    - bash: |
         set -e
         echo "======================================"
         echo "  Add Homebrew Tap"
