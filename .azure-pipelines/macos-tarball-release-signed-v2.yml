@@ -871,29 +871,40 @@ stages:
         rsync -a "$ORIGINAL_DIR/" "$MERGED_DIR/"
         
         echo ""
-        echo "After rsync, checking bin/az:"
-        ls -la "$MERGED_DIR/bin/az"
+        echo "After rsync, checking symlinks:"
+        echo "  bin/az:" && ls -la "$MERGED_DIR/bin/az"
+        echo "  libexec/bin/python:" && ls -la "$MERGED_DIR/libexec/bin/python"
+        echo "  libexec/bin/python3.13:" && ls -la "$MERGED_DIR/libexec/bin/python3.13"
         
-        # Replace unsigned binaries with notarized versions (but not symlinks!)
+        # Replace unsigned binaries with notarized versions (but NEVER replace symlinks!)
         echo "Replacing unsigned binaries with notarized versions..."
         cd "$SIGNED_DIR"
         find . -type f | while read signed_file; do
           target_file="$MERGED_DIR/$signed_file"
           
-          # Only replace if target is a regular file (not a symlink)
-          if [ -f "$target_file" ] && [ ! -L "$target_file" ]; then
-            cp "$signed_file" "$target_file"
-            echo "  ✓ Replaced: $signed_file"
-          elif [ -L "$target_file" ]; then
-            echo "  ↷ Skipped (symlink): $signed_file"
+          # Critical check: if target is a symlink in the original, DO NOT copy over it!
+          if [ -L "$target_file" ]; then
+            echo "  ↷ Skipped (target is symlink): $signed_file"
+            continue
+          fi
+          
+          # Only replace if target exists and is a regular file
+          if [ -f "$target_file" ]; then
+            # Double-check it's not a symlink (belt and suspenders)
+            if [ ! -L "$target_file" ]; then
+              cp "$signed_file" "$target_file"
+              echo "  ✓ Replaced: $signed_file"
+            fi
           else
-            echo "  ⚠️  Warning: $signed_file not found in original"
+            echo "  ⚠️  Warning: $signed_file not found in original (signed artifact may have extra files from PowerShell ZIP issue)"
           fi
         done
         
         echo ""
-        echo "After replacing binaries, checking bin/az again:"
-        ls -la "$MERGED_DIR/bin/az"
+        echo "After replacing binaries, checking symlinks again:"
+        echo "  bin/az:" && ls -la "$MERGED_DIR/bin/az"
+        echo "  libexec/bin/python:" && ls -la "$MERGED_DIR/libexec/bin/python"
+        echo "  libexec/bin/python3.13:" && ls -la "$MERGED_DIR/libexec/bin/python3.13"
         
         # CRITICAL: Set executable permissions on all binaries
         echo ""
