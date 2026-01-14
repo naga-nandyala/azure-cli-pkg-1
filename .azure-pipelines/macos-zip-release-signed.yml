@@ -375,9 +375,9 @@ stages:
     AzureCliVersion: $[ stageDependencies.DownloadAndConvert.ConvertARM64.outputs['ConvertARM64.AzureCliVersion'] ]
   jobs:
   - job: PrepareARM64
-    displayName: 'Prepare ARM64 Binaries (macOS)'
+    displayName: 'Prepare ARM64 Binaries (Windows)'
     pool:
-      vmImage: 'macos-latest'
+      vmImage: 'windows-2022'
     
     steps:
     - checkout: none
@@ -386,44 +386,27 @@ stages:
       artifact: arm64-signed
       displayName: 'Download ARM64 signed binaries'
     
-    - bash: |
-        echo "=== Creating ARM64 Binary-Only ZIP for Notarization ==="
-        echo "Following tarball pipeline approach: BINARIES ONLY"
-        echo "IMPORTANT: Excluding symlinks - ESRP requires only regular files"
+    - pwsh: |
+        Write-Host "=== Preparing ARM64 Signed Binaries for Apple Notarization ==="
+        Write-Host "NOTE: Matching tarball pipeline approach exactly"
         
-        SIGNED_DIR="$(Pipeline.Workspace)/arm64-signed"
-        OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/binaries-for-notarization"
+        $signedDir = "$(Pipeline.Workspace)/arm64-signed"
+        $zipPath = "$(Pipeline.Workspace)/arm64-signed-binaries.zip"
         
-        mkdir -p "$OUTPUT_DIR"
+        # Count files
+        $fileCount = (Get-ChildItem -Path $signedDir -File -Recurse).Count
+        Write-Host "Files to notarize: $fileCount"
         
-        VERSION="$(AzureCliVersion)"
-        ZIP_NAME="arm64-signed-binaries.zip"
+        Write-Host ""
+        Write-Host "Creating ZIP for notarization..."
+        Compress-Archive -Path "$signedDir/*" -DestinationPath $zipPath -Force
         
-        echo "Step 1: Finding regular files (excluding symlinks)"
-        cd "$SIGNED_DIR"
+        Write-Host "✅ ZIP created: arm64-signed-binaries.zip"
+        Write-Host "   Size: $([math]::Round((Get-Item $zipPath).Length / 1MB, 2)) MB"
         
-        # Find only regular files (not symlinks) - ESRP rejects symlinks
-        TEMP_LIST=$(mktemp)
-        find . -type f ! -type l > "$TEMP_LIST"
-        
-        FILE_COUNT=$(wc -l < "$TEMP_LIST")
-        echo "Found $FILE_COUNT regular files to include"
-        
-        echo ""
-        echo "Step 2: Creating ZIP from regular files only (no symlinks)"
-        cat "$TEMP_LIST" | zip -q -@ "$OUTPUT_DIR/$ZIP_NAME"
-        rm -f "$TEMP_LIST"
-        
-        echo ""
-        echo "✅ ARM64 binary-only ZIP created for notarization"
-        ls -lh "$OUTPUT_DIR"
-        
-        echo ""
-        echo "Contents (binaries only, no symlinks):"
-        unzip -l "$OUTPUT_DIR/$ZIP_NAME" | head -20
-      displayName: 'Create ARM64 binary-only ZIP (exclude symlinks)'
+      displayName: 'Prepare ARM64 binaries for notarization (create ZIP)'
     
-    - publish: $(Build.ArtifactStagingDirectory)/binaries-for-notarization
+    - publish: $(Pipeline.Workspace)
       artifact: arm64-binaries-for-notarization
       displayName: 'Publish ARM64 binaries for notarization'
 

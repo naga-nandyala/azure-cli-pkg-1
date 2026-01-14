@@ -864,6 +864,15 @@ stages:
         
         echo "Notarized binaries:"
         echo "  Files: $(find "$SIGNED_DIR" -type f | wc -l)"
+        echo "  Symlinks: $(find "$SIGNED_DIR" -type l | wc -l)"
+        echo ""
+        
+        echo "DEBUG: Checking signed directory structure..."
+        echo "First 10 items in signed dir:"
+        find "$SIGNED_DIR" -type f | head -10
+        echo ""
+        echo "Any symlinks in signed dir? (should be 0)"
+        find "$SIGNED_DIR" -type l | head -10 || echo "  (none found)"
         echo ""
         
         # CRITICAL: Use rsync to preserve symlinks and permissions
@@ -873,18 +882,42 @@ stages:
         echo ""
         echo "After rsync, checking symlinks:"
         echo "  bin/az:" && ls -la "$MERGED_DIR/bin/az"
-        echo "  libexec/bin/python:" && ls -la "$MERGED_DIR/libexec/bin/python"
-        echo "  libexec/bin/python3.13:" && ls -la "$MERGED_DIR/libexec/bin/python3.13"
+        echo "  libexec/bin/python:" && ls -la "$MERGED_DIR/libexec/bin/python" 2>&1 || echo "  (not found)"
+        echo "  libexec/bin/python3.13:" && ls -la "$MERGED_DIR/libexec/bin/python3.13" 2>&1 || echo "  (not found)"
+        echo ""
+        echo "Total symlinks after rsync: $(find "$MERGED_DIR" -type l | wc -l)"
+        echo ""
         
         # Replace unsigned binaries with notarized versions (but NEVER replace symlinks!)
         echo "Replacing unsigned binaries with notarized versions..."
+        echo "DEBUG: Current directory before find: $PWD"
         cd "$SIGNED_DIR"
+        echo "DEBUG: Changed to: $PWD"
+        echo "DEBUG: Running find . -type f | head -5:"
+        find . -type f | head -5
+        echo ""
+        
+        SKIP_COUNT=0
+        REPLACE_COUNT=0
+        
         find . -type f | while read signed_file; do
           target_file="$MERGED_DIR/$signed_file"
           
+          # DEBUG: Log first 5 checks
+          if [ $REPLACE_COUNT -lt 5 ] || [ "$signed_file" = "./bin/az" ] || [ "$signed_file" = "./libexec/bin/python" ]; then
+            echo "DEBUG: Checking $signed_file"
+            echo "  Target: $target_file"
+            if [ -e "$target_file" ]; then
+              ls -la "$target_file"
+            else
+              echo "  (target does not exist)"
+            fi
+          fi
+          
           # Critical check: if target is a symlink in the original, DO NOT copy over it!
           if [ -L "$target_file" ]; then
-            echo "  ↷ Skipped (target is symlink): $signed_file"
+            echo "  ↷ SKIPPED (target is symlink): $signed_file"
+            SKIP_COUNT=$((SKIP_COUNT + 1))
             continue
           fi
           
@@ -893,7 +926,10 @@ stages:
             # Double-check it's not a symlink (belt and suspenders)
             if [ ! -L "$target_file" ]; then
               cp "$signed_file" "$target_file"
-              echo "  ✓ Replaced: $signed_file"
+              REPLACE_COUNT=$((REPLACE_COUNT + 1))
+              if [ $REPLACE_COUNT -le 5 ]; then
+                echo "  ✓ Replaced: $signed_file"
+              fi
             fi
           else
             echo "  ⚠️  Warning: $signed_file not found in original (signed artifact may have extra files from PowerShell ZIP issue)"
@@ -901,10 +937,18 @@ stages:
         done
         
         echo ""
+        echo "Merge complete: Replaced $REPLACE_COUNT binaries, Skipped $SKIP_COUNT symlinks"
+        
+        echo ""
         echo "After replacing binaries, checking symlinks again:"
         echo "  bin/az:" && ls -la "$MERGED_DIR/bin/az"
-        echo "  libexec/bin/python:" && ls -la "$MERGED_DIR/libexec/bin/python"
-        echo "  libexec/bin/python3.13:" && ls -la "$MERGED_DIR/libexec/bin/python3.13"
+        echo "  libexec/bin/python:" && ls -la "$MERGED_DIR/libexec/bin/python" 2>&1 || echo "  (not found)"
+        echo "  libexec/bin/python3.13:" && ls -la "$MERGED_DIR/libexec/bin/python3.13" 2>&1 || echo "  (not found)"
+        echo ""
+        echo "Total symlinks after merge: $(find "$MERGED_DIR" -type l | wc -l)"
+        echo ""
+        echo "DEBUG: List ALL symlinks in merged directory:"
+        find "$MERGED_DIR" -type l -exec ls -la {} \;
         
         # CRITICAL: Set executable permissions on all binaries
         echo ""
@@ -953,7 +997,19 @@ stages:
         echo "✅ ARM64 tarball created:"
         ls -lh "$OUTPUT_DIR/$TARBALL_NAME"
         echo ""
-        echo "Tarball contents:"
+        echo "DEBUG: Checking symlinks in the created tarball..."
+        echo "Symlinks in tarball (first 20):"
+        tar -tzf "$TARBALL_NAME" | while read entry; do
+          # Extract to temp location to check
+          if tar -xzf "$TARBALL_NAME" "$entry" -C /tmp 2>/dev/null; then
+            if [ -L "/tmp/$entry" ]; then
+              echo "  SYMLINK: $entry -> $(readlink "/tmp/$entry")"
+            fi
+            rm -f "/tmp/$entry"
+          fi
+        done | head -20
+        echo ""
+        echo "Tarball contents (first 20 entries):"
         tar -tzf "$TARBALL_NAME" | head -20
         echo ""
         echo "SHA256:"
