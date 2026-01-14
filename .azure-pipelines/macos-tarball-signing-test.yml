@@ -142,11 +142,19 @@ stages:
       displayName: 'Download unsigned contents'
     
     - pwsh: |
-        Write-Host "Preparing binaries for signing..."
+        Write-Host "=== Preparing binaries for ESRP signing ==="
+        Write-Host "NOTE: ESRP MacAppDeveloperSign requires ZIP archives, not individual files"
+        Write-Host "Creating individual ZIP files for each binary (same as PKG pipeline)"
+        Write-Host ""
         
         $extractedPath = "$(Pipeline.Workspace)/unsigned-contents"
-        $signingRoot = "$(Build.SourcesDirectory)/signing"
-        New-Item -ItemType Directory -Force -Path $signingRoot | Out-Null
+        $toBeSignedDir = "$(Pipeline.Workspace)/toBeSigned"
+        
+        # Create directory for ZIP files
+        if (Test-Path $toBeSignedDir) {
+          Remove-Item -Path $toBeSignedDir -Recurse -Force
+        }
+        New-Item -ItemType Directory -Path $toBeSignedDir -Force | Out-Null
         
         Write-Host "Finding binaries to sign..."
         
@@ -172,61 +180,51 @@ stages:
         Write-Host "  Executables: $($executables.Count)"
         Write-Host "  Dylibs: $($dylibs.Count)"
         Write-Host "  SO files: $($soFiles.Count)"
+        Write-Host ""
         
-        # Copy files to signing directory preserving structure
-        $fileList = @()
+        Write-Host "Creating individual ZIP files for each binary..."
+        
+        $zippedCount = 0
+        $fileMapping = @{}
+        
         foreach ($file in $allFiles) {
             $relativePath = $file.FullName.Substring($extractedPath.Length + 1)
-            $destPath = Join-Path $signingRoot $relativePath
-            $destDir = Split-Path $destPath -Parent
             
-            New-Item -ItemType Directory -Force -Path $destDir | Out-Null
-            Copy-Item -Path $file.FullName -Destination $destPath -Force
+            # Create unique flat filename (replace / with __)
+            $flatName = $relativePath -replace '[/\\]', '__'
+            $zipName = "$flatName.zip"
+            $zipPath = Join-Path $toBeSignedDir $zipName
             
-            $fileList += @{
-                SourcePath = $file.FullName
-                DestPath = $destPath
-                RelativePath = $relativePath
+            # Compress individual file to ZIP
+            Compress-Archive -Path $file.FullName -DestinationPath $zipPath -Force
+            
+            # Store mapping for later reconstruction
+            $fileMapping[$zipName] = @{
+              "OriginalPath" = $relativePath
+              "FileName" = $file.Name
+            }
+            
+            $zippedCount++
+            
+            if ($zippedCount -le 10) {
+              $zipSize = [math]::Round((Get-Item $zipPath).Length / 1KB, 1)
+              Write-Host "  ✓ $relativePath -> $zipName ($zipSize KB)"
             }
         }
         
-        # Save file mapping for later
-        $fileList | ConvertTo-Json -Depth 10 | Set-Content "$(Build.SourcesDirectory)/file-mapping.json"
+        Write-Host ""
+        Write-Host "✅ Created $zippedCount ZIP files"
+        Write-Host "ZIP directory size: $([math]::Round((Get-ChildItem $toBeSignedDir -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB, 2)) MB"
         
-        Write-Host "Files prepared for signing in: $signingRoot"
+        # Save mapping for reconstruction
+        $mappingPath = "$(Pipeline.Workspace)/file-mapping.json"
+        $fileMapping | ConvertTo-Json | Set-Content $mappingPath
+        Write-Host "File mapping saved: $mappingPath"
         
-        # Create ESRP input JSON
-        $esrpFiles = @()
-        foreach ($file in $allFiles) {
-            $relativePath = $file.FullName.Substring($extractedPath.Length + 1)
-            $destPath = Join-Path $signingRoot $relativePath
-            
-            $esrpFiles += @{
-                SourceLocation = $destPath
-            }
-        }
-        
-        $esrpInput = @{
-            Version = "1.0.0"
-            SignBatches = @(
-                @{
-                    SourceLocationType = "File"
-                    SignRequestFiles = $esrpFiles
-                }
-            )
-        }
-        
-        $esrpInputPath = "$(Build.SourcesDirectory)/esrp-input.json"
-        $esrpInput | ConvertTo-Json -Depth 10 | Set-Content $esrpInputPath
-        
-        Write-Host "ESRP input created with $($esrpFiles.Count) files"
-        Write-Host "Contents of esrp-input.json:"
-        Get-Content $esrpInputPath
-        
-      displayName: 'Prepare binaries for ESRP signing'
+      displayName: 'Prepare binaries for signing (ZIP each file)'
     
     - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
-      displayName: 'Sign binaries with ESRP'
+      displayName: 'ESRP - Sign macOS binaries (ZIP archives)'
       inputs:
         ConnectedServiceName: 'ame_esrp_connection'
         AppRegistrationClientId: '$(ESRPAppClientId)'
@@ -234,13 +232,8 @@ stages:
         AuthAKVName: '$(ESRPKVName)'
         AuthCertName: '$(ESRPAuthCertName)'
         AuthSignCertName: '$(ESRPSignCertName)'
-        FolderPath: '$(Build.SourcesDirectory)/signing'
-        Pattern: |
-          **/python3.13
-          **/python3
-          **/python
-          **/*.dylib
-          **/*.so
+        FolderPath: '$(Pipeline.Workspace)/toBeSigned'
+        Pattern: '*.zip'
         signConfigType: 'inlineSignParams'
         inlineOperation: |
           [
@@ -259,51 +252,65 @@ stages:
         MaxRetryAttempts: '5'
     
     - pwsh: |
-        Write-Host "Copying signed binaries back to original structure..."
+        Write-Host "=== Extracting signed binaries from ZIP files ==="
         
-        $signingRoot = "$(Build.SourcesDirectory)/signing"
-        $signedContents = "$(Build.ArtifactStagingDirectory)/signed-contents"
+        $signedZipsDir = "$(Pipeline.Workspace)/toBeSigned"
+        $outputDir = "$(Build.ArtifactStagingDirectory)/signed-contents"
         $unsignedPath = "$(Pipeline.Workspace)/unsigned-contents"
+        $mappingPath = "$(Pipeline.Workspace)/file-mapping.json"
         
-        # Copy entire unsigned structure first
-        Write-Host "Copying base structure..."
-        Copy-Item -Path "$unsignedPath/*" -Destination $signedContents -Recurse -Force
+        if (-not (Test-Path $mappingPath)) {
+          Write-Error "File mapping not found: $mappingPath"
+          exit 1
+        }
         
-        # Read file mapping
-        $fileMapping = Get-Content "$(Build.SourcesDirectory)/file-mapping.json" | ConvertFrom-Json
+        # Copy entire unsigned structure as base
+        Write-Host "Copying base structure from unsigned contents..."
+        Copy-Item -Path "$unsignedPath/*" -Destination $outputDir -Recurse -Force
         
-        # Replace with signed versions
-        Write-Host "Replacing with signed binaries..."
-        foreach ($file in $fileMapping) {
-            $signedFile = $file.DestPath
-            $targetFile = Join-Path $signedContents $file.RelativePath
+        # Load mapping
+        $fileMapping = Get-Content $mappingPath | ConvertFrom-Json
+        $mappingObj = $fileMapping.PSObject.Properties
+        
+        Write-Host "Processing $($mappingObj.Count) signed ZIP files..."
+        
+        $extractedCount = 0
+        foreach ($entry in $mappingObj) {
+          $zipName = $entry.Name
+          $fileInfo = $entry.Value
+          $zipPath = Join-Path $signedZipsDir $zipName
+          
+          if (Test-Path $zipPath) {
+            # Extract ZIP to temp location
+            $tempExtract = "$(Pipeline.Workspace)/temp_extract/$zipName"
+            Expand-Archive -Path $zipPath -DestinationPath $tempExtract -Force
             
-            if (Test-Path $signedFile) {
-                $targetDir = Split-Path $targetFile -Parent
-                New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
-                
-                Copy-Item -Path $signedFile -Destination $targetFile -Force
-                Write-Host "Replaced: $($file.RelativePath)"
-            } else {
-                Write-Warning "Signed file not found: $signedFile"
+            # Find the extracted binary (should be only one file)
+            $extractedFile = Get-ChildItem -Path $tempExtract -File | Select-Object -First 1
+            
+            if ($extractedFile) {
+              # Copy to original location in output structure
+              $targetPath = Join-Path $outputDir $fileInfo.OriginalPath
+              $targetDir = Split-Path $targetPath -Parent
+              New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+              
+              Copy-Item -Path $extractedFile.FullName -Destination $targetPath -Force
+              
+              $extractedCount++
+              if ($extractedCount -le 10) {
+                Write-Host "  ✓ $($fileInfo.OriginalPath)"
+              }
             }
+          } else {
+            Write-Warning "Signed ZIP not found: $zipPath"
+          }
         }
         
-        Write-Host "Signed contents prepared"
+        Write-Host ""
+        Write-Host "✅ Extracted $extractedCount signed binaries"
+        Write-Host "Signed contents ready for packaging"
         
-        # Verify signatures (convert paths for verification)
-        Write-Host "`nVerifying signatures on a sample of files..."
-        $sampleFiles = Get-ChildItem -Path $signedContents -Recurse -File | 
-                       Where-Object { $_.Extension -in @('.dylib', '.so', '') -and $_.Name -match 'python' } | 
-                       Select-Object -First 3
-        
-        foreach ($file in $sampleFiles) {
-            Write-Host "`nFile: $($file.Name)"
-            Write-Host "Path: $($file.FullName)"
-            # We can't verify on Windows, will verify on macOS in next stage
-        }
-        
-      displayName: 'Copy signed binaries to output structure'
+      displayName: 'Extract signed binaries from ZIPs'
     
     - publish: $(Build.ArtifactStagingDirectory)/signed-contents
       artifact: signed-contents
@@ -367,15 +374,15 @@ stages:
           echo ""
         fi
         
-        # Create tar.gz preserving extended attributes and permissions
-        echo "Creating tar.gz with ditto..."
+        # Create tar.gz preserving signatures and permissions
+        # Note: Code signatures are embedded in binaries, not in xattrs
+        # We intentionally don't preserve xattrs to avoid including any stray quarantine flags
         cd "$SIGNED_DIR"
         
-        # Use tar with proper flags to preserve everything
+        # Use tar with proper flags to preserve permissions and signatures
         TARBALL_NAME="azure-cli-${VERSION}-macos-${ARCH}-signed.tar.gz"
         tar -czf "$OUTPUT_DIR/$TARBALL_NAME" \
           --preserve-permissions \
-          --no-xattrs \
           .
         
         echo ""
