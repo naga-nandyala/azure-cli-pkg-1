@@ -823,7 +823,7 @@ stages:
   - job: RepackageARM64
     displayName: 'Repackage ARM64 tarball (macOS)'
     pool:
-      vmImage: 'macos-14'
+      vmImage: 'macos-15-arm64'
     
     steps:
     - checkout: none
@@ -1020,7 +1020,7 @@ stages:
   - job: VerifyARM64
     displayName: 'Verify ARM64 signatures'
     pool:
-      vmImage: 'macos-14'
+      vmImage: 'macos-15-arm64'
     
     steps:
     - checkout: none
@@ -1470,7 +1470,7 @@ stages:
   - job: TestARM64
     displayName: 'Test ARM64 installation on Apple Silicon'
     pool:
-      vmImage: 'macos-15'
+      vmImage: 'macos-15-arm64'
     
     steps:
     - checkout: none
@@ -1499,25 +1499,35 @@ stages:
         
         # Remove any existing Azure CLI installations
         echo "Checking for existing Azure CLI installations..."
+        echo "Current PATH: $PATH"
         
-        # Check common locations
+        # Uninstall ALL azure-cli related Homebrew formulas
+        echo ""
+        echo "Checking Homebrew formulas..."
+        brew list | grep -i azure || echo "No Azure formulas found"
+        
+        brew list 2>/dev/null | grep -i azure | while read formula; do
+          echo "Uninstalling Homebrew formula: $formula"
+          brew uninstall --force --ignore-dependencies "$formula" 2>/dev/null || true
+        done
+        
+        # Check for az command
         if command -v az &> /dev/null; then
-          echo "Found existing 'az' command at: $(which az)"
+          AZ_LOCATION=$(which az)
+          echo ""
+          echo "Found 'az' command at: $AZ_LOCATION"
           
-          # Try to uninstall via Homebrew if possible
-          brew list | grep -i azure-cli | while read formula; do
-            echo "Uninstalling Homebrew formula: $formula"
-            brew uninstall --force "$formula" || true
-          done
-          
-          # Remove any remaining az binaries
-          sudo rm -f /usr/local/bin/az /opt/homebrew/bin/az || true
-        else
-          echo "No existing Azure CLI installation found"
+          # Try to remove it (won't use sudo, just try regular rm)
+          rm -f "$AZ_LOCATION" 2>/dev/null && echo "Removed $AZ_LOCATION" || echo "Could not remove $AZ_LOCATION (no permissions)"
         fi
         
+        # Verify cleanup
         echo ""
-        echo "✅ Cleanup complete"
+        if command -v az &> /dev/null; then
+          echo "⚠️  WARNING: 'az' command still exists at: $(which az)"
+        else
+          echo "✅ No 'az' command found - cleanup successful"
+        fi
       displayName: 'Cleanup existing installations'
     
     - bash: |
@@ -1598,34 +1608,36 @@ stages:
         echo "======================================"
         echo ""
         
-        # Verify az is in PATH
-        which az || {
-          echo "❌ ERROR: az not found in PATH"
-          exit 1
-        }
+        FORMULA_NAME="$(FormulaName)"
+        EXPECTED_VERSION="$(AzureCliVersion)"
         
-        AZ_PATH=$(which az)
-        echo "Azure CLI location: $AZ_PATH"
+        # Get the Homebrew-installed az path explicitly
+        BREW_PREFIX=$(brew --prefix)
+        HOMEBREW_AZ="$BREW_PREFIX/bin/az"
         
-        # CRITICAL: Verify it's the newly installed version from Homebrew
-        if [[ "$AZ_PATH" != *"/opt/homebrew/"* ]] && [[ "$AZ_PATH" != *"/usr/local/Homebrew/"* ]]; then
-          echo "❌ ERROR: az is not from Homebrew installation!"
-          echo "   Expected: /opt/homebrew/bin/az or /usr/local/bin/az (from Homebrew)"
-          echo "   Got: $AZ_PATH"
+        echo "Homebrew prefix: $BREW_PREFIX"
+        echo "Expected az location: $HOMEBREW_AZ"
+        echo ""
+        
+        # Verify the Homebrew az exists
+        if [ ! -f "$HOMEBREW_AZ" ]; then
+          echo "❌ ERROR: Homebrew az not found at $HOMEBREW_AZ"
+          echo ""
+          echo "Searching for az installations:"
+          find /usr/local/bin /opt/homebrew/bin -name "az" -type f -o -name "az" -type l 2>/dev/null || echo "  None found"
           exit 1
         fi
         
-        # Verify it's the correct formula
-        FORMULA_NAME="$(FormulaName)"
-        EXPECTED_VERSION="$(AzureCliVersion)"
+        echo "✅ Found Homebrew az at: $HOMEBREW_AZ"
+        ls -la "$HOMEBREW_AZ"
         
         echo ""
         echo "Expected version: $EXPECTED_VERSION"
         echo "Expected formula: $FORMULA_NAME"
         
         echo ""
-        echo "Testing: az --version"
-        AZ_OUTPUT=$(az --version 2>&1)
+        echo "Testing: $HOMEBREW_AZ --version"
+        AZ_OUTPUT=$("$HOMEBREW_AZ" --version 2>&1)
         echo "$AZ_OUTPUT"
         
         # Verify version matches
@@ -1641,18 +1653,22 @@ stages:
         echo "✅ Correct version verified: $EXPECTED_VERSION"
         
         echo ""
-        echo "Testing: az help"
-        az help > /dev/null || {
+        echo "Testing: $HOMEBREW_AZ help"
+        "$HOMEBREW_AZ" help > /dev/null || {
           echo "❌ ERROR: az help failed"
           exit 1
         }
         
-        echo ""
-        echo "Testing: az account list-locations"
-        az account list-locations --output table 2>/dev/null || true
+        echo "✅ az help succeeded"
         
         echo ""
-        echo "✅ All commands executed successfully"
+        echo "Testing: $HOMEBREW_AZ account list-locations"
+        "$HOMEBREW_AZ" account list-locations --output table 2>/dev/null || true
+        
+        echo ""
+        echo "======================================"
+        echo "  ✅ All CLI Command Tests Passed"
+        echo "======================================"
       displayName: 'Test CLI commands'
     
     - bash: |

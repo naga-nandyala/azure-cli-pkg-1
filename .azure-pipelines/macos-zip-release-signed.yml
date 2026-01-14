@@ -1035,7 +1035,10 @@ stages:
   - job: TestARM64
     displayName: 'Test ARM64 ZIP installation on Apple Silicon'
     pool:
-      vmImage: 'macos-14'  # Apple Silicon
+      vmImage: 'macos-15-arm64'  # ARM64 Apple Silicon (limited preview)
+      demands:
+      - agent.os -equals Darwin
+      - agent.osArchitecture -equals ARM64
     
     steps:
     - checkout: none
@@ -1044,11 +1047,24 @@ stages:
         echo "======================================"
         echo "  System Information"
         echo "======================================"
-        echo "Architecture: $(uname -m)"
+        ARCH=$(uname -m)
+        echo "Architecture: $ARCH"
         echo "macOS Version: $(sw_vers -productVersion)"
         echo "Homebrew: $(brew --version | head -1)"
+        echo "Homebrew prefix: $(brew --prefix)"
         echo ""
-      displayName: 'System info'
+        
+        # Verify we're on ARM64
+        if [ "$ARCH" != "arm64" ]; then
+          echo "❌ ERROR: This test requires ARM64 architecture"
+          echo "   Current architecture: $ARCH"
+          echo "   This formula only supports ARM64 (Apple Silicon) Macs"
+          exit 1
+        fi
+        
+        echo "✅ Running on ARM64 (Apple Silicon)"
+        echo ""
+      displayName: 'System info and architecture check'
     
     - bash: |
         echo "======================================"
