@@ -186,6 +186,12 @@ stages:
         artifactName: 'arm64-unsigned-binaries'
     
     - task: PublishPipelineArtifact@1
+      displayName: 'Publish ARM64 ORIGINAL TARBALL (preserves symlinks)'
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)/arm64-unsigned'
+        artifactName: 'arm64-unsigned-tarball'
+    
+    - task: PublishPipelineArtifact@1
       displayName: 'Publish ARM64 file list'
       inputs:
         targetPath: '$(Pipeline.Workspace)/arm64-files-to-sign.txt'
@@ -841,16 +847,52 @@ stages:
         targetPath: '$(Pipeline.Workspace)'
     
     - task: DownloadPipelineArtifact@2
-      displayName: 'Download ARM64 unsigned (complete) content'
+      displayName: 'Download ARM64 ORIGINAL TARBALL (to preserve symlinks)'
       inputs:
-        artifactName: 'arm64-unsigned-binaries'
-        targetPath: '$(Pipeline.Workspace)/arm64-original'
+        artifactName: 'arm64-unsigned-tarball'
+        targetPath: '$(Pipeline.Workspace)/arm64-tarball'
     
     - bash: |
         set -e
         echo "=== Repackaging ARM64 Tarball with Notarized Binaries ==="
         
+        # Extract the ORIGINAL TARBALL fresh to preserve symlinks
+        TARBALL_DIR="$(Pipeline.Workspace)/arm64-tarball"
+        TAR_FILE=$(find "$TARBALL_DIR" -name "azure-cli-*.tar.gz" | head -1)
+        
+        if [ -z "$TAR_FILE" ]; then
+          echo "❌ ERROR: Could not find original tarball in $TARBALL_DIR"
+          exit 1
+        fi
+        
+        echo "Found original tarball: $(basename $TAR_FILE)"
+        echo "Size: $(du -h "$TAR_FILE" | cut -f1)"
+        echo ""
+        
+        # Extract fresh to preserve symlinks (tar preserves them, artifact upload/download destroys them)
         ORIGINAL_DIR="$(Pipeline.Workspace)/arm64-original"
+        mkdir -p "$ORIGINAL_DIR"
+        
+        echo "Extracting original tarball to preserve symlinks..."
+        tar -xzf "$TAR_FILE" -C "$ORIGINAL_DIR"
+        
+        # Verify symlinks are present in extracted tarball
+        echo ""
+        echo "Verifying symlinks in extracted tarball:"
+        SYMLINK_COUNT=$(find "$ORIGINAL_DIR" -type l | wc -l | xargs)
+        echo "  Total symlinks: $SYMLINK_COUNT"
+        
+        if [ "$SYMLINK_COUNT" -eq 0 ]; then
+          echo "  ❌ WARNING: No symlinks found in original tarball!"
+        else
+          echo "  ✅ Found symlinks:"
+          find "$ORIGINAL_DIR" -type l | while read link; do
+            target=$(readlink "$link")
+            echo "    $link -> $target"
+          done
+        fi
+        echo ""
+        
         SIGNED_DIR="$(Pipeline.Workspace)/arm64-signed"
         MERGED_DIR="$(Pipeline.Workspace)/arm64-merged"
         OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/notarized-tarballs"
