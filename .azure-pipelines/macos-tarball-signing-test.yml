@@ -440,37 +440,31 @@ stages:
       displayName: 'Download signed tar.gz'
     
     - pwsh: |
-        Write-Host "Preparing for notarization..."
+        Write-Host "=== Preparing Signed Tar.gz for Apple Notarization ==="
         
-        $tarballPath = Get-ChildItem -Path "$(Pipeline.Workspace)/signed-tarball" -Filter "*.tar.gz" | Select-Object -First 1
-        Write-Host "Tar.gz to notarize: $($tarballPath.Name)"
+        $signedTarball = Get-ChildItem -Path "$(Pipeline.Workspace)/signed-tarball" -Filter "*-signed.tar.gz" | Select-Object -First 1
         
-        # ESRP requires .zip for notarization, so wrap tar.gz in zip
-        $zipPath = "$(Build.SourcesDirectory)/azure-cli-notarize.zip"
-        Compress-Archive -Path $tarballPath.FullName -DestinationPath $zipPath -Force
-        
-        Write-Host "Created wrapper zip for ESRP: azure-cli-notarize.zip"
-        
-        # Create notarization config
-        $notarizeConfig = @{
-          Version = "1.0.0"
-          Bundles = @(
-            @{
-              BundleId = "${{ parameters.BundleId }}"
-              BundlePath = $zipPath
-            }
-          )
+        if (-not $signedTarball) {
+          Write-Error "❌ No signed tar.gz found"
+          exit 1
         }
         
-        $configPath = "$(Build.SourcesDirectory)/notarize-config.json"
-        $notarizeConfig | ConvertTo-Json -Depth 10 | Set-Content $configPath
+        Write-Host "✅ Found signed tar.gz: $($signedTarball.Name)"
+        Write-Host "   Size: $([math]::Round($signedTarball.Length / 1MB, 2)) MB"
         
-        Write-Host "Notarization config created"
+        # Copy to workspace for ESRP
+        $targetPath = "$(Pipeline.Workspace)/$($signedTarball.Name)"
+        Copy-Item -Path $signedTarball.FullName -Destination $targetPath -Force
         
-      displayName: 'Prepare for notarization'
+        Write-Host ""
+        Write-Host "=== Ready for Apple notarization ==="
+        Write-Host "NOTE: Notarization submits tar.gz to Apple for malware scanning"
+        Write-Host "      Ticket will be stored on Apple servers (cannot be stapled to tar.gz)"
+        
+      displayName: 'Prepare signed tar.gz for notarization'
     
     - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
-      displayName: 'Notarize with Apple via ESRP'
+      displayName: 'ESRP - Notarize Tar.gz with Apple'
       inputs:
         ConnectedServiceName: 'ame_esrp_connection'
         AppRegistrationClientId: '$(ESRPAppClientId)'
@@ -478,8 +472,8 @@ stages:
         AuthAKVName: '$(ESRPKVName)'
         AuthCertName: '$(ESRPAuthCertName)'
         AuthSignCertName: '$(ESRPSignCertName)'
-        FolderPath: '$(Build.SourcesDirectory)'
-        Pattern: 'azure-cli-notarize.zip'
+        FolderPath: '$(Pipeline.Workspace)'
+        Pattern: '*-signed.tar.gz'
         signConfigType: 'inlineSignParams'
         inlineOperation: |
           [
@@ -498,35 +492,42 @@ stages:
         MaxRetryAttempts: '5'
     
     - pwsh: |
-        Write-Host "Notarization complete!"
+        Write-Host "=== Collecting Notarized Tar.gz ==="
         
-        # Extract notarized tar.gz from wrapper zip
-        $wrapperZip = "$(Build.SourcesDirectory)/azure-cli-notarize.zip"
-        $extractPath = "$(Build.SourcesDirectory)/notarized-extract"
+        $notarizedTarball = Get-ChildItem -Path "$(Pipeline.Workspace)" -Filter "*-signed.tar.gz" -File | 
+                            Sort-Object LastWriteTime -Descending | 
+                            Select-Object -First 1
         
-        Expand-Archive -Path $wrapperZip -DestinationPath $extractPath -Force
-        
-        # Find the tar.gz
-        $notarizedTarball = Get-ChildItem -Path $extractPath -Filter "*.tar.gz" -Recurse | Select-Object -First 1
-        
-        if ($notarizedTarball) {
-            Write-Host "Found notarized tar.gz: $($notarizedTarball.Name)"
-            
-            # Rename to indicate it's notarized
-            $newName = $notarizedTarball.Name -replace '-signed\.tar\.gz$', '-signed-notarized.tar.gz'
-            $outputPath = "$(Build.ArtifactStagingDirectory)/signed-notarized-tarball"
-            New-Item -ItemType Directory -Force -Path $outputPath | Out-Null
-            
-            Copy-Item -Path $notarizedTarball.FullName -Destination "$outputPath/$newName" -Force
-            
-            Write-Host "Notarized tar.gz saved as: $newName"
-            Get-ChildItem "$outputPath" | Format-Table Name, Length
-        } else {
-            Write-Error "Could not find notarized tar.gz in wrapper"
-            exit 1
+        if (-not $notarizedTarball) {
+          Write-Error "❌ Notarized tar.gz not found"
+          exit 1
         }
         
-      displayName: 'Extract notarized tar.gz'
+        Write-Host "Found notarized tar.gz: $($notarizedTarball.Name)"
+        
+        # Create output directory
+        $outputDir = "$(Build.ArtifactStagingDirectory)/signed-notarized-tarball"
+        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+        
+        # Rename to indicate it's notarized
+        $notarizedName = $notarizedTarball.Name -replace '-signed\.tar\.gz$', '-signed-notarized.tar.gz'
+        $newPath = Join-Path $outputDir $notarizedName
+        Copy-Item -Path $notarizedTarball.FullName -Destination $newPath -Force
+        
+        if (Test-Path $newPath) {
+          Write-Host "✅ Notarized tar.gz ready"
+          Write-Host "   Name: $notarizedName"
+          Write-Host "   Size: $([math]::Round((Get-Item $newPath).Length / 1MB, 2)) MB"
+          
+          # Generate SHA256
+          $hash = Get-FileHash -Path $newPath -Algorithm SHA256
+          $hashFile = "$newPath.sha256"
+          "$($hash.Hash.ToLower())  $notarizedName" | Out-File -FilePath $hashFile -Encoding ASCII -NoNewline
+          
+          Write-Host "   SHA256: $($hash.Hash)"
+        }
+        
+      displayName: 'Collect notarized tar.gz'
     
     - publish: $(Build.ArtifactStagingDirectory)/signed-notarized-tarball
       artifact: signed-notarized-tarball
