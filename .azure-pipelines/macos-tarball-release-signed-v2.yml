@@ -870,6 +870,10 @@ stages:
         echo "Copying complete original content (preserving symlinks)..."
         rsync -a "$ORIGINAL_DIR/" "$MERGED_DIR/"
         
+        echo ""
+        echo "After rsync, checking bin/az:"
+        ls -la "$MERGED_DIR/bin/az"
+        
         # Replace unsigned binaries with notarized versions (but not symlinks!)
         echo "Replacing unsigned binaries with notarized versions..."
         cd "$SIGNED_DIR"
@@ -886,6 +890,10 @@ stages:
             echo "  ⚠️  Warning: $signed_file not found in original"
           fi
         done
+        
+        echo ""
+        echo "After replacing binaries, checking bin/az again:"
+        ls -la "$MERGED_DIR/bin/az"
         
         # CRITICAL: Set executable permissions on all binaries
         echo ""
@@ -922,8 +930,9 @@ stages:
         cd "$MERGED_DIR"
         echo "Creating tarball: $TARBALL_NAME"
         
-        # Create tarball with complete structure
-        tar -czf "$OUTPUT_DIR/$TARBALL_NAME" .
+        # CRITICAL: Create tarball preserving symlinks (-h follows symlinks, we want -H to NOT follow them)
+        # Use tar with default behavior (no -h) to preserve symlinks as-is
+        tar -czf "$OUTPUT_DIR/$TARBALL_NAME" --no-mac-metadata .
         
         # Generate SHA256
         cd "$OUTPUT_DIR"
@@ -1126,7 +1135,7 @@ stages:
         ✅ **Notarized by Apple** - No Gatekeeper warnings
         ✅ **No quarantine attribute issues** - Safe for browser downloads
         
-        > **Note**: This release provides ARM64 (Apple Silicon) binaries only. Intel Mac users can use Rosetta 2 or the official PKG installer.
+        > **Note**: This release provides ARM64 (Apple Silicon) binaries only.
         
         ## Download
         
@@ -1296,7 +1305,6 @@ stages:
           def install
             # Install signed and notarized tarball
             prefix.install Dir["*"]
-            chmod 0755, bin/"az"
           end
           
           test do
@@ -1484,7 +1492,9 @@ stages:
         
         echo ""
         echo "Verifying tap:"
-        brew tap | grep "$TAP_NAME" || {
+        # Extract tap name without 'homebrew-' prefix for verification
+        TAP_VERIFY=$(echo "$TAP_NAME" | sed 's/homebrew-//')
+        brew tap | grep "$TAP_VERIFY" || {
           echo "❌ ERROR: Tap not found"
           exit 1
         }

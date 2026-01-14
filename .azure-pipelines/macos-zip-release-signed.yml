@@ -79,6 +79,9 @@ variables:
     value: ${{ parameters.GitHubRepo }}
   - name: HomebrewTapRepo
     value: ${{ parameters.HomebrewTapRepo }}
+  - name: HomebrewTapName
+    # Strip 'homebrew-' prefix for brew commands (e.g., 'user/homebrew-tap' -> 'user/tap')
+    value: ${{ replace(parameters.HomebrewTapRepo, '/homebrew-', '/') }}
   - name: FormulaName
     value: ${{ parameters.FormulaName }}
   - name: GITHUB_TOKEN
@@ -163,8 +166,20 @@ stages:
         
         echo "Total Mach-O binaries: $(wc -l < $FILES_TO_SIGN)"
         echo ""
-        echo "Binaries to sign:"
-        cat "$FILES_TO_SIGN"
+        echo "Binaries to sign (first 20):"
+        head -20 "$FILES_TO_SIGN"
+        
+        # CRITICAL: Strip existing signatures to avoid Team ID conflicts
+        echo ""
+        echo "=== Removing existing signatures (adhoc or otherwise) ==="
+        cat "$FILES_TO_SIGN" | while read filepath; do
+          fullpath="$EXTRACT_DIR/$filepath"
+          # Remove existing signature if present
+          codesign --remove-signature "$fullpath" 2>/dev/null || true
+        done
+        
+        echo "✅ All existing signatures removed"
+        echo ""
         
       displayName: 'Convert ARM64 tarball and identify binaries'
       name: ConvertARM64
@@ -569,11 +584,20 @@ stages:
           cp "$notarized_file" "$target"
         done
         
-        echo "Step 3: Create symlink for bin/az (matching tarball structure)"
+        echo "Step 3: Create symlinks (matching tarball structure)"
         cd "$TEMP_DIR"
+        
+        # Main az symlink
         rm -f bin/az
         ln -s ../libexec/bin/az bin/az
         echo "✅ Symlink created: bin/az -> ../libexec/bin/az"
+        
+        # Python symlinks in libexec/bin/
+        rm -f libexec/bin/python libexec/bin/python3.13
+        ln -s python3 libexec/bin/python
+        ln -s python3 libexec/bin/python3.13
+        echo "✅ Symlinks created: libexec/bin/python -> python3"
+        echo "✅ Symlinks created: libexec/bin/python3.13 -> python3"
         
         echo "Step 4: Set executable permissions on all binaries"
         chmod +x libexec/bin/az 2>/dev/null || true
@@ -992,8 +1016,8 @@ stages:
         echo "Version: $(AzureCliVersion)"
         echo ""
         echo "Users can install with:"
-        echo "  brew tap $(HomebrewTapRepo)"
-        echo "  brew install $(FormulaName)"
+        echo "  brew tap $(HomebrewTapName)"
+        echo "  brew install $(HomebrewTapName)/$(FormulaName)"
         echo ""
       displayName: 'Print summary'
 
@@ -1033,7 +1057,7 @@ stages:
         echo "  Add Homebrew Tap"
         echo "======================================"
         
-        brew tap $(HomebrewTapRepo)
+        brew tap $(HomebrewTapName)
         
         echo "✅ Tap added"
         echo ""
@@ -1045,7 +1069,7 @@ stages:
         echo "  Install Azure CLI from Formula"
         echo "======================================"
         
-        brew install --verbose $(FormulaName)
+        brew install --verbose $(HomebrewTapName)/$(FormulaName)
         
         echo ""
         echo "✅ Installation complete"
@@ -1122,7 +1146,7 @@ stages:
         echo "======================================"
         echo ""
         
-        INSTALL_PATH=$(brew --prefix $(FormulaName))
+        INSTALL_PATH=$(brew --prefix $(HomebrewTapName)/$(FormulaName))
         echo "Installation path: $INSTALL_PATH"
         echo ""
         
@@ -1138,8 +1162,8 @@ stages:
       displayName: 'Verify signatures'
     
     - bash: |
-        brew uninstall $(FormulaName) || true
-        brew untap $(HomebrewTapRepo) || true
+        brew uninstall $(HomebrewTapName)/$(FormulaName) || true
+        brew untap $(HomebrewTapName) || true
         echo "✅ Cleanup complete"
       displayName: 'Cleanup'
       condition: always()
@@ -1188,8 +1212,8 @@ stages:
         echo "  ARM64: https://github.com/$(GitHubRepo)/releases/download/$(ReleaseTag)/azure-cli-$(AzureCliVersion)-macos-arm64-notarized.zip"
         echo ""
         echo "Homebrew Installation:"
-        echo "  brew tap $(HomebrewTapRepo)"
-        echo "  brew install $(FormulaName)"
+        echo "  brew tap $(HomebrewTapName)"
+        echo "  brew install $(HomebrewTapName)/$(FormulaName)"
         echo ""
         echo "============================================"
       displayName: 'Print summary'
