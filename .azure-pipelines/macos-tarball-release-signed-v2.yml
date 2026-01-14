@@ -1493,6 +1493,35 @@ stages:
     
     - bash: |
         echo "======================================"
+        echo "  Cleanup Existing Installations"
+        echo "======================================"
+        echo ""
+        
+        # Remove any existing Azure CLI installations
+        echo "Checking for existing Azure CLI installations..."
+        
+        # Check common locations
+        if command -v az &> /dev/null; then
+          echo "Found existing 'az' command at: $(which az)"
+          
+          # Try to uninstall via Homebrew if possible
+          brew list | grep -i azure-cli | while read formula; do
+            echo "Uninstalling Homebrew formula: $formula"
+            brew uninstall --force "$formula" || true
+          done
+          
+          # Remove any remaining az binaries
+          sudo rm -f /usr/local/bin/az /opt/homebrew/bin/az || true
+        else
+          echo "No existing Azure CLI installation found"
+        fi
+        
+        echo ""
+        echo "✅ Cleanup complete"
+      displayName: 'Cleanup existing installations'
+    
+    - bash: |
+        echo "======================================"
         echo "  Add Homebrew Tap"
         echo "======================================"
         echo ""
@@ -1575,15 +1604,41 @@ stages:
           exit 1
         }
         
-        echo "Azure CLI location:"
-        which az
+        AZ_PATH=$(which az)
+        echo "Azure CLI location: $AZ_PATH"
+        
+        # CRITICAL: Verify it's the newly installed version from Homebrew
+        if [[ "$AZ_PATH" != *"/opt/homebrew/"* ]] && [[ "$AZ_PATH" != *"/usr/local/Homebrew/"* ]]; then
+          echo "❌ ERROR: az is not from Homebrew installation!"
+          echo "   Expected: /opt/homebrew/bin/az or /usr/local/bin/az (from Homebrew)"
+          echo "   Got: $AZ_PATH"
+          exit 1
+        fi
+        
+        # Verify it's the correct formula
+        FORMULA_NAME="$(FormulaName)"
+        EXPECTED_VERSION="$(AzureCliVersion)"
+        
+        echo ""
+        echo "Expected version: $EXPECTED_VERSION"
+        echo "Expected formula: $FORMULA_NAME"
         
         echo ""
         echo "Testing: az --version"
-        az --version || {
-          echo "❌ ERROR: az --version failed"
+        AZ_OUTPUT=$(az --version 2>&1)
+        echo "$AZ_OUTPUT"
+        
+        # Verify version matches
+        if ! echo "$AZ_OUTPUT" | grep -q "$EXPECTED_VERSION"; then
+          echo ""
+          echo "❌ ERROR: Version mismatch!"
+          echo "   Expected: $EXPECTED_VERSION"
+          echo "   Got output above"
           exit 1
-        }
+        fi
+        
+        echo ""
+        echo "✅ Correct version verified: $EXPECTED_VERSION"
         
         echo ""
         echo "Testing: az help"

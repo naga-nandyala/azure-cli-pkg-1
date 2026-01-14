@@ -875,10 +875,9 @@ stages:
           homepage "https://learn.microsoft.com/cli/azure/"
           version "$(AzureCliVersion)"
           
-          on_arm do
-            url "$(GetDetails.ARM64_URL)"
-            sha256 "$(GetDetails.ARM64_SHA256)"
-          end
+          # ARM64 only - no architecture conditionals needed
+          url "$(GetDetails.ARM64_URL)"
+          sha256 "$(GetDetails.ARM64_SHA256)"
           
           def install
             # ZIP structure matches tarball: bin/az -> symlink to ../libexec/bin/az
