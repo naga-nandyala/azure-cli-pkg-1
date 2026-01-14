@@ -1011,7 +1011,7 @@ stages:
   dependsOn:
   - UpdateHomebrewFormula
   - DownloadAndConvert
-  condition: succeeded()
+  condition: false  # Disabled: macos-15-arm64 not available yet (limited preview)
   variables:
     AzureCliVersion: $[ stageDependencies.DownloadAndConvert.ConvertARM64.outputs['ConvertARM64.AzureCliVersion'] ]
   jobs:
