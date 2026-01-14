@@ -1056,43 +1056,58 @@ stages:
         echo "======================================"
         echo ""
         
-        # Check for existing az command
-        if command -v az &> /dev/null; then
-          echo "⚠️  Found existing az: $(which az)"
-          
-          # Try to uninstall via Homebrew first
-          if brew list azure-cli &> /dev/null; then
-            echo "   Removing Homebrew azure-cli..."
-            brew uninstall azure-cli || true
-          fi
-          
-          if brew list azure-cli-zip-signed &> /dev/null; then
-            echo "   Removing existing formula installation..."
-            brew uninstall azure-cli-zip-signed || true
-          fi
-          
-          # Remove common manual installation paths
-          if [ -d "$HOME/.local/azure-cli" ]; then
-            echo "   Removing ~/.local/azure-cli..."
-            rm -rf "$HOME/.local/azure-cli"
-          fi
-          
-          if [ -d "/usr/local/az" ]; then
-            echo "   Removing /usr/local/az..."
-            sudo rm -rf /usr/local/az || true
-          fi
-          
-          # Verify az is gone
-          if command -v az &> /dev/null; then
-            echo "   ⚠️  az still found at: $(which az)"
-            echo "   Removing from PATH manually..."
-            rm -f "$(which az)" || sudo rm -f "$(which az)" || true
-          fi
-        else
-          echo "✅ No existing az installation found"
+        # List all Azure CLI related formulas
+        echo "Checking for existing Azure CLI installations..."
+        brew list | grep -i azure || echo "No Azure formulas found via 'brew list'"
+        echo ""
+        
+        # Uninstall official azure-cli formula (common on Microsoft agents)
+        if brew list azure-cli &> /dev/null; then
+          echo "⚠️  Found official azure-cli formula (v$(brew list --versions azure-cli | awk '{print $2}'))"
+          echo "   Unlinking and uninstalling..."
+          brew unlink azure-cli 2>/dev/null || true
+          brew uninstall --force azure-cli 2>/dev/null || true
         fi
         
+        # Uninstall our test formula if present
+        if brew list azure-cli-zip-signed &> /dev/null; then
+          echo "⚠️  Found existing test formula installation"
+          echo "   Unlinking and uninstalling..."
+          brew unlink azure-cli-zip-signed 2>/dev/null || true
+          brew uninstall --force azure-cli-zip-signed 2>/dev/null || true
+        fi
+        
+        # Remove any orphaned symlinks
+        if [ -L "/usr/local/bin/az" ]; then
+          echo "⚠️  Found orphaned symlink at /usr/local/bin/az"
+          rm -f /usr/local/bin/az
+        fi
+        
+        if [ -L "$(brew --prefix)/bin/az" ]; then
+          echo "⚠️  Found orphaned symlink at $(brew --prefix)/bin/az"
+          rm -f "$(brew --prefix)/bin/az"
+        fi
+        
+        # Remove common manual installation paths
+        if [ -d "$HOME/.local/azure-cli" ]; then
+          echo "   Removing ~/.local/azure-cli..."
+          rm -rf "$HOME/.local/azure-cli"
+        fi
+        
+        if [ -d "/usr/local/az" ]; then
+          echo "   Removing /usr/local/az..."
+          sudo rm -rf /usr/local/az 2>/dev/null || true
+        fi
+        
+        # Final verification
         echo ""
+        if command -v az &> /dev/null; then
+          echo "⚠️  WARNING: az still found at: $(which az)"
+          echo "   This will be overwritten during installation"
+        else
+          echo "✅ No az command in PATH"
+        fi
+        
         echo "✅ Cleanup complete"
         echo ""
       displayName: 'Cleanup existing Azure CLI'
@@ -1115,7 +1130,11 @@ stages:
         echo "  Install Azure CLI from Formula"
         echo "======================================"
         
-        brew install --verbose $(HomebrewTapName)/$(FormulaName)
+        # Install with force-overwrite to handle any remaining conflicts
+        brew install --verbose --overwrite $(HomebrewTapName)/$(FormulaName)
+        
+        # Ensure linking succeeded
+        brew link --overwrite --force $(HomebrewTapName)/$(FormulaName)
         
         echo ""
         echo "✅ Installation complete"
