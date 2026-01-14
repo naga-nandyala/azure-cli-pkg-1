@@ -200,7 +200,7 @@ stages:
     - task: PublishPipelineArtifact@1
       displayName: 'Publish ARM64 original structure'
       inputs:
-        targetPath: '$(Pipeline.Workspace)/arm64-original-structure.txt'
+        targetPath: '$(Pipeline.Workspace)/tarball-arm64xt'
         artifactName: 'arm64-original-structure'
   
   # ============================================================================
