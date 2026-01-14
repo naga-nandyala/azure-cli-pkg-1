@@ -228,12 +228,12 @@ stages:
     - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
       displayName: 'Sign binaries with ESRP'
       inputs:
-        ConnectedServiceName: 'AMECodeSignforCLI2'
-        AppRegistrationClientId: '$(app-registration-client-id)'
-        AppRegistrationTenantId: '$(app-registration-tenant-id)'
-        AuthAKVName: '$(auth-kv-name)'
-        AuthCertName: '$(auth-cert-name)'
-        AuthSignCertName: '$(auth-sign-cert-name)'
+        ConnectedServiceName: 'ame_esrp_connection'
+        AppRegistrationClientId: '$(ESRPAppClientId)'
+        AppRegistrationTenantId: '$(ESRPAppTenantId)'
+        AuthAKVName: '$(ESRPKVName)'
+        AuthCertName: '$(ESRPAuthCertName)'
+        AuthSignCertName: '$(ESRPSignCertName)'
         FolderPath: '$(Build.SourcesDirectory)/signing'
         Pattern: |
           **/python3.13
@@ -247,15 +247,15 @@ stages:
             {
               "KeyCode": "CP-401337-Apple",
               "OperationCode": "MacAppDeveloperSign",
-              "Parameters": {
-                "Hardening": "--timestamp --options runtime"
-              },
               "ToolName": "sign",
-              "ToolVersion": "1.0"
+              "ToolVersion": "1.0",
+              "Parameters": {
+                "Hardening": "--options=runtime"
+              }
             }
           ]
-        SessionTimeout: '90'
-        MaxConcurrency: '25'
+        SessionTimeout: '120'
+        MaxConcurrency: '50'
         MaxRetryAttempts: '5'
     
     - pwsh: |
@@ -465,12 +465,12 @@ stages:
     - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
       displayName: 'Notarize with Apple via ESRP'
       inputs:
-        ConnectedServiceName: 'AMECodeSignforCLI2'
-        AppRegistrationClientId: '$(app-registration-client-id)'
-        AppRegistrationTenantId: '$(app-registration-tenant-id)'
-        AuthAKVName: '$(auth-kv-name)'
-        AuthCertName: '$(auth-cert-name)'
-        AuthSignCertName: '$(auth-sign-cert-name)'
+        ConnectedServiceName: 'ame_esrp_connection'
+        AppRegistrationClientId: '$(ESRPAppClientId)'
+        AppRegistrationTenantId: '$(ESRPAppTenantId)'
+        AuthAKVName: '$(ESRPKVName)'
+        AuthCertName: '$(ESRPAuthCertName)'
+        AuthSignCertName: '$(ESRPSignCertName)'
         FolderPath: '$(Build.SourcesDirectory)'
         Pattern: 'azure-cli-notarize.zip'
         signConfigType: 'inlineSignParams'
@@ -479,16 +479,16 @@ stages:
             {
               "KeyCode": "CP-401337-Apple",
               "OperationCode": "MacAppNotarize",
+              "ToolName": "sign",
+              "ToolVersion": "1.0",
               "Parameters": {
                 "BundleId": "${{ parameters.BundleId }}"
-              },
-              "ToolName": "sign",
-              "ToolVersion": "1.0"
+              }
             }
           ]
-        SessionTimeout: '120'
-        MaxConcurrency: '5'
-        MaxRetryAttempts: '3'
+        SessionTimeout: '60'
+        MaxConcurrency: '50'
+        MaxRetryAttempts: '5'
     
     - pwsh: |
         Write-Host "Notarization complete!"
