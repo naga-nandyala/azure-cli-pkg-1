@@ -50,7 +50,7 @@ stages:
   - job: BuildARM64
     displayName: 'Build PKG (ARM64)'
     pool:
-      vmImage: 'macos-latest'  # Apple Silicon (macOS-15)
+      vmImage: 'macos-15-arm64'  # Apple Silicon (ARM64) - limited public preview
     
     variables:
       ARCH: 'arm64'

@@ -95,7 +95,7 @@ stages:
   - job: DownloadAndExtractPkg
     displayName: 'Download and extract PKG contents'
     pool:
-      vmImage: 'macos-14'
+      vmImage: 'macos-15-arm64'
     
     steps:
     - checkout: none
@@ -504,7 +504,7 @@ stages:
   - job: RepackagePkg
     displayName: 'Repackage PKG with signed binaries (macOS)'
     pool:
-      vmImage: 'macos-14'
+      vmImage: 'macos-15-arm64'
     
     steps:
     - checkout: none
@@ -902,7 +902,7 @@ stages:
     displayName: 'Staple notarization ticket (macOS)'
     dependsOn: NotarizeARM64
     pool:
-      vmImage: 'macos-14'
+      vmImage: 'macos-15-arm64'
     
     steps:
     - checkout: none
@@ -978,7 +978,7 @@ stages:
   - job: GatekeeperTests
     displayName: 'Run 9 Gatekeeper security tests'
     pool:
-      vmImage: 'macos-14'
+      vmImage: 'macos-15-arm64'
     
     steps:
     - checkout: none
@@ -1530,7 +1530,7 @@ stages:
   - job: GenerateFormula
     displayName: 'Generate Homebrew formula'
     pool:
-      vmImage: 'macos-14'
+      vmImage: 'macos-15-arm64'
     
     steps:
     - checkout: none
@@ -1621,7 +1621,7 @@ stages:
       PKG_DOWNLOAD_URL: $[ dependencies.GenerateFormula.outputs['GetPkgDetails.PKG_DOWNLOAD_URL'] ]
       PKG_NAME: $[ dependencies.GenerateFormula.outputs['GetPkgDetails.PKG_NAME'] ]
     pool:
-      vmImage: 'macos-14'
+      vmImage: 'macos-15-arm64'
     
     steps:
     - checkout: none
@@ -1819,7 +1819,7 @@ stages:
   - job: TestHomebrewInstall
     displayName: 'Test Homebrew formula'
     pool:
-      vmImage: 'macos-14'
+      vmImage: 'macos-15-arm64'
     
     steps:
     - checkout: none
@@ -1892,7 +1892,7 @@ stages:
   - job: TestHomebrewCask
     displayName: 'Test Homebrew Cask (PKG installer via Cask)'
     pool:
-      vmImage: 'macos-14'
+      vmImage: 'macos-15-arm64'
     
     steps:
     - checkout: none
@@ -2066,7 +2066,7 @@ stages:
   - job: TestOfflineInstall
     displayName: 'Test offline PKG install'
     pool:
-      vmImage: 'macos-14'
+      vmImage: 'macos-15-arm64'
     
     steps:
     - checkout: none
