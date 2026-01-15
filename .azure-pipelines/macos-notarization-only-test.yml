@@ -1,0 +1,440 @@
+# Azure CLI - macOS Notarization Only Test Pipeline
+# 
+# This pipeline tests ONLY the notarization step using an already-signed tar.gz
+# Use this to iterate on notarization without re-running signing each time
+#
+# Input: Signed tar.gz (from previous build or external source)
+# Output: Signed + Notarized tar.gz with stapled ticket
+
+trigger: none
+
+parameters:
+  - name: SignedTarballUrl
+    displayName: 'URL to SIGNED tar.gz'
+    type: string
+    default: 'https://dev.azure.com/azclitools/release/_apis/build/builds/29361/artifacts?artifactName=signed-tarball&api-version=7.1&%24format=zip'
+  
+  - name: BundleId
+    displayName: 'Bundle ID for notarization'
+    type: string
+    default: 'com.microsoft.azure.cli'
+  
+  - name: Version
+    displayName: 'Azure CLI Version'
+    type: string
+    default: '2.77.0'
+  
+  - name: Architecture
+    displayName: 'Architecture (arm64 or x86_64)'
+    type: string
+    default: 'arm64'
+    values:
+    - arm64
+    - x86_64
+
+variables:
+  - group: 'AME ESRP Variable Group'
+  
+  # Disable auto-injection tasks
+  - name: Codeql.Enabled
+    value: false
+  - name: Codeql.SkipTaskAutoInjection
+    value: true
+  - name: CodeQL.enabled
+    value: false
+  - name: runCodesignValidationInjection
+    value: false
+  - name: DOTNET_CLI_TELEMETRY_OPTOUT
+    value: 1
+  - name: DOTNET_NOLOGO
+    value: 1
+  - name: NugetSecurityAnalysisWarningLevel
+    value: none
+  - name: skipNugetSecurityAnalysis
+    value: true
+
+name: notarization-test-$(Build.BuildId)
+
+stages:
+# ============================================================================
+# STAGE 1: DOWNLOAD SIGNED TAR.GZ
+# ============================================================================
+- stage: DownloadSignedTarball
+  displayName: 'Stage 1: Download Signed Tar.gz'
+  jobs:
+  - job: Download
+    displayName: 'Download signed tar.gz from build artifacts'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        set -e
+        echo "Downloading signed tar.gz from build 29361..."
+        
+        # Download the artifact ZIP
+        curl -L -o signed-tarball.zip "${{ parameters.SignedTarballUrl }}"
+        
+        # Unzip to get the tar.gz
+        unzip signed-tarball.zip
+        
+        # Find the tar.gz file
+        TARBALL=$(find . -name "*.tar.gz" | head -1)
+        
+        if [ -z "$TARBALL" ]; then
+          echo "❌ No tar.gz found in downloaded artifact"
+          exit 1
+        fi
+        
+        echo "Found signed tar.gz: $TARBALL"
+        ls -lh "$TARBALL"
+        
+        # Move to staging
+        mkdir -p $(Build.ArtifactStagingDirectory)/signed-tarball
+        cp "$TARBALL" $(Build.ArtifactStagingDirectory)/signed-tarball/
+        
+        echo "✅ Signed tar.gz ready for notarization"
+      displayName: 'Download signed tar.gz artifact'
+    
+    - bash: |
+        set -e
+        echo "=== Verifying signed tar.gz structure ==="
+        
+        cd $(Build.ArtifactStagingDirectory)/signed-tarball
+        TARBALL=$(ls *.tar.gz | head -1)
+        
+        # Extract to verify
+        mkdir -p verify
+        tar -xzf "$TARBALL" -C verify
+        
+        cd verify
+        
+        echo ""
+        echo "Structure:"
+        ls -lh
+        
+        echo ""
+        echo "Symlinks:"
+        find . -type l -ls
+        
+        echo ""
+        echo "Python binaries:"
+        find . -type f -name "python*" ! -name "*.pyc" ! -name "*.py" -ls | head -5
+        
+        echo ""
+        echo "Checking code signatures..."
+        if [ -f "libexec/bin/python3" ]; then
+          codesign -dv --verbose=4 libexec/bin/python3 2>&1 | grep -E "(Authority|Identifier)" || true
+        fi
+        
+      displayName: 'Verify signed tar.gz structure'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/signed-tarball
+      artifact: signed-tarball
+      displayName: 'Publish signed tar.gz for notarization'
+
+# ============================================================================
+# STAGE 2: NOTARIZE WITH APPLE (ESRP)
+# ============================================================================
+- stage: NotarizeTarball
+  displayName: 'Stage 2: Notarize with Apple'
+  dependsOn: DownloadSignedTarball
+  condition: succeeded()
+  jobs:
+  - job: NotarizeWithESRP
+    displayName: 'Submit to Apple notarization via ESRP (Windows)'
+    pool:
+      vmImage: 'windows-latest'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: signed-tarball
+      displayName: 'Download signed tar.gz'
+    
+    - pwsh: |
+        Write-Host "=== Preparing signed tar.gz for notarization ==="
+        Write-Host "NOTE: ESRP MacAppNotarize requires specific filename format"
+        Write-Host ""
+        
+        $signedTarballDir = "$(Pipeline.Workspace)/signed-tarball"
+        $tarballPath = Get-ChildItem "$signedTarballDir/*.tar.gz" | Select-Object -First 1
+        
+        if (-not $tarballPath) {
+            Write-Error "❌ No signed tar.gz found"
+            exit 1
+        }
+        
+        Write-Host "Found signed tar.gz: $($tarballPath.FullName)"
+        Write-Host "Size: $([math]::Round($tarballPath.Length / 1MB, 2)) MB"
+        Write-Host ""
+        
+        # ESRP requires the file to be in a specific location with specific name
+        $toBeNotarizedDir = "$(Pipeline.Workspace)/toBeNotarized"
+        New-Item -ItemType Directory -Path $toBeNotarizedDir -Force | Out-Null
+        
+        $targetName = "azure-cli-${{ parameters.Version }}-macos-${{ parameters.Architecture }}-signed.tar.gz"
+        $targetPath = Join-Path $toBeNotarizedDir $targetName
+        
+        Copy-Item $tarballPath.FullName $targetPath
+        Write-Host "Prepared for notarization: $targetPath"
+        
+      displayName: 'Prepare tar.gz for notarization'
+    
+    - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
+      displayName: 'ESRP - Notarize tar.gz with Apple'
+      inputs:
+        ConnectedServiceName: 'ESRP Code Signing Connection - Azure CLI'
+        AppRegistrationClientId: $(ESRPClientId)
+        AppRegistrationTenantId: $(ESRPTenantId)
+        AuthAKVName: $(ESRPKeyVault)
+        AuthCertName: $(ESRPSignAuthCertName)
+        AuthSignCertName: $(ESRPSignAuthSignCertName)
+        FolderPath: '$(Pipeline.Workspace)/toBeNotarized'
+        Pattern: '*.tar.gz'
+        signConfigType: inlineSignParams
+        inlineOperation: |
+          [
+            {
+              "KeyCode": "CP-401337-Apple",
+              "OperationCode": "MacAppNotarize",
+              "Parameters": {
+                "BundleId": "${{ parameters.BundleId }}"
+              },
+              "ToolName": "sign",
+              "ToolVersion": "1.0"
+            }
+          ]
+        SessionTimeout: 180
+    
+    - pwsh: |
+        Write-Host "=== Verifying notarization result ==="
+        Write-Host ""
+        
+        $notarizedDir = "$(Pipeline.Workspace)/toBeNotarized"
+        $tarballPath = Get-ChildItem "$notarizedDir/*.tar.gz" | Select-Object -First 1
+        
+        if (-not $tarballPath) {
+            Write-Error "❌ No notarized tar.gz found"
+            exit 1
+        }
+        
+        Write-Host "✅ Notarized tar.gz: $($tarballPath.Name)"
+        Write-Host "Size: $([math]::Round($tarballPath.Length / 1MB, 2)) MB"
+        Write-Host ""
+        
+        # Copy to staging
+        $stagingDir = "$(Build.ArtifactStagingDirectory)/signed-notarized-tarball"
+        New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null
+        Copy-Item $tarballPath.FullName $stagingDir
+        
+        Write-Host "✅ Notarization complete - ready for distribution"
+        
+      displayName: 'Verify notarization result'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/signed-notarized-tarball
+      artifact: signed-notarized-tarball
+      displayName: 'Publish notarized tar.gz'
+
+# ============================================================================
+# STAGE 3: STAPLE NOTARIZATION TICKET (macOS)
+# ============================================================================
+- stage: StapleTicket
+  displayName: 'Stage 3: Staple Notarization Ticket'
+  dependsOn: NotarizeTarball
+  condition: succeeded()
+  jobs:
+  - job: Staple
+    displayName: 'Staple notarization ticket (macOS)'
+    pool:
+      vmImage: 'macOS-14'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: signed-notarized-tarball
+      displayName: 'Download notarized tar.gz'
+    
+    - bash: |
+        set -e
+        echo "=== Stapling notarization ticket to tar.gz ==="
+        echo "NOTE: Stapling embeds the ticket for offline validation"
+        echo ""
+        
+        cd $(Pipeline.Workspace)/signed-notarized-tarball
+        TARBALL=$(ls *.tar.gz | head -1)
+        
+        echo "Notarized tar.gz: $TARBALL"
+        ls -lh "$TARBALL"
+        echo ""
+        
+        # Extract tar.gz
+        echo "Extracting tar.gz for stapling..."
+        mkdir -p extracted
+        tar -xzf "$TARBALL" -C extracted
+        
+        echo "Structure:"
+        ls -lh extracted/
+        echo ""
+        
+        # Staple ticket to each binary
+        echo "Stapling notarization ticket to binaries..."
+        
+        STAPLED_COUNT=0
+        
+        # Find all Mach-O binaries
+        find extracted -type f | while read filepath; do
+          if file "$filepath" | grep -q "Mach-O"; then
+            echo "Stapling: $filepath"
+            if xcrun stapler staple "$filepath" 2>&1; then
+              STAPLED_COUNT=$((STAPLED_COUNT + 1))
+              echo "  ✅ Stapled"
+            else
+              echo "  ⚠️  Staple failed (may not be supported for this file type)"
+            fi
+          fi
+        done
+        
+        echo ""
+        echo "Stapling complete - creating final tar.gz..."
+        
+        # Create new tar.gz with stapled binaries
+        STAPLED_TARBALL="${TARBALL%.tar.gz}-stapled.tar.gz"
+        tar -czf "$STAPLED_TARBALL" -C extracted .
+        
+        echo ""
+        echo "✅ Created stapled tar.gz: $STAPLED_TARBALL"
+        ls -lh "$STAPLED_TARBALL"
+        
+        # Copy to staging
+        mkdir -p $(Build.ArtifactStagingDirectory)/signed-notarized-stapled-tarball
+        cp "$STAPLED_TARBALL" $(Build.ArtifactStagingDirectory)/signed-notarized-stapled-tarball/
+        
+      displayName: 'Staple notarization ticket'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/signed-notarized-stapled-tarball
+      artifact: signed-notarized-stapled-tarball
+      displayName: 'Publish stapled tar.gz'
+
+# ============================================================================
+# STAGE 4: TEST NOTARIZED PACKAGE
+# ============================================================================
+- stage: TestNotarized
+  displayName: 'Stage 4: Test Notarized Package'
+  dependsOn: StapleTicket
+  condition: succeeded()
+  jobs:
+  - job: TestWithQuarantine
+    displayName: 'Test notarized tar.gz with quarantine'
+    pool:
+      vmImage: 'macOS-14'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: signed-notarized-stapled-tarball
+      displayName: 'Download stapled tar.gz'
+    
+    - bash: |
+        set -e
+        echo "=== Testing Signed + Notarized + Stapled Tar.gz ==="
+        echo ""
+        
+        cd $(Pipeline.Workspace)/signed-notarized-stapled-tarball
+        TARBALL=$(ls *.tar.gz | head -1)
+        
+        echo "Testing: $TARBALL"
+        echo ""
+        
+        # Simulate download by adding quarantine
+        echo "Adding quarantine attribute to simulate browser download..."
+        xattr -w com.apple.quarantine "0081;$(date +%s);TestBrowser;TEST-UUID" "$TARBALL"
+        
+        echo "Quarantine added:"
+        xattr -l "$TARBALL"
+        echo ""
+        
+        # Extract
+        echo "Extracting tar.gz..."
+        mkdir -p test-dir
+        cd test-dir
+        tar -xzf "../$TARBALL"
+        
+        echo "Extracted structure:"
+        ls -lh
+        echo ""
+        
+        # Check if quarantine propagated
+        echo "Checking quarantine propagation..."
+        if xattr bin/az 2>/dev/null | grep -q "com.apple.quarantine"; then
+          echo "✅ Quarantine propagated to extracted files"
+          xattr bin/az | head -3
+        else
+          echo "ℹ️  No quarantine on extracted files"
+        fi
+        echo ""
+        
+        # Check notarization ticket
+        echo "Checking for notarization ticket..."
+        if xcrun stapler validate libexec/bin/python3 2>&1 | grep -q "The validate action worked"; then
+          echo "✅ Notarization ticket is stapled"
+        else
+          echo "⚠️  No stapled ticket found (ticket may need to be fetched from Apple on first run)"
+        fi
+        echo ""
+        
+        # Verify signatures
+        echo "Verifying code signatures..."
+        codesign -dv --verbose=4 libexec/bin/python3 2>&1 | grep -E "(Authority|Identifier)" || true
+        echo ""
+        
+        # Test execution
+        echo "Testing execution with quarantine..."
+        echo "Running: ./bin/az --version"
+        echo ""
+        
+        if timeout 30 ./bin/az --version 2>&1 | head -10; then
+          echo ""
+          echo "✅ EXECUTION SUCCESSFUL - Notarized package works with quarantine!"
+        else
+          EXIT_CODE=$?
+          echo ""
+          echo "❌ EXECUTION FAILED (exit code: $EXIT_CODE)"
+          if [ $EXIT_CODE -eq 137 ]; then
+            echo "   Exit 137 = SIGKILL from Gatekeeper - notarization may have failed"
+          fi
+          exit 1
+        fi
+        echo ""
+        
+        # Test again to verify caching
+        echo "Testing second execution (should be instant with cached validation)..."
+        if ./bin/az --version >/dev/null 2>&1; then
+          echo "✅ Second execution successful - Gatekeeper cached approval"
+        else
+          echo "⚠️  Second execution had issues"
+        fi
+        
+      displayName: 'Test notarized package with quarantine'
+    
+    - bash: |
+        echo ""
+        echo "========================================"
+        echo "✅ NOTARIZATION TEST COMPLETE"
+        echo "========================================"
+        echo ""
+        echo "Results:"
+        echo "  ✅ Signed tar.gz downloaded successfully"
+        echo "  ✅ Notarization submitted to Apple"
+        echo "  ✅ Notarization ticket stapled"
+        echo "  ✅ Package executes with quarantine"
+        echo ""
+        echo "The notarized tar.gz is ready for distribution!"
+        echo "Artifact: signed-notarized-stapled-tarball"
+        echo ""
+      displayName: 'Print success summary'

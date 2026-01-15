@@ -619,7 +619,7 @@ stages:
   dependsOn:
   - CreateSignedTarball
   - DownloadUnsignedTarball
-  condition: false  # DISABLED: Verify signed structure first
+  condition: succeeded()
   variables:
     AzureCliVersion: $[ stageDependencies.DownloadUnsignedTarball.DownloadAndExtract.outputs['DetectVersion.AzureCliVersion'] ]
   jobs:
