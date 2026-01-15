@@ -12,7 +12,7 @@ parameters:
   - name: BuildId
     displayName: 'Build ID from signing pipeline'
     type: string
-    default: '29361'
+    default: '291361'
   
   - name: BundleId
     displayName: 'Bundle ID for notarization'
@@ -206,11 +206,11 @@ stages:
       displayName: 'ESRP - Notarize tar.gz with Apple'
       inputs:
         ConnectedServiceName: 'ame_esrp_connection'
-        AppRegistrationClientId: $(ESRPClientId)
-        AppRegistrationTenantId: $(ESRPTenantId)
-        AuthAKVName: $(ESRPKeyVault)
-        AuthCertName: $(ESRPSignAuthCertName)
-        AuthSignCertName: $(ESRPSignAuthSignCertName)
+        AppRegistrationClientId: '$(ESRPAppClientId)'
+        AppRegistrationTenantId: '$(ESRPAppTenantId)'
+        AuthAKVName: '$(ESRPKVName)'
+        AuthCertName: '$(ESRPAuthCertName)'
+        AuthSignCertName: '$(ESRPSignCertName)'
         FolderPath: '$(Pipeline.Workspace)/toBeNotarized'
         Pattern: '*.tar.gz'
         signConfigType: inlineSignParams
