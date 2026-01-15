@@ -781,13 +781,126 @@ stages:
     - publish: $(Build.ArtifactStagingDirectory)/fully-signed-pkg
       artifact: fully-signed-macos-pkg
       displayName: 'Publish fully signed PKG'
-  
-  # Note: MacAppDeveloperSign operation above automatically notarizes with Apple.
-  # No separate notarization submission needed - the PKG is already notarized.
-  # This job only staples the notarization ticket for offline verification.
+
+# ============================================================================
+# STAGE 4: NOTARIZE WITH APPLE (ESRP)
+# ============================================================================
+- stage: NotarizeWithApple
+  displayName: 'Stage 4: Notarize with Apple via ESRP'
+  dependsOn:
+  - RepackageAndSignPkg
+  - DownloadAndExtract
+  condition: succeeded()
+  variables:
+    AzureCliVersion: $[ stageDependencies.DownloadAndExtract.DownloadAndExtractPkg.outputs['DetectVersion.AzureCliVersion'] ]
+  jobs:
+  - job: NotarizeARM64
+    displayName: 'Notarize PKG with Apple (ESRP on Windows)'
+    pool:
+      vmImage: windows-2022
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: fully-signed-macos-pkg
+      displayName: 'Download fully-signed PKG'
+    
+    - pwsh: |
+        Write-Host "=== Preparing Fully-Signed PKG for Apple Notarization ==="
+        
+        $signedPkg = Get-ChildItem -Path "$(Pipeline.Workspace)/fully-signed-macos-pkg" -Filter "*fully-signed.pkg" -File | Select-Object -First 1
+        
+        if (-not $signedPkg) {
+          Write-Error "❌ No PKG file found"
+          exit 1
+        }
+        
+        Write-Host "✅ Found signed PKG: $($signedPkg.Name)"
+        Write-Host "   Size: $([math]::Round($signedPkg.Length / 1MB, 2)) MB"
+        
+        # Copy to workspace
+        $targetPath = "$(Pipeline.Workspace)/$($signedPkg.Name)"
+        Copy-Item -Path $signedPkg.FullName -Destination $targetPath -Force
+        
+        Write-Host ""
+        Write-Host "=== Ready for Apple notarization ==="
+        
+      displayName: 'Prepare fully-signed PKG for notarization'
+    
+    - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
+      displayName: 'ESRP - Notarize ARM64 PKG with Apple'
+      inputs:
+        ConnectedServiceName: 'ame_esrp_connection'
+        AppRegistrationClientId: '$(ESRPAppClientId)'
+        AppRegistrationTenantId: '$(ESRPAppTenantId)'
+        AuthAKVName: '$(ESRPKVName)'
+        AuthCertName: '$(ESRPAuthCertName)'
+        AuthSignCertName: '$(ESRPSignCertName)'
+        FolderPath: '$(Pipeline.Workspace)'
+        Pattern: '*fully-signed.pkg'
+        signConfigType: 'inlineSignParams'
+        inlineOperation: |
+          [
+            {
+              "KeyCode": "CP-401337-Apple",
+              "OperationCode": "MacAppNotarize",
+              "ToolName": "sign",
+              "ToolVersion": "1.0",
+              "Parameters": {
+                "BundleId": "$(BundleId)"
+              }
+            }
+          ]
+        SessionTimeout: '60'
+        MaxConcurrency: '50'
+        MaxRetryAttempts: '5'
+    
+    - pwsh: |
+        Write-Host "=== Collecting Notarized PKG ==="
+        
+        $notarizedPkg = Get-ChildItem -Path "$(Pipeline.Workspace)" -Filter "*fully-signed.pkg" -File | 
+                        Sort-Object LastWriteTime -Descending | 
+                        Select-Object -First 1
+        
+        if (-not $notarizedPkg) {
+          Write-Error "❌ Notarized PKG not found"
+          exit 1
+        }
+        
+        Write-Host "Found notarized PKG: $($notarizedPkg.Name)"
+        
+        # Create output directory
+        $outputDir = "$(Build.ArtifactStagingDirectory)/notarized-pkg"
+        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+        
+        # Rename to indicate it's notarized
+        $notarizedName = $notarizedPkg.Name -replace 'fully-signed\.pkg$', 'notarized.pkg'
+        $newPath = Join-Path $outputDir $notarizedName
+        Copy-Item -Path $notarizedPkg.FullName -Destination $newPath -Force
+        
+        if (Test-Path $newPath) {
+          Write-Host "✅ Notarized PKG ready"
+          Write-Host "   Name: $notarizedName"
+          Write-Host "   Size: $([math]::Round((Get-Item $newPath).Length / 1MB, 2)) MB"
+          
+          # Generate SHA256
+          $hash = Get-FileHash -Path $newPath -Algorithm SHA256
+          $hashFile = "$newPath.sha256"
+          "$($hash.Hash.ToLower())  $notarizedName" | Out-File -FilePath $hashFile -Encoding ASCII -NoNewline
+          
+          Write-Host "   SHA256: $($hash.Hash)"
+        }
+        
+      displayName: 'Collect notarized PKG'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/notarized-pkg
+      artifact: notarized-macos-pkg
+      displayName: 'Publish notarized PKG'
+
   - job: StapleTicket
     displayName: 'Staple notarization ticket (macOS)'
-    dependsOn: SignPkg
+    dependsOn: NotarizeARM64
     pool:
       vmImage: 'macos-15-arm64'
     
@@ -795,20 +908,17 @@ stages:
     - checkout: none
     
     - download: current
-      artifact: fully-signed-macos-pkg
-      displayName: 'Download signed PKG (already notarized)'
+      artifact: notarized-macos-pkg
+      displayName: 'Download notarized PKG'
     
     - bash: |
         echo "=== Stapling Notarization Ticket ==="
-        echo "Note: PKG was already notarized during MacAppDeveloperSign operation."
-        echo "This step embeds the ticket for offline verification."
-        echo ""
         
-        SIGNED_DIR="$(Pipeline.Workspace)/fully-signed-macos-pkg"
+        NOTARIZED_DIR="$(Pipeline.Workspace)/notarized-macos-pkg"
         STAPLED_DIR="$(Build.ArtifactStagingDirectory)/stapled-pkg"
         mkdir -p "$STAPLED_DIR"
         
-        for pkg in "$SIGNED_DIR"/*.pkg; do
+        for pkg in "$NOTARIZED_DIR"/*.pkg; do
           if [ -f "$pkg" ]; then
             pkg_name=$(basename "$pkg")
             echo "Processing: $pkg_name"
@@ -828,7 +938,6 @@ stages:
                 echo "✅ Ticket stapled successfully (after retry)"
               else
                 echo "❌ Stapling failed after retry"
-                echo "Note: PKG is still notarized, ticket just not embedded."
               fi
             fi
             
@@ -836,10 +945,11 @@ stages:
             echo "Validating stapled ticket..."
             xcrun stapler validate "$STAPLED_DIR/$pkg_name" || true
             
-            # Copy SHA256 file if exists, otherwise generate
+            # Copy SHA256 file if exists
             if [ -f "${pkg}.sha256" ]; then
               cp "${pkg}.sha256" "$STAPLED_DIR/${pkg_name}.sha256"
             else
+              # Generate new SHA256 for stapled PKG
               shasum -a 256 "$STAPLED_DIR/$pkg_name" | awk '{print $1 "  " "'$pkg_name'"}' > "$STAPLED_DIR/${pkg_name}.sha256"
             fi
             
@@ -858,15 +968,11 @@ stages:
       displayName: 'Publish stapled PKG'
 
 # ============================================================================
-# STAGE 4: GATEKEEPER SECURITY VALIDATION (9 Comprehensive Tests)
-# Note: Stage 4 was previously "Notarize with Apple" but MacAppDeveloperSign
-# already notarizes during signing (Stage 3), so explicit notarization via
-# MacAppNotarize was removed as redundant. Stapling moved to Stage 3 to
-# optimize pipeline time (~16 minutes saved).
+# STAGE 5: GATEKEEPER SECURITY VALIDATION (9 Comprehensive Tests)
 # ============================================================================
 - stage: GatekeeperSecurityValidation
-  displayName: 'Stage 4: Gatekeeper Security Validation (9 Tests)'
-  dependsOn: RepackageAndSignPkg
+  displayName: 'Stage 5: Gatekeeper Security Validation (9 Tests)'
+  dependsOn: NotarizeWithApple
   condition: succeeded()
   jobs:
   - job: GatekeeperTests
@@ -1283,10 +1389,10 @@ stages:
       condition: always()
 
 # ============================================================================
-# STAGE 5: PUBLISH TO GITHUB RELEASE
+# STAGE 6: PUBLISH TO GITHUB RELEASE
 # ============================================================================
 - stage: PublishToGitHub
-  displayName: 'Stage 5: Publish to GitHub Release'
+  displayName: 'Stage 6: Publish to GitHub Release'
   dependsOn:
   - GatekeeperSecurityValidation
   - DownloadAndExtract
@@ -1409,10 +1515,10 @@ stages:
       displayName: 'Release summary'
 
 # ============================================================================
-# STAGE 6: UPDATE HOMEBREW FORMULA
+# STAGE 7: UPDATE HOMEBREW FORMULA
 # ============================================================================
 - stage: UpdateHomebrewFormula
-  displayName: 'Stage 6: Update Homebrew Formula'
+  displayName: 'Stage 7: Update Homebrew Formula'
   dependsOn:
   - PublishToGitHub
   - DownloadAndExtract
@@ -1699,10 +1805,10 @@ stages:
       displayName: 'Print summary'
 
 # ============================================================================
-# STAGE 7: TEST HOMEBREW INSTALLATION
+# STAGE 8: TEST HOMEBREW INSTALLATION
 # ============================================================================
 - stage: TestInstallation
-  displayName: 'Stage 7: Test Homebrew Installation'
+  displayName: 'Stage 8: Test Homebrew Installation'
   dependsOn:
   - UpdateHomebrewFormula
   - DownloadAndExtract
@@ -2124,14 +2230,15 @@ stages:
       displayName: 'Test offline PKG installation'
 
 # ============================================================================
-# STAGE 8: RELEASE SUMMARY
+# STAGE 9: RELEASE SUMMARY
 # ============================================================================
 - stage: ReleaseSummary
-  displayName: 'Stage 8: Release Summary'
+  displayName: 'Stage 9: Release Summary'
   dependsOn:
   - DownloadAndExtract
   - SignBinaries
   - RepackageAndSignPkg
+  - NotarizeWithApple
   - GatekeeperSecurityValidation
   - PublishToGitHub
   - UpdateHomebrewFormula
