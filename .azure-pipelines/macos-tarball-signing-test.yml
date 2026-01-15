@@ -1368,8 +1368,14 @@ stages:
         
         echo ""
         echo "Verifying tap:"
-        brew tap | grep "$TAP_NAME" || {
+        # Homebrew strips 'homebrew-' prefix from tap names
+        EXPECTED_TAP=$(echo "$TAP_NAME" | sed 's|/homebrew-|/|')
+        echo "Looking for tap: $EXPECTED_TAP"
+        
+        brew tap | grep "$EXPECTED_TAP" || {
           echo "❌ ERROR: Tap not found"
+          echo "Available taps:"
+          brew tap
           exit 1
         }
         
