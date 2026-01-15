@@ -162,9 +162,9 @@ stages:
       artifact: unsigned-tarball
       displayName: 'Publish unsigned tar.gz artifact'
     
-    - publish: $(Build.ArtifactStagingDirectory)/unsigned-contents
-      artifact: unsigned-contents
-      displayName: 'Publish unsigned contents for signing'
+    # NOTE: Do NOT publish extracted contents - Azure DevOps artifact storage
+    # does not preserve symlinks. Instead, Stage 2 and Stage 3 will extract
+    # from the tar.gz which preserves symlinks.
     
     - publish: $(Build.ArtifactStagingDirectory)/files-to-sign.txt
       artifact: files-to-sign-list
@@ -187,8 +187,8 @@ stages:
     - checkout: none
     
     - download: current
-      artifact: unsigned-contents
-      displayName: 'Download unsigned contents'
+      artifact: unsigned-tarball
+      displayName: 'Download unsigned tar.gz'
     
     - download: current
       artifact: files-to-sign-list
@@ -200,7 +200,16 @@ stages:
         Write-Host "Creating individual ZIP files for each binary (same as PKG pipeline)"
         Write-Host ""
         
+        # Extract tar.gz fresh to preserve symlinks (Azure DevOps artifacts don't preserve them)
+        $tarballPath = Get-ChildItem "$(Pipeline.Workspace)/unsigned-tarball/*.tar.gz" | Select-Object -First 1
         $extractedPath = "$(Pipeline.Workspace)/unsigned-contents"
+        
+        Write-Host "Extracting tarball: $tarballPath"
+        New-Item -ItemType Directory -Path $extractedPath -Force | Out-Null
+        tar -xzf $tarballPath -C $extractedPath
+        Write-Host "Extracted to: $extractedPath"
+        Write-Host ""
+        
         $fileListPath = "$(Pipeline.Workspace)/files-to-sign-list/files-to-sign.txt"
         $toBeSignedDir = "$(Pipeline.Workspace)/toBeSigned"
         
@@ -386,23 +395,39 @@ stages:
     - checkout: none
     
     - download: current
-      artifact: unsigned-contents
-      displayName: 'Download unsigned contents'
+      artifact: unsigned-tarball
+      displayName: 'Download unsigned tar.gz'
     
     - download: current
       artifact: signed-binaries
       displayName: 'Download signed binaries'
     
+    - download: current
+      artifact: files-to-sign-list
+      displayName: 'Download file list'
+    
     - bash: |
         set -e
+        
+        echo "=== Extracting unsigned tar.gz (preserves symlinks) ==="
+        echo "NOTE: Azure DevOps artifacts don't preserve symlinks - must extract from tar.gz"
+        
+        TARBALL=$(find "$(Pipeline.Workspace)/unsigned-tarball" -name "*.tar.gz" | head -1)
+        ORIGINAL_PAYLOAD="$(Pipeline.Workspace)/unsigned-contents"
+        
+        echo "Extracting: $TARBALL"
+        mkdir -p "$ORIGINAL_PAYLOAD"
+        tar -xzf "$TARBALL" -C "$ORIGINAL_PAYLOAD"
+        echo "✅ Extracted with symlinks preserved"
+        echo ""
         
         echo "=== Merging signed binaries back into payload ==="
         echo "NOTE: Using cp -R on macOS to preserve symlinks"
         
-        ORIGINAL_PAYLOAD="$(Pipeline.Workspace)/unsigned-contents"
         SIGNED_BINARIES="$(Pipeline.Workspace)/signed-binaries"
         MERGED_PAYLOAD="$(Build.ArtifactStagingDirectory)/signed-contents"
         OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/signed-tarball"
+        FILES_TO_SIGN="$(Pipeline.Workspace)/files-to-sign-list/files-to-sign.txt"
         
         # Copy original payload (preserves symlinks)
         echo "Copying original payload structure (with symlinks)..."
@@ -434,6 +459,70 @@ stages:
         
         echo ""
         echo "✅ Merged payload ready"
+        
+        # CRITICAL: Re-create symlinks that may have been broken
+        # (Similar to how we re-apply permissions - be defensive)
+        echo ""
+        echo "Re-creating critical symlinks..."
+        
+        cd "$MERGED_PAYLOAD"
+        
+        # Re-create bin/az symlink (points to actual script in libexec)
+        if [ -f "libexec/bin/az" ]; then
+          rm -f bin/az
+          ln -s ../libexec/bin/az bin/az
+          echo "  ✅ Created: bin/az -> ../libexec/bin/az"
+        else
+          echo "  ⚠️  Warning: libexec/bin/az not found, cannot create symlink"
+        fi
+        
+        # Re-create Python symlinks
+        cd "$MERGED_PAYLOAD/libexec/bin"
+        
+        if [ -f "python3" ]; then
+          # python -> python3
+          rm -f python
+          ln -s python3 python
+          echo "  ✅ Created: libexec/bin/python -> python3"
+          
+          # python3.13 -> python3
+          rm -f python3.13
+          ln -s python3 python3.13
+          echo "  ✅ Created: libexec/bin/python3.13 -> python3"
+        else
+          echo "  ⚠️  Warning: python3 binary not found"
+        fi
+        
+        cd "$MERGED_PAYLOAD"
+        
+        echo ""
+        echo "Verifying symlinks:"
+        ls -lh bin/az
+        ls -lh libexec/bin/python*
+        
+        # CRITICAL: Set executable permissions on all binaries
+        # (Same approach as PKG pipeline - signing process loses execute bits)
+        echo ""
+        echo "Setting executable permissions on binaries..."
+        
+        cd "$MERGED_PAYLOAD"
+        
+        # Set execute permissions on wrapper scripts
+        chmod +x bin/az 2>/dev/null || true
+        
+        # Set execute permissions on Python executables
+        find libexec/bin -type f -name "python*" ! -name "*.pyc" ! -name "*.py" -exec chmod +x {} \; 2>/dev/null || true
+        
+        # Set execute permissions on all Mach-O binaries (dylibs, .so files)
+        find . -type f \( -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \; 2>/dev/null || true
+        
+        echo ""
+        echo "Verifying permissions on critical files:"
+        ls -l bin/az
+        ls -l libexec/bin/python*
+        
+        echo ""
+        echo "✅ Permissions restored"
         echo "Size: $(du -sh $MERGED_PAYLOAD | cut -f1)"
         
       displayName: 'Merge signed binaries (preserves symlinks)'
