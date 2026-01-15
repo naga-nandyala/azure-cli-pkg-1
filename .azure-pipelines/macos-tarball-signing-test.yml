@@ -257,9 +257,6 @@ stages:
               Write-Host "  ✓ $relativePath -> $zipName ($zipSize KB)"
             }
         }
-              Write-Host "  ✓ $relativePath -> $zipName ($zipSize KB)"
-            }
-        }
         
         Write-Host ""
         Write-Host "✅ Created $zippedCount ZIP files"

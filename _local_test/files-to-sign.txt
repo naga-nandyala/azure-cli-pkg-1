@@ -1,0 +1,17 @@
+./libexec/bin/python3
+./libexec/lib/libpython3.13.dylib
+./libexec/lib/python3.13/lib-dynload/_ctypes_test.cpython-313-darwin.so
+./libexec/lib/python3.13/lib-dynload/_dbm.cpython-313-darwin.so
+./libexec/lib/python3.13/lib-dynload/_tkinter.cpython-313-darwin.so
+./libexec/lib/python3.13/site-packages/_cffi_backend.cpython-313-darwin.so
+./libexec/lib/python3.13/site-packages/bcrypt/_bcrypt.abi3.so
+./libexec/lib/python3.13/site-packages/charset_normalizer/md.cpython-313-darwin.so
+./libexec/lib/python3.13/site-packages/charset_normalizer/md__mypyc.cpython-313-darwin.so
+./libexec/lib/python3.13/site-packages/cryptography/hazmat/bindings/_rust.abi3.so
+./libexec/lib/python3.13/site-packages/nacl/_sodium.abi3.so
+./libexec/lib/python3.13/site-packages/psutil/_psutil_osx.abi3.so
+./libexec/lib/python3.13/site-packages/pymsalruntime/libmsalruntime_arm64.dylib
+./libexec/lib/python3.13/site-packages/pymsalruntime/libpyRunloopAPIs_arm64.dylib
+./libexec/lib/python3.13/site-packages/pymsalruntime/pymsalruntime.cpython-313-darwin.so
+./libexec/lib/python3.13/site-packages/wrapt/_wrappers.cpython-313-darwin.so
+./libexec/lib/python3.13/site-packages/yaml/_yaml.cpython-313-darwin.so
