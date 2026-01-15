@@ -1,15 +1,17 @@
-# Azure CLI - macOS Tar.gz Signing and Notarization Test Pipeline
+# Azure CLI - macOS Tar.gz Signing Pipeline
 # 
-# This pipeline demonstrates the difference between:
-# 1. Unsigned tar.gz (baseline - will fail with quarantine)
-# 2. Signed-only tar.gz (requires right-click approval per binary)
-# 3. Signed + Notarized tar.gz (requires internet first run)
-#
-# Pipeline Flow:
+# This pipeline demonstrates tar.gz signing with ESRP:
 # - Download unsigned tar.gz
-# - Sign all binaries with ESRP
-# - Create TWO distributions: signed-only and signed+notarized
-# - Test all three variants with quarantine to demonstrate behavior
+# - Sign all binaries with ESRP (Developer ID Application certificate)
+# - Repackage signed tar.gz
+# - Publish to GitHub Release
+# - Update Homebrew formula
+# - Test Homebrew installation
+#
+# NOTE: Tar.gz files CANNOT be notarized by Apple
+# - Notarization only works for: .pkg, .dmg, .app bundles
+# - Signed tar.gz works perfectly for Homebrew (strips quarantine)
+# - Manual downloads may require right-click approval
 
 trigger: none
 
@@ -18,11 +20,6 @@ parameters:
     displayName: 'URL to Unsigned tar.gz'
     type: string
     default: 'https://github.com/naga-nandyala/azure-cli-pkg-1/releases/download/v2.77.0-tarball/azure-cli-2.77.0-macos-arm64.tar.gz'
-  
-  - name: BundleId
-    displayName: 'Bundle ID for notarization'
-    type: string
-    default: 'com.microsoft.azure.cli'
   
   - name: Architecture
     displayName: 'Architecture (arm64 or x86_64)'
@@ -650,132 +647,13 @@ stages:
       displayName: 'Publish signed-only tar.gz'
 
 # ============================================================================
-# STAGE 4: NOTARIZE WITH APPLE (ESRP)
-# ============================================================================
-- stage: NotarizeTarball
-  displayName: 'Stage 4: Notarize Tar.gz with Apple'
-  dependsOn:
-  - CreateSignedTarball
-  - DownloadUnsignedTarball
-  condition: succeeded()
-  variables:
-    AzureCliVersion: $[ stageDependencies.DownloadUnsignedTarball.DownloadAndExtract.outputs['DetectVersion.AzureCliVersion'] ]
-  jobs:
-  - job: NotarizeWithESRP
-    displayName: 'Submit to Apple notarization via ESRP (Windows)'
-    pool:
-      vmImage: 'windows-latest'
-    
-    steps:
-    - checkout: none
-    
-    - download: current
-      artifact: signed-tarball
-      displayName: 'Download signed tar.gz'
-    
-    - pwsh: |
-        Write-Host "=== Preparing Signed Tar.gz for Apple Notarization ==="
-        
-        $signedTarball = Get-ChildItem -Path "$(Pipeline.Workspace)/signed-tarball" -Filter "*-signed.tar.gz" | Select-Object -First 1
-        
-        if (-not $signedTarball) {
-          Write-Error "❌ No signed tar.gz found"
-          exit 1
-        }
-        
-        Write-Host "✅ Found signed tar.gz: $($signedTarball.Name)"
-        Write-Host "   Size: $([math]::Round($signedTarball.Length / 1MB, 2)) MB"
-        
-        # Copy to workspace for ESRP
-        $targetPath = "$(Pipeline.Workspace)/$($signedTarball.Name)"
-        Copy-Item -Path $signedTarball.FullName -Destination $targetPath -Force
-        
-        Write-Host ""
-        Write-Host "=== Ready for Apple notarization ==="
-        Write-Host "NOTE: Notarization submits tar.gz to Apple for malware scanning"
-        Write-Host "      Ticket will be stored on Apple servers (cannot be stapled to tar.gz)"
-        
-      displayName: 'Prepare signed tar.gz for notarization'
-    
-    - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
-      displayName: 'ESRP - Notarize Tar.gz with Apple'
-      inputs:
-        ConnectedServiceName: 'ame_esrp_connection'
-        AppRegistrationClientId: '$(ESRPAppClientId)'
-        AppRegistrationTenantId: '$(ESRPAppTenantId)'
-        AuthAKVName: '$(ESRPKVName)'
-        AuthCertName: '$(ESRPAuthCertName)'
-        AuthSignCertName: '$(ESRPSignCertName)'
-        FolderPath: '$(Pipeline.Workspace)'
-        Pattern: '*-signed.tar.gz'
-        signConfigType: 'inlineSignParams'
-        inlineOperation: |
-          [
-            {
-              "KeyCode": "CP-401337-Apple",
-              "OperationCode": "MacAppNotarize",
-              "ToolName": "sign",
-              "ToolVersion": "1.0",
-              "Parameters": {
-                "BundleId": "${{ parameters.BundleId }}"
-              }
-            }
-          ]
-        SessionTimeout: '60'
-        MaxConcurrency: '50'
-        MaxRetryAttempts: '5'
-    
-    - pwsh: |
-        Write-Host "=== Collecting Notarized Tar.gz ==="
-        
-        $notarizedTarball = Get-ChildItem -Path "$(Pipeline.Workspace)" -Filter "*-signed.tar.gz" -File | 
-                            Sort-Object LastWriteTime -Descending | 
-                            Select-Object -First 1
-        
-        if (-not $notarizedTarball) {
-          Write-Error "❌ Notarized tar.gz not found"
-          exit 1
-        }
-        
-        Write-Host "Found notarized tar.gz: $($notarizedTarball.Name)"
-        
-        # Create output directory
-        $outputDir = "$(Build.ArtifactStagingDirectory)/signed-notarized-tarball"
-        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
-        
-        # Rename to indicate it's notarized
-        $notarizedName = $notarizedTarball.Name -replace '-signed\.tar\.gz$', '-signed-notarized.tar.gz'
-        $newPath = Join-Path $outputDir $notarizedName
-        Copy-Item -Path $notarizedTarball.FullName -Destination $newPath -Force
-        
-        if (Test-Path $newPath) {
-          Write-Host "✅ Notarized tar.gz ready"
-          Write-Host "   Name: $notarizedName"
-          Write-Host "   Size: $([math]::Round((Get-Item $newPath).Length / 1MB, 2)) MB"
-          
-          # Generate SHA256
-          $hash = Get-FileHash -Path $newPath -Algorithm SHA256
-          $hashFile = "$newPath.sha256"
-          "$($hash.Hash.ToLower())  $notarizedName" | Out-File -FilePath $hashFile -Encoding ASCII -NoNewline
-          
-          Write-Host "   SHA256: $($hash.Hash)"
-        }
-        
-      displayName: 'Collect notarized tar.gz'
-    
-    - publish: $(Build.ArtifactStagingDirectory)/signed-notarized-tarball
-      artifact: signed-notarized-tarball
-      displayName: 'Publish signed+notarized tar.gz'
-
-# ============================================================================
-# STAGE 5: TEST ALL THREE VARIANTS
+# STAGE 4: TEST ALL THREE VARIANTS
 # ============================================================================
 - stage: TestAllVariants
-  displayName: 'Stage 5: Test All Variants'
+  displayName: 'Stage 4: Test All Variants'
   dependsOn:
   - DownloadUnsignedTarball
   - CreateSignedTarball
-  - NotarizeTarball
   condition: false  # DISABLED: Verify signed structure first
   jobs:
   - job: TestUnsigned
@@ -887,7 +765,7 @@ stages:
         codesign -v "$TEST_DIR/libexec/bin/python3.13" && echo "✅ Signature is valid"
         echo ""
         
-        echo "Attempting to execute (MAY FAIL without notarization):"
+        echo "Attempting to execute (expected to work with signature):"
         set +e
         timeout 5 "$TEST_DIR/libexec/bin/python3.13" --version 2>&1
         EXIT_CODE=$?
@@ -921,81 +799,12 @@ stages:
         
       displayName: 'Test signed-only with quarantine'
       continueOnError: true
-  
-  - job: TestSignedNotarized
-    displayName: 'Test 3: Signed+Notarized tar.gz (best experience)'
-    pool:
-      vmImage: 'macOS-14'
-    dependsOn: []
-    
-    steps:
-    - checkout: none
-    
-    - download: current
-      artifact: signed-notarized-tarball
-    
-    - bash: |
-        set -e
-        
-        echo "=========================================="
-        echo "TEST 3: SIGNED + NOTARIZED TAR.GZ"
-        echo "=========================================="
-        echo ""
-        
-        TARBALL=$(find "$(Pipeline.Workspace)/signed-notarized-tarball" -name "*-notarized.tar.gz" | head -1)
-        echo "Testing: $(basename $TARBALL)"
-        
-        # Add quarantine
-        xattr -w com.apple.quarantine "0083;$(date +%s);Safari;|com.apple.Safari" "$TARBALL"
-        
-        echo "Quarantine on tar.gz:"
-        xattr "$TARBALL"
-        echo ""
-        
-        # Extract
-        TEST_DIR=$(mktemp -d)
-        tar -xzf "$TARBALL" -C "$TEST_DIR"
-        
-        echo "Quarantine on extracted Python:"
-        xattr "$TEST_DIR/libexec/bin/python3.13"
-        echo ""
-        
-        echo "Signature verification:"
-        codesign -dvv "$TEST_DIR/libexec/bin/python3.13" 2>&1 | grep -E "Signature|Authority|TeamIdentifier"
-        codesign -v "$TEST_DIR/libexec/bin/python3.13" && echo "✅ Signature is valid"
-        echo ""
-        
-        echo "Checking notarization status (requires internet):"
-        spctl --assess --verbose --type execute "$TEST_DIR/libexec/bin/python3.13" 2>&1 || true
-        echo ""
-        
-        echo "Attempting to execute (should work with internet):"
-        "$TEST_DIR/libexec/bin/python3.13" --version && echo "✅ Executed successfully!"
-        
-        echo ""
-        echo "Testing az command:"
-        "$TEST_DIR/bin/az" --version 2>&1 | head -5 && echo "✅ Azure CLI works!"
-        
-        echo ""
-        echo "=========================================="
-        echo "SUMMARY FOR SIGNED + NOTARIZED:"
-        echo "=========================================="
-        echo "✅ Valid code signature"
-        echo "✅ Notarized by Apple"
-        echo "✅ Works with quarantine (requires internet first run)"
-        echo "✅ Best user experience"
-        echo ""
-        
-        rm -rf "$TEST_DIR"
-        
-      displayName: 'Test signed+notarized with quarantine'
-      continueOnError: true
 
 # ============================================================================
-# STAGE 6: COMPARISON SUMMARY
+# STAGE 5: COMPARISON SUMMARY
 # ============================================================================
 - stage: ComparisonSummary
-  displayName: 'Stage 6: Test Results Summary'
+  displayName: 'Stage 5: Test Results Summary'
   dependsOn:
   - DownloadUnsignedTarball
   - TestAllVariants
@@ -1087,12 +896,12 @@ stages:
       displayName: 'Print summary'
 
 # ============================================================================
-# STAGE 7: PUBLISH TO GITHUB RELEASE
+# STAGE 6: PUBLISH TO GITHUB RELEASE
 # ============================================================================
 - stage: PublishToGitHub
-  displayName: 'Stage 7: Publish to GitHub Release'
+  displayName: 'Stage 6: Publish to GitHub Release'
   dependsOn:
-  - NotarizeTarball
+  - CreateSignedTarball
   - DownloadUnsignedTarball
   condition: succeeded()
   variables:
@@ -1107,8 +916,8 @@ stages:
     - checkout: none
     
     - download: current
-      artifact: signed-notarized-tarball
-      displayName: 'Download signed+notarized tarball'
+      artifact: signed-tarball
+      displayName: 'Download signed tarball'
     
     - bash: |
         set -e
@@ -1117,8 +926,8 @@ stages:
         RELEASE_DIR="$(Build.ArtifactStagingDirectory)/release-tarballs"
         mkdir -p "$RELEASE_DIR"
         
-        # Copy signed+notarized tarball
-        cp -v $(Pipeline.Workspace)/signed-notarized-tarball/*.tar.gz* "$RELEASE_DIR/"
+        # Copy signed tarball
+        cp -v $(Pipeline.Workspace)/signed-tarball/*.tar.gz* "$RELEASE_DIR/"
         
         echo ""
         echo "=== Release Files ==="
@@ -1153,22 +962,22 @@ stages:
         echo "=== Create Release Notes ==="
         
         cat > release-notes.md <<'EOF'
-        # Azure CLI $(AzureCliVersion) - Signed & Notarized Tarball
+        # Azure CLI $(AzureCliVersion) - Signed Tarball
         
         ## Official Code-Signed Distribution
         
         ✅ **All binaries are code-signed with Apple Developer ID Application certificate**
-        ✅ **Notarized by Apple** - No Gatekeeper warnings
-        ✅ **No quarantine attribute issues** - Safe for browser downloads
+        ⚠️ **Note: Tar.gz cannot be notarized** - Right-click approval required for manual downloads
+        📦 **For Homebrew use** - Homebrew strips quarantine attributes automatically
         
         ## Download
         
-        ### macOS ${{ parameters.Architecture }} - Signed & Notarized
+        ### macOS ${{ parameters.Architecture }} - Signed
         - **File**: `$(TAR_NAME)`
         - **Size**: $(TAR_SIZE)
         - **SHA256**: `$(TAR_SHA256)`
         - **Code Signing**: Developer ID Application
-        - **Notarization**: Apple Notarized
+        - **Notarization**: N/A (tar.gz format cannot be notarized by Apple)
         
         ## Installation
         
@@ -1181,7 +990,7 @@ stages:
         
         ### Option 2: Manual Installation
         
-        **No Gatekeeper issues - all binaries are signed and notarized!**
+        **Note: Tar.gz files cannot be notarized. Homebrew strips quarantine; manual downloads require right-click approval.**
         
         ```bash
         # Download
@@ -1206,25 +1015,25 @@ stages:
         
         - ✅ **Code Signing**: All Mach-O binaries signed with Developer ID Application
         - ✅ **Hardened Runtime**: All executables use hardened runtime
-        - ✅ **Apple Notarization**: Verified by Apple's notarization service
-        - ✅ **Gatekeeper Compatible**: No quarantine warnings on browser downloads
+        - ⚠️ **Apple Notarization**: N/A (tar.gz cannot be notarized; use .pkg/.dmg for notarization)
+        - ✅ **Homebrew Compatible**: Works seamlessly via Homebrew
         - ✅ **SHA256 Verification**: Integrity verification via cryptographic hashes
         
         ## What's Different from Unsigned Tarballs?
         
-        | Feature | Unsigned Tarball | Signed & Notarized Tarball |
-        |---------|------------------|----------------------------|
-        | Browser downloads | ⚠️ Gatekeeper blocks execution | ✅ No warnings |
+        | Feature | Unsigned Tarball | Signed Tarball |
+        |---------|------------------|----------------|
+        | Browser downloads | ⚠️ Gatekeeper blocks execution | ⚠️ May need approval |
         | Code signing | ❌ Ad-hoc signed only | ✅ Developer ID Application |
-        | Apple notarization | ❌ Not notarized | ✅ Notarized by Apple |
-        | Quarantine removal | 🔧 Requires manual xattr fix | ✅ Not needed |
-        | Enterprise trust | ⚠️ May be blocked | ✅ Fully trusted |
+        | Apple notarization | ❌ N/A | ✅ Signed (N/A - tar.gz format limitation) |
+        | Homebrew install | ✅ Works (strips quarantine) | ✅ Works (strips quarantine) |
+        | Manual install | 🔧 Requires xattr removal | ⚠️ Requires approval |
         
         ## Build Information
         
         - **Build ID**: $(Build.BuildId)
         - **ESRP Signed**: Yes
-        - **Apple Notarized**: Yes
+        - **Apple Notarized**: No
         
         ## Documentation
         
@@ -1265,10 +1074,10 @@ stages:
         addChangeLog: false
 
 # ============================================================================
-# STAGE 8: UPDATE HOMEBREW FORMULA
+# STAGE 7: UPDATE HOMEBREW FORMULA
 # ============================================================================
 - stage: UpdateHomebrewFormula
-  displayName: 'Stage 8: Update Homebrew Formula'
+  displayName: 'Stage 7: Update Homebrew Formula'
   dependsOn:
   - PublishToGitHub
   - DownloadUnsignedTarball
@@ -1286,13 +1095,13 @@ stages:
     - checkout: none
     
     - download: current
-      artifact: signed-notarized-tarball
+      artifact: signed-tarball
     
     - bash: |
         set -e
         echo "=== Get Tarball Details ==="
         
-        TAR_FILE=$(find $(Pipeline.Workspace)/signed-notarized-tarball -name "*.tar.gz" -type f | head -1)
+        TAR_FILE=$(find $(Pipeline.Workspace)/signed-tarball -name "*.tar.gz" -type f | head -1)
         
         TAR_NAME=$(basename "$TAR_FILE")
         TAR_SHA256=$(cat "${TAR_FILE}.sha256" | awk '{print $1}')
@@ -1480,10 +1289,10 @@ stages:
       displayName: 'Update summary'
 
 # ============================================================================
-# STAGE 9: TEST HOMEBREW INSTALLATION
+# STAGE 8: TEST HOMEBREW INSTALLATION
 # ============================================================================
 - stage: TestInstallation
-  displayName: 'Stage 9: Test Homebrew Installation'
+  displayName: 'Stage 8: Test Homebrew Installation'
   dependsOn:
   - UpdateHomebrewFormula
   - DownloadUnsignedTarball
@@ -1727,15 +1536,14 @@ stages:
       displayName: 'Cleanup test installation'
 
 # ============================================================================
-# STAGE 10: RELEASE SUMMARY
+# STAGE 9: RELEASE SUMMARY
 # ============================================================================
 - stage: ReleaseSummary
-  displayName: 'Stage 10: Release Summary'
+  displayName: 'Stage 9: Release Summary'
   dependsOn:
   - DownloadUnsignedTarball
   - SignBinaries
   - CreateSignedTarball
-  - NotarizeTarball
   - PublishToGitHub
   - UpdateHomebrewFormula
   - TestInstallation
@@ -1768,9 +1576,9 @@ stages:
         echo ""
         echo "Security Features:"
         echo "  ✅ All binaries code-signed with Developer ID Application"
-        echo "  ✅ Notarized by Apple"
-        echo "  ✅ No Gatekeeper warnings"
-        echo "  ✅ Safe for browser downloads"
+        echo "  ⚠️  Not notarized (manual approval may be needed)"
+        echo "  ✅ Works seamlessly via Homebrew"
+        echo "  ✅ Safe for Homebrew distribution"
         echo ""
         echo "=============================================="
       displayName: 'Release summary'
