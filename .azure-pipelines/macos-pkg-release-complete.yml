@@ -16,7 +16,7 @@ parameters:
   - name: UnsignedBuildId
     displayName: 'Unsigned Build ID (from naga_macos_build)'
     type: string
-    default: '289589'
+    default: '291160'
   - name: BundleId
     displayName: 'Bundle ID for signing/notarization'
     type: string
