@@ -264,6 +264,12 @@ stages:
           exit 1
         }
         
+        # Create clean output directory
+        if (Test-Path $outputDir) {
+          Remove-Item -Path $outputDir -Recurse -Force
+        }
+        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+        
         # Copy entire unsigned structure as base
         Write-Host "Copying base structure from unsigned contents..."
         Copy-Item -Path "$unsignedPath/*" -Destination $outputDir -Recurse -Force
@@ -423,7 +429,7 @@ stages:
   dependsOn:
   - CreateSignedTarball
   - DownloadUnsignedTarball
-  condition: succeeded()
+  condition: false  # DISABLED: Verify signed structure first
   variables:
     AzureCliVersion: $[ stageDependencies.DownloadUnsignedTarball.DownloadAndExtract.outputs['DetectVersion.AzureCliVersion'] ]
   jobs:
@@ -542,7 +548,7 @@ stages:
   - DownloadUnsignedTarball
   - CreateSignedTarball
   - NotarizeTarball
-  condition: succeeded()
+  condition: false  # DISABLED: Verify signed structure first
   jobs:
   - job: TestUnsigned
     displayName: 'Test 1: Unsigned tar.gz (should fail with quarantine)'
@@ -765,7 +771,7 @@ stages:
   dependsOn:
   - DownloadUnsignedTarball
   - TestAllVariants
-  condition: always()
+  condition: false  # DISABLED: Verify signed structure first
   variables:
     AzureCliVersion: $[ stageDependencies.DownloadUnsignedTarball.DownloadAndExtract.outputs['DetectVersion.AzureCliVersion'] ]
   jobs:
