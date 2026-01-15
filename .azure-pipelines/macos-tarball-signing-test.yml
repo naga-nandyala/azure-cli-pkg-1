@@ -1144,8 +1144,15 @@ stages:
           sha256 "$(GetDetails.TAR_SHA256)"
           
           def install
-            # Install signed and notarized tarball
+            # Extract tarball structure:
+            #   bin/az (wrapper script)
+            #   libexec/ (Python runtime and libraries)
+            
+            # Install to prefix
             prefix.install Dir["*"]
+            
+            # Ensure az wrapper is executable
+            chmod 0755, bin/"az"
           end
           
           test do
