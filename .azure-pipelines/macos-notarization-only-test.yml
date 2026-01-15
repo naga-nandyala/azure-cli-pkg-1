@@ -9,10 +9,10 @@
 trigger: none
 
 parameters:
-  - name: SignedTarballUrl
-    displayName: 'URL to SIGNED tar.gz'
+  - name: BuildId
+    displayName: 'Build ID from signing pipeline'
     type: string
-    default: 'https://dev.azure.com/azclitools/release/_apis/build/builds/29361/artifacts?artifactName=signed-tarball&api-version=7.1&%24format=zip'
+    default: '29361'
   
   - name: BundleId
     displayName: 'Bundle ID for notarization'
@@ -72,31 +72,64 @@ stages:
     
     - bash: |
         set -e
-        echo "Downloading signed tar.gz from build 29361..."
+        echo "=== Downloading signed tar.gz from build ${{ parameters.BuildId }} ==="
+        echo ""
         
-        # Download the artifact ZIP
-        curl -L -o signed-tarball.zip "${{ parameters.SignedTarballUrl }}"
+        # Expected artifact name pattern
+        ARTIFACT_NAME="signed-tarball"
+        EXPECTED_FILENAME="azure-cli-${{ parameters.Version }}-macos-${{ parameters.Architecture }}-signed.tar.gz"
         
-        # Unzip to get the tar.gz
-        unzip signed-tarball.zip
+        echo "Build ID: ${{ parameters.BuildId }}"
+        echo "Artifact: $ARTIFACT_NAME"
+        echo "Expected file: $EXPECTED_FILENAME"
+        echo ""
+        
+        # Construct the download URL (same pattern as PKG pipeline)
+        # Note: This uses Azure DevOps REST API to download artifacts
+        BASE_URL="https://dev.azure.com/azclitools/release/_apis/build/builds/${{ parameters.BuildId }}/artifacts"
+        DOWNLOAD_URL="${BASE_URL}?artifactName=${ARTIFACT_NAME}&api-version=7.1&\$format=zip"
+        
+        echo "Downloading from: $DOWNLOAD_URL"
+        echo ""
+        
+        # Download artifact ZIP
+        curl -L -o signed-tarball.zip "$DOWNLOAD_URL"
+        
+        if [ ! -f signed-tarball.zip ]; then
+          echo "❌ Failed to download artifact"
+          exit 1
+        fi
+        
+        echo "Downloaded artifact ZIP:"
+        ls -lh signed-tarball.zip
+        echo ""
+        
+        # Extract the ZIP
+        echo "Extracting artifact..."
+        unzip -q signed-tarball.zip
         
         # Find the tar.gz file
-        TARBALL=$(find . -name "*.tar.gz" | head -1)
+        TARBALL=$(find . -name "*-signed.tar.gz" -type f | head -1)
         
         if [ -z "$TARBALL" ]; then
-          echo "❌ No tar.gz found in downloaded artifact"
+          echo "❌ No signed tar.gz found in artifact"
+          echo "Contents:"
+          find . -type f
           exit 1
         fi
         
         echo "Found signed tar.gz: $TARBALL"
         ls -lh "$TARBALL"
+        echo ""
         
-        # Move to staging
+        # Move to staging with expected name
         mkdir -p $(Build.ArtifactStagingDirectory)/signed-tarball
-        cp "$TARBALL" $(Build.ArtifactStagingDirectory)/signed-tarball/
+        cp "$TARBALL" "$(Build.ArtifactStagingDirectory)/signed-tarball/$EXPECTED_FILENAME"
         
         echo "✅ Signed tar.gz ready for notarization"
-      displayName: 'Download signed tar.gz artifact'
+        ls -lh "$(Build.ArtifactStagingDirectory)/signed-tarball/"
+        
+      displayName: 'Download signed tar.gz from build ${{ parameters.BuildId }}'
     
     - bash: |
         set -e
