@@ -40,7 +40,7 @@ parameters:
   - name: HomebrewTapRepo
     displayName: 'Homebrew Tap Repository (owner/homebrew-tap)'
     type: string
-    default: 'naga-nandyala/homebrew-test-tap'
+    default: 'naga-nandyala/homebrew-mycli-app'
   
   - name: FormulaName
     displayName: 'Homebrew Formula Name'
@@ -56,13 +56,18 @@ parameters:
     displayName: 'Mark as pre-release'
     type: boolean
     default: false
+  
+  - name: SkipHomebrew
+    displayName: 'Skip Homebrew formula update and testing'
+    type: boolean
+    default: false
 
 resources:
   repositories:
   - repository: homebrewtap
     type: github
     endpoint: 'github.com_naga-nandyala'
-    name: naga-nandyala/homebrew-test-tap
+    name: naga-nandyala/homebrew-mycli-app
     ref: main
 
 variables:
@@ -1267,7 +1272,7 @@ stages:
   dependsOn:
   - PublishToGitHub
   - DownloadUnsignedTarball
-  condition: succeeded()
+  condition: and(succeeded(), eq(${{ parameters.SkipHomebrew }}, false))
   variables:
     AzureCliVersion: $[ stageDependencies.DownloadUnsignedTarball.DownloadAndExtract.outputs['DetectVersion.AzureCliVersion'] ]
     ReleaseTag: $[ stageDependencies.PublishToGitHub.CreateRelease.outputs['PrepareRelease.ReleaseTag'] ]
@@ -1482,7 +1487,7 @@ stages:
   dependsOn:
   - UpdateHomebrewFormula
   - DownloadUnsignedTarball
-  condition: succeeded()
+  condition: and(succeeded(), eq(${{ parameters.SkipHomebrew }}, false))
   variables:
     AzureCliVersion: $[ stageDependencies.DownloadUnsignedTarball.DownloadAndExtract.outputs['DetectVersion.AzureCliVersion'] ]
   jobs:
