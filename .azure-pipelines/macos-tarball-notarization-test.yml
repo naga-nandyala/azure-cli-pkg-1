@@ -220,7 +220,7 @@ stages:
     - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
       displayName: 'ESRP - Notarize tar.gz with Apple'
       inputs:
-        ConnectedServiceName: 'ESRP Code Signing Connection - Azure CLI'
+        ConnectedServiceName: 'ame_esrp_connection'
         AppRegistrationClientId: $(ESRPClientId)
         AppRegistrationTenantId: $(ESRPTenantId)
         AuthAKVName: $(ESRPKeyVault)
