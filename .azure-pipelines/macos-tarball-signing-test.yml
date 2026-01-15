@@ -113,6 +113,51 @@ stages:
       displayName: 'Download and extract unsigned tar.gz'
       name: DetectVersion
     
+    - bash: |
+        set -e
+        
+        echo "=== Identifying Mach-O binaries for signing ==="
+        echo "NOTE: Only actual binaries (not Python scripts) should be signed"
+        echo ""
+        
+        PAYLOAD_DIR="$(Build.ArtifactStagingDirectory)/unsigned-contents"
+        FILES_TO_SIGN="$(Build.ArtifactStagingDirectory)/files-to-sign.txt"
+        
+        cd "$PAYLOAD_DIR"
+        
+        # Find all binaries that need signing using 'file' command
+        # Only include Mach-O binaries (excludes text-based Python scripts)
+        
+        echo "Scanning for Mach-O binaries..."
+        
+        find . -type f | while read filepath; do
+          filetype=$(file -b "$filepath")
+          
+          # Only include if it's a Mach-O binary
+          if echo "$filetype" | grep -q -i "Mach-O"; then
+            echo "$filepath"
+          fi
+        done | sort -u > "$FILES_TO_SIGN"
+        
+        echo ""
+        echo "=== Files identified for signing ==="
+        echo "Total Mach-O binaries: $(wc -l < $FILES_TO_SIGN)"
+        echo ""
+        echo "All files to be signed:"
+        cat "$FILES_TO_SIGN"
+        
+        # Show file type breakdown
+        echo ""
+        echo "=== File type breakdown ==="
+        echo "Python binaries:"
+        grep 'bin/python' "$FILES_TO_SIGN" || echo "  (none)"
+        echo ".dylib files:"
+        grep '\.dylib$' "$FILES_TO_SIGN" || echo "  (none)"
+        echo ".so files:"
+        grep '\.so$' "$FILES_TO_SIGN" || echo "  (none)"
+        
+      displayName: 'Identify Mach-O binaries for signing'
+    
     - publish: $(Build.ArtifactStagingDirectory)/unsigned-tarball
       artifact: unsigned-tarball
       displayName: 'Publish unsigned tar.gz artifact'
@@ -120,6 +165,10 @@ stages:
     - publish: $(Build.ArtifactStagingDirectory)/unsigned-contents
       artifact: unsigned-contents
       displayName: 'Publish unsigned contents for signing'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/files-to-sign.txt
+      artifact: files-to-sign-list
+      displayName: 'Publish file list for signing'
 
 # ============================================================================
 # STAGE 2: SIGN ALL BINARIES WITH ESRP
@@ -141,6 +190,10 @@ stages:
       artifact: unsigned-contents
       displayName: 'Download unsigned contents'
     
+    - download: current
+      artifact: files-to-sign-list
+      displayName: 'Download file list'
+    
     - pwsh: |
         Write-Host "=== Preparing binaries for ESRP signing ==="
         Write-Host "NOTE: ESRP MacAppDeveloperSign requires ZIP archives, not individual files"
@@ -148,6 +201,7 @@ stages:
         Write-Host ""
         
         $extractedPath = "$(Pipeline.Workspace)/unsigned-contents"
+        $fileListPath = "$(Pipeline.Workspace)/files-to-sign-list/files-to-sign.txt"
         $toBeSignedDir = "$(Pipeline.Workspace)/toBeSigned"
         
         # Create directory for ZIP files
@@ -156,39 +210,31 @@ stages:
         }
         New-Item -ItemType Directory -Path $toBeSignedDir -Force | Out-Null
         
-        Write-Host "Finding binaries to sign..."
+        Write-Host "Reading file list..."
         
-        # Find all executables (binaries without extension)
-        $executables = Get-ChildItem -Path $extractedPath -Recurse -File | Where-Object {
-            ($_.Extension -eq '') -and 
-            ($_.Name -match '^(python|az|pip|chardetect|fab|humanfriendly|inv|invoke|jdiff|jp\.py|normalizer|pkginfo|pygmentize|pygrun|pysemver)') -and
-            ($_.Directory.Name -eq 'bin')
+        if (-not (Test-Path $fileListPath)) {
+          Write-Error "File list not found: $fileListPath"
+          exit 1
         }
         
-        # Find all .dylib files
-        $dylibs = Get-ChildItem -Path $extractedPath -Recurse -Filter "*.dylib"
-        
-        # Find all .so files
-        $soFiles = Get-ChildItem -Path $extractedPath -Recurse -Filter "*.so"
-        
-        $allFiles = @()
-        $allFiles += $executables
-        $allFiles += $dylibs
-        $allFiles += $soFiles
-        
-        Write-Host "Found $($allFiles.Count) files to sign:"
-        Write-Host "  Executables: $($executables.Count)"
-        Write-Host "  Dylibs: $($dylibs.Count)"
-        Write-Host "  SO files: $($soFiles.Count)"
+        $filesToSign = Get-Content $fileListPath
+        Write-Host "Files to sign: $($filesToSign.Count)"
         Write-Host ""
         
-        Write-Host "Creating individual ZIP files for each binary..."
+        Write-Host "Creating individual ZIP files for each Mach-O binary..."
         
         $zippedCount = 0
         $fileMapping = @{}
         
-        foreach ($file in $allFiles) {
-            $relativePath = $file.FullName.Substring($extractedPath.Length + 1)
+        foreach ($filePathFromList in $filesToSign) {
+            # Remove leading './' from file path
+            $relativePath = $filePathFromList -replace '^\.\/', ''
+            $fullPath = Join-Path $extractedPath $relativePath
+            
+            if (-not (Test-Path $fullPath)) {
+              Write-Warning "File not found: $fullPath"
+              continue
+            }
             
             # Create unique flat filename (replace / with __)
             $flatName = $relativePath -replace '[/\\]', '__'
@@ -196,18 +242,21 @@ stages:
             $zipPath = Join-Path $toBeSignedDir $zipName
             
             # Compress individual file to ZIP
-            Compress-Archive -Path $file.FullName -DestinationPath $zipPath -Force
+            Compress-Archive -Path $fullPath -DestinationPath $zipPath -Force
             
             # Store mapping for later reconstruction
             $fileMapping[$zipName] = @{
               "OriginalPath" = $relativePath
-              "FileName" = $file.Name
+              "FileName" = (Split-Path $relativePath -Leaf)
             }
             
             $zippedCount++
             
             if ($zippedCount -le 10) {
               $zipSize = [math]::Round((Get-Item $zipPath).Length / 1KB, 1)
+              Write-Host "  ✓ $relativePath -> $zipName ($zipSize KB)"
+            }
+        }
               Write-Host "  ✓ $relativePath -> $zipName ($zipSize KB)"
             }
         }
@@ -253,10 +302,11 @@ stages:
     
     - pwsh: |
         Write-Host "=== Extracting signed binaries from ZIP files ==="
+        Write-Host "NOTE: Only extracting binaries, NOT copying unsigned structure yet"
+        Write-Host "Symlink preservation will be done on macOS in Stage 3"
         
         $signedZipsDir = "$(Pipeline.Workspace)/toBeSigned"
-        $outputDir = "$(Build.ArtifactStagingDirectory)/signed-contents"
-        $unsignedPath = "$(Pipeline.Workspace)/unsigned-contents"
+        $outputDir = "$(Build.ArtifactStagingDirectory)/signed-binaries"
         $mappingPath = "$(Pipeline.Workspace)/file-mapping.json"
         
         if (-not (Test-Path $mappingPath)) {
@@ -269,10 +319,6 @@ stages:
           Remove-Item -Path $outputDir -Recurse -Force
         }
         New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
-        
-        # Copy entire unsigned structure as base
-        Write-Host "Copying base structure from unsigned contents..."
-        Copy-Item -Path "$unsignedPath/*" -Destination $outputDir -Recurse -Force
         
         # Load mapping
         $fileMapping = Get-Content $mappingPath | ConvertFrom-Json
@@ -314,19 +360,19 @@ stages:
         
         Write-Host ""
         Write-Host "✅ Extracted $extractedCount signed binaries"
-        Write-Host "Signed contents ready for packaging"
+        Write-Host "Signed binaries published as flat structure for macOS merging"
         
       displayName: 'Extract signed binaries from ZIPs'
     
-    - publish: $(Build.ArtifactStagingDirectory)/signed-contents
-      artifact: signed-contents
-      displayName: 'Publish signed contents'
+    - publish: $(Build.ArtifactStagingDirectory)/signed-binaries
+      artifact: signed-binaries
+      displayName: 'Publish signed binaries (flat structure)'
 
 # ============================================================================
-# STAGE 3: CREATE SIGNED-ONLY TAR.GZ
+# STAGE 3: MERGE SIGNED BINARIES AND CREATE TAR.GZ
 # ============================================================================
 - stage: CreateSignedTarball
-  displayName: 'Stage 3: Create Signed-Only Tar.gz'
+  displayName: 'Stage 3: Merge Signed Binaries and Create Tar.gz'
   dependsOn:
   - SignBinaries
   - DownloadUnsignedTarball
@@ -334,8 +380,8 @@ stages:
   variables:
     AzureCliVersion: $[ stageDependencies.DownloadUnsignedTarball.DownloadAndExtract.outputs['DetectVersion.AzureCliVersion'] ]
   jobs:
-  - job: CreateSignedTarball
-    displayName: 'Create signed tar.gz (macOS)'
+  - job: MergeAndPackage
+    displayName: 'Merge signed binaries with unsigned structure (macOS)'
     pool:
       vmImage: 'macOS-14'
     
@@ -343,13 +389,62 @@ stages:
     - checkout: none
     
     - download: current
-      artifact: signed-contents
-      displayName: 'Download signed contents'
+      artifact: unsigned-contents
+      displayName: 'Download unsigned contents'
+    
+    - download: current
+      artifact: signed-binaries
+      displayName: 'Download signed binaries'
     
     - bash: |
         set -e
         
-        SIGNED_DIR="$(Pipeline.Workspace)/signed-contents"
+        echo "=== Merging signed binaries back into payload ==="
+        echo "NOTE: Using cp -R on macOS to preserve symlinks"
+        
+        ORIGINAL_PAYLOAD="$(Pipeline.Workspace)/unsigned-contents"
+        SIGNED_BINARIES="$(Pipeline.Workspace)/signed-binaries"
+        MERGED_PAYLOAD="$(Build.ArtifactStagingDirectory)/signed-contents"
+        OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/signed-tarball"
+        
+        # Copy original payload (preserves symlinks)
+        echo "Copying original payload structure (with symlinks)..."
+        mkdir -p "$MERGED_PAYLOAD"
+        cp -R "$ORIGINAL_PAYLOAD"/* "$MERGED_PAYLOAD"/
+        
+        # Verify symlinks preserved
+        echo ""
+        echo "Verifying symlinks preserved:"
+        if [ -L "$MERGED_PAYLOAD/bin/az" ]; then
+          echo "✅ bin/az is still a symlink: $(readlink $MERGED_PAYLOAD/bin/az)"
+        else
+          echo "❌ WARNING: bin/az is not a symlink!"
+        fi
+        
+        # Replace unsigned binaries with signed ones
+        echo ""
+        echo "Replacing unsigned binaries with signed versions..."
+        
+        cd "$SIGNED_BINARIES"
+        find . -type f | while read signed_file; do
+          target_file="$MERGED_PAYLOAD/$signed_file"
+          
+          if [ -f "$target_file" ]; then
+            cp "$signed_file" "$target_file"
+            echo "  Replaced: $signed_file"
+          fi
+        done
+        
+        echo ""
+        echo "✅ Merged payload ready"
+        echo "Size: $(du -sh $MERGED_PAYLOAD | cut -f1)"
+        
+      displayName: 'Merge signed binaries (preserves symlinks)'
+    
+    - bash: |
+        set -e
+        
+        SIGNED_DIR="$(Build.ArtifactStagingDirectory)/signed-contents"
         OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/signed-tarball"
         VERSION="$(AzureCliVersion)"
         ARCH="${{ parameters.Architecture }}"
@@ -359,6 +454,15 @@ stages:
         echo "Creating signed-only tar.gz..."
         echo "Version: $VERSION"
         echo "Architecture: $ARCH"
+        
+        # Verify symlinks preserved
+        echo ""
+        echo "=== Verifying Symlinks Preserved ==="
+        if [ -L "$SIGNED_DIR/bin/az" ]; then
+          echo "✅ bin/az is a symlink: $(readlink $SIGNED_DIR/bin/az)"
+        else
+          echo "❌ ERROR: bin/az is not a symlink!"
+        fi
         
         # Verify signatures on signed binaries
         echo ""
