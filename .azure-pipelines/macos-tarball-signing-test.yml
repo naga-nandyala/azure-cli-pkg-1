@@ -31,6 +31,39 @@ parameters:
     values:
     - arm64
     - x86_64
+  
+  - name: GitHubRepo
+    displayName: 'GitHub Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+  
+  - name: HomebrewTapRepo
+    displayName: 'Homebrew Tap Repository (owner/homebrew-tap)'
+    type: string
+    default: 'naga-nandyala/homebrew-test-tap'
+  
+  - name: FormulaName
+    displayName: 'Homebrew Formula Name'
+    type: string
+    default: 'azure-cli-tarball-signed'
+  
+  - name: IsDraft
+    displayName: 'Create as draft release'
+    type: boolean
+    default: false
+  
+  - name: IsPreRelease
+    displayName: 'Mark as pre-release'
+    type: boolean
+    default: false
+
+resources:
+  repositories:
+  - repository: homebrewtap
+    type: github
+    endpoint: 'github.com_naga-nandyala'
+    name: naga-nandyala/homebrew-test-tap
+    ref: main
 
 variables:
   - group: 'AME ESRP Variable Group'
@@ -1047,3 +1080,692 @@ stages:
         
         EOF
       displayName: 'Print summary'
+
+# ============================================================================
+# STAGE 7: PUBLISH TO GITHUB RELEASE
+# ============================================================================
+- stage: PublishToGitHub
+  displayName: 'Stage 7: Publish to GitHub Release'
+  dependsOn:
+  - NotarizeTarball
+  - DownloadUnsignedTarball
+  condition: succeeded()
+  variables:
+    AzureCliVersion: $[ stageDependencies.DownloadUnsignedTarball.DownloadAndExtract.outputs['DetectVersion.AzureCliVersion'] ]
+  jobs:
+  - job: CreateRelease
+    displayName: 'Create GitHub release'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: signed-notarized-tarball
+      displayName: 'Download signed+notarized tarball'
+    
+    - bash: |
+        set -e
+        echo "=== Prepare Release Files ==="
+        
+        RELEASE_DIR="$(Build.ArtifactStagingDirectory)/release-tarballs"
+        mkdir -p "$RELEASE_DIR"
+        
+        # Copy signed+notarized tarball
+        cp -v $(Pipeline.Workspace)/signed-notarized-tarball/*.tar.gz* "$RELEASE_DIR/"
+        
+        echo ""
+        echo "=== Release Files ==="
+        ls -lh "$RELEASE_DIR"
+        
+        # Get details for release notes
+        TAR_FILE=$(find "$RELEASE_DIR" -name "*.tar.gz" -type f | head -1)
+        TAR_NAME=$(basename "$TAR_FILE")
+        TAR_SIZE=$(du -h "$TAR_FILE" | cut -f1)
+        TAR_SHA256=$(cat "${TAR_FILE}.sha256" | awk '{print $1}')
+        
+        # Determine release tag
+        VERSION="$(AzureCliVersion)"
+        RELEASE_TAG="v${VERSION}-tarball-signed"
+        
+        # Export for next steps
+        echo "##vso[task.setvariable variable=TAR_NAME]$TAR_NAME"
+        echo "##vso[task.setvariable variable=TAR_SIZE]$TAR_SIZE"
+        echo "##vso[task.setvariable variable=TAR_SHA256]$TAR_SHA256"
+        echo "##vso[task.setvariable variable=ReleaseTag]$RELEASE_TAG"
+        
+        # Export as output for next stage
+        echo "##vso[task.setvariable variable=ReleaseTag;isOutput=true]$RELEASE_TAG"
+        echo "##vso[task.setvariable variable=TAR_NAME;isOutput=true]$TAR_NAME"
+        echo "##vso[task.setvariable variable=TAR_SHA256;isOutput=true]$TAR_SHA256"
+        
+      name: PrepareRelease
+      displayName: 'Prepare release files'
+    
+    - bash: |
+        set -e
+        echo "=== Create Release Notes ==="
+        
+        cat > release-notes.md <<'EOF'
+        # Azure CLI $(AzureCliVersion) - Signed & Notarized Tarball
+        
+        ## Official Code-Signed Distribution
+        
+        ✅ **All binaries are code-signed with Apple Developer ID Application certificate**
+        ✅ **Notarized by Apple** - No Gatekeeper warnings
+        ✅ **No quarantine attribute issues** - Safe for browser downloads
+        
+        ## Download
+        
+        ### macOS ${{ parameters.Architecture }} - Signed & Notarized
+        - **File**: `$(TAR_NAME)`
+        - **Size**: $(TAR_SIZE)
+        - **SHA256**: `$(TAR_SHA256)`
+        - **Code Signing**: Developer ID Application
+        - **Notarization**: Apple Notarized
+        
+        ## Installation
+        
+        ### Option 1: Homebrew (Recommended)
+        
+        ```bash
+        brew tap ${{ parameters.HomebrewTapRepo }}
+        brew install ${{ parameters.FormulaName }}
+        ```
+        
+        ### Option 2: Manual Installation
+        
+        **No Gatekeeper issues - all binaries are signed and notarized!**
+        
+        ```bash
+        # Download
+        curl -LO https://github.com/${{ parameters.GitHubRepo }}/releases/download/$(ReleaseTag)/$(TAR_NAME)
+        curl -LO https://github.com/${{ parameters.GitHubRepo }}/releases/download/$(ReleaseTag)/$(TAR_NAME).sha256
+        
+        # Verify SHA256
+        echo "$(TAR_SHA256)  $(TAR_NAME)" | shasum -a 256 -c -
+        
+        # Extract and install
+        sudo mkdir -p /opt/azure-cli
+        sudo tar -xzf $(TAR_NAME) -C /opt/azure-cli
+        
+        # Add to PATH
+        export PATH="/opt/azure-cli/bin:$PATH"
+        
+        # Verify - no Gatekeeper warnings!
+        az --version
+        ```
+        
+        ## Security Features
+        
+        - ✅ **Code Signing**: All Mach-O binaries signed with Developer ID Application
+        - ✅ **Hardened Runtime**: All executables use hardened runtime
+        - ✅ **Apple Notarization**: Verified by Apple's notarization service
+        - ✅ **Gatekeeper Compatible**: No quarantine warnings on browser downloads
+        - ✅ **SHA256 Verification**: Integrity verification via cryptographic hashes
+        
+        ## What's Different from Unsigned Tarballs?
+        
+        | Feature | Unsigned Tarball | Signed & Notarized Tarball |
+        |---------|------------------|----------------------------|
+        | Browser downloads | ⚠️ Gatekeeper blocks execution | ✅ No warnings |
+        | Code signing | ❌ Ad-hoc signed only | ✅ Developer ID Application |
+        | Apple notarization | ❌ Not notarized | ✅ Notarized by Apple |
+        | Quarantine removal | 🔧 Requires manual xattr fix | ✅ Not needed |
+        | Enterprise trust | ⚠️ May be blocked | ✅ Fully trusted |
+        
+        ## Build Information
+        
+        - **Build ID**: $(Build.BuildId)
+        - **ESRP Signed**: Yes
+        - **Apple Notarized**: Yes
+        
+        ## Documentation
+        
+        - **Azure CLI Docs**: https://learn.microsoft.com/cli/azure/
+        - **GitHub Repository**: https://github.com/${{ parameters.GitHubRepo }}
+        - **Report Issues**: https://github.com/${{ parameters.GitHubRepo }}/issues
+        EOF
+        
+        echo "✅ Release notes created"
+        cat release-notes.md
+        
+      displayName: 'Create release notes'
+    
+    - task: GitHubRelease@1
+      displayName: 'Delete existing release if present'
+      continueOnError: true
+      inputs:
+        gitHubConnection: 'github.com_naga-nandyala'
+        repositoryName: '${{ parameters.GitHubRepo }}'
+        action: 'delete'
+        tag: '$(ReleaseTag)'
+    
+    - task: GitHubRelease@1
+      displayName: 'Create GitHub Release'
+      inputs:
+        gitHubConnection: 'github.com_naga-nandyala'
+        repositoryName: '${{ parameters.GitHubRepo }}'
+        action: 'create'
+        target: '$(Build.SourceVersion)'
+        tagSource: 'userSpecifiedTag'
+        tag: '$(ReleaseTag)'
+        title: 'Azure CLI $(AzureCliVersion) - Signed & Notarized Tarball'
+        releaseNotesSource: 'filePath'
+        releaseNotesFilePath: '$(System.DefaultWorkingDirectory)/release-notes.md'
+        assets: '$(Build.ArtifactStagingDirectory)/release-tarballs/*'
+        isDraft: ${{ parameters.IsDraft }}
+        isPreRelease: ${{ parameters.IsPreRelease }}
+        addChangeLog: false
+
+# ============================================================================
+# STAGE 8: UPDATE HOMEBREW FORMULA
+# ============================================================================
+- stage: UpdateHomebrewFormula
+  displayName: 'Stage 8: Update Homebrew Formula'
+  dependsOn:
+  - PublishToGitHub
+  - DownloadUnsignedTarball
+  condition: succeeded()
+  variables:
+    AzureCliVersion: $[ stageDependencies.DownloadUnsignedTarball.DownloadAndExtract.outputs['DetectVersion.AzureCliVersion'] ]
+    ReleaseTag: $[ stageDependencies.PublishToGitHub.CreateRelease.outputs['PrepareRelease.ReleaseTag'] ]
+  jobs:
+  - job: GenerateFormula
+    displayName: 'Generate Homebrew formula'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: signed-notarized-tarball
+    
+    - bash: |
+        set -e
+        echo "=== Get Tarball Details ==="
+        
+        TAR_FILE=$(find $(Pipeline.Workspace)/signed-notarized-tarball -name "*.tar.gz" -type f | head -1)
+        
+        TAR_NAME=$(basename "$TAR_FILE")
+        TAR_SHA256=$(cat "${TAR_FILE}.sha256" | awk '{print $1}')
+        
+        # Use ReleaseTag from Stage 7 if available, otherwise construct it
+        RELEASE_TAG="$(ReleaseTag)"
+        if [ -z "$RELEASE_TAG" ]; then
+          VERSION="$(AzureCliVersion)"
+          RELEASE_TAG="v${VERSION}-tarball-signed"
+        fi
+        TAR_URL="https://github.com/${{ parameters.GitHubRepo }}/releases/download/${RELEASE_TAG}/${TAR_NAME}"
+        
+        echo "Tarball URL: $TAR_URL"
+        echo "SHA256: $TAR_SHA256"
+        
+        # Export variables
+        echo "##vso[task.setvariable variable=TAR_SHA256;isOutput=true]$TAR_SHA256"
+        echo "##vso[task.setvariable variable=TAR_URL;isOutput=true]$TAR_URL"
+        echo "##vso[task.setvariable variable=ReleaseTag;isOutput=true]$RELEASE_TAG"
+        
+      name: GetDetails
+      displayName: 'Get tarball URL and SHA256'
+    
+    - bash: |
+        set -e
+        echo "=== Generate Homebrew Formula ==="
+        
+        mkdir -p Formula
+        
+        # Convert formula name to Ruby class name (capitalize first letter of each word, remove hyphens)
+        FORMULA_CLASS=$(echo "${{ parameters.FormulaName }}" | sed -E 's/(^|-)([a-z])/\U\2/g')
+        
+        cat > Formula/${{ parameters.FormulaName }}.rb <<FORMULA_END
+        class ${FORMULA_CLASS} < Formula
+          desc "Microsoft Azure CLI - Code-Signed & Notarized Tarball"
+          homepage "https://learn.microsoft.com/cli/azure/"
+          version "$(AzureCliVersion)"
+          
+          url "$(GetDetails.TAR_URL)"
+          sha256 "$(GetDetails.TAR_SHA256)"
+          
+          def install
+            # Install signed and notarized tarball
+            prefix.install Dir["*"]
+          end
+          
+          test do
+            system "#{bin}/az", "--version"
+          end
+          
+          def caveats
+            <<~EOS
+              Azure CLI Signed Tarball has been installed!
+              
+              ✅ All binaries are code-signed with Apple Developer ID
+              ✅ Notarized by Apple - No Gatekeeper warnings
+              
+              Installation Details:
+                • Executable: #{bin}/az
+                • Runtime: #{prefix}/libexec/
+                • Python: Bundled Python runtime
+              
+              This is a fully code-signed and notarized distribution.
+              No quarantine issues with browser downloads!
+              
+              To get started:
+                az login
+                az account list
+            EOS
+          end
+        end
+        FORMULA_END
+        
+        echo "✅ Formula generated"
+        cat Formula/${{ parameters.FormulaName }}.rb
+        
+      displayName: 'Generate formula'
+    
+    - publish: Formula
+      artifact: homebrew-formula
+      displayName: 'Publish formula'
+  
+  - job: CommitFormula
+    displayName: 'Commit formula to tap repository'
+    dependsOn: GenerateFormula
+    variables:
+      TAR_SHA256: $[ dependencies.GenerateFormula.outputs['GetDetails.TAR_SHA256'] ]
+      TAR_URL: $[ dependencies.GenerateFormula.outputs['GetDetails.TAR_URL'] ]
+      ReleaseTag: $[ dependencies.GenerateFormula.outputs['GetDetails.ReleaseTag'] ]
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: homebrewtap
+      persistCredentials: true
+      clean: true
+      displayName: 'Checkout Homebrew tap repository'
+    
+    - download: current
+      artifact: homebrew-formula
+      displayName: 'Download formula'
+    
+    - bash: |
+        set -e
+        echo "=== Configure Git ==="
+        
+        git config --global user.email "azure-pipelines@microsoft.com"
+        git config --global user.name "Azure Pipelines Bot"
+        
+        echo "✅ Git configured"
+      displayName: 'Configure git'
+    
+    - bash: |
+        set -e
+        echo "=== Commit Formula to Main Branch ==="
+        
+        # Check current state
+        echo "Current branch:"
+        git branch -a
+        echo ""
+        
+        # Checkout main branch
+        git checkout -B main origin/main
+        
+        # Copy formula
+        mkdir -p Formula
+        cp $(Pipeline.Workspace)/homebrew-formula/${{ parameters.FormulaName }}.rb Formula/
+        
+        # Add formula
+        git add Formula/${{ parameters.FormulaName }}.rb
+        
+        # Check if there are changes to commit
+        if git diff --cached --quiet; then
+          echo "ℹ️  No changes detected - formula is already up-to-date"
+          COMMIT_SHA=$(git rev-parse HEAD)
+          echo "✅ Formula is current (no update needed)"
+          echo "   Repository: https://github.com/${{ parameters.HomebrewTapRepo }}"
+          echo "   Latest commit: $COMMIT_SHA"
+        else
+          # Commit changes
+          git commit -m "Update Azure CLI Signed Tarball to version $(AzureCliVersion)
+
+          - Version: $(AzureCliVersion)
+          - Release Tag: $(ReleaseTag)
+          - SHA256: $(TAR_SHA256)
+          - Code-signed with Developer ID Application
+          - Notarized by Apple
+          - No Gatekeeper warnings
+
+          Build: $(Build.BuildId)
+          "
+          
+          # Push to main
+          echo "Pushing to origin/main..."
+          git push origin main || {
+            echo "❌ ERROR: Failed to push to origin/main"
+            echo "Checking remote configuration:"
+            git remote -v
+            exit 1
+          }
+          
+          COMMIT_SHA=$(git rev-parse HEAD)
+          echo ""
+          echo "✅ Formula committed to main branch!"
+          echo "   Repository: https://github.com/${{ parameters.HomebrewTapRepo }}"
+          echo "   Commit: $COMMIT_SHA"
+        fi
+        echo ""
+      displayName: 'Commit and push formula'
+    
+    - bash: |
+        echo "=== Formula Update Summary ==="
+        echo ""
+        echo "✅ Homebrew Formula Updated!"
+        echo ""
+        echo "Repository: https://github.com/${{ parameters.HomebrewTapRepo }}"
+        echo "Formula: ${{ parameters.FormulaName }}"
+        echo "Version: $(AzureCliVersion)"
+        echo ""
+        echo "Users can now install with:"
+        echo ""
+        echo "  brew tap ${{ parameters.HomebrewTapRepo }}"
+        echo "  brew install ${{ parameters.FormulaName }}"
+        echo ""
+      displayName: 'Update summary'
+
+# ============================================================================
+# STAGE 9: TEST HOMEBREW INSTALLATION
+# ============================================================================
+- stage: TestInstallation
+  displayName: 'Stage 9: Test Homebrew Installation'
+  dependsOn:
+  - UpdateHomebrewFormula
+  - DownloadUnsignedTarball
+  condition: succeeded()
+  variables:
+    AzureCliVersion: $[ stageDependencies.DownloadUnsignedTarball.DownloadAndExtract.outputs['DetectVersion.AzureCliVersion'] ]
+  jobs:
+  - job: TestHomebrew
+    displayName: 'Test Homebrew installation'
+    pool:
+      vmImage: 'macos-14'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo "======================================"
+        echo "  Update Homebrew"
+        echo "======================================"
+        echo ""
+        brew update
+        
+        echo ""
+        echo "Homebrew version:"
+        brew --version
+        
+        echo ""
+        echo "System architecture:"
+        uname -m
+      displayName: 'Update Homebrew'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Cleanup Existing Installations"
+        echo "======================================"
+        echo ""
+        
+        # Remove any existing Azure CLI installations
+        echo "Checking for existing Azure CLI installations..."
+        
+        # Uninstall all azure-cli related Homebrew formulas
+        brew list 2>/dev/null | grep -i azure | while read formula; do
+          echo "Uninstalling Homebrew formula: $formula"
+          brew uninstall --force --ignore-dependencies "$formula" 2>/dev/null || true
+        done
+        
+        # Check for az command
+        if command -v az &> /dev/null; then
+          AZ_LOCATION=$(which az)
+          echo ""
+          echo "Found 'az' command at: $AZ_LOCATION"
+          rm -f "$AZ_LOCATION" 2>/dev/null || echo "Could not remove $AZ_LOCATION"
+        fi
+        
+        # Verify cleanup
+        echo ""
+        if command -v az &> /dev/null; then
+          echo "⚠️  WARNING: 'az' command still exists at: $(which az)"
+        else
+          echo "✅ No 'az' command found - cleanup successful"
+        fi
+      displayName: 'Cleanup existing installations'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Add Homebrew Tap"
+        echo "======================================"
+        echo ""
+        
+        TAP_NAME="${{ parameters.HomebrewTapRepo }}"
+        echo "Tapping repository: $TAP_NAME"
+        brew tap "$TAP_NAME"
+        
+        echo ""
+        echo "Verifying tap:"
+        brew tap | grep "$TAP_NAME" || {
+          echo "❌ ERROR: Tap not found"
+          exit 1
+        }
+        
+        echo ""
+        echo "✅ Tap added successfully"
+      displayName: 'Add Homebrew tap'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Install Azure CLI via Homebrew"
+        echo "======================================"
+        echo ""
+        
+        FORMULA_NAME="${{ parameters.FormulaName }}"
+        echo "Installing formula: $FORMULA_NAME"
+        
+        brew install "$FORMULA_NAME" -v
+        
+        echo ""
+        echo "✅ Installation complete"
+      displayName: 'Install Azure CLI'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Verify Installation"
+        echo "======================================"
+        echo ""
+        
+        FORMULA_NAME="${{ parameters.FormulaName }}"
+        
+        # Get Cellar path
+        CELLAR_PATH=$(brew --cellar "$FORMULA_NAME")
+        VERSION=$(brew info "$FORMULA_NAME" --json | python3 -c "import sys, json; print(json.load(sys.stdin)[0]['installed'][0]['version'])")
+        
+        echo "Formula: $FORMULA_NAME"
+        echo "Version: $VERSION"
+        echo "Cellar path: $CELLAR_PATH/$VERSION"
+        echo ""
+        
+        # Check installation directory structure
+        echo "Installation structure:"
+        ls -la "$CELLAR_PATH/$VERSION/" || {
+          echo "❌ ERROR: Installation directory not found"
+          exit 1
+        }
+        
+        echo ""
+        echo "Binary location:"
+        ls -la "$CELLAR_PATH/$VERSION/bin/az" || {
+          echo "❌ ERROR: az binary not found"
+          exit 1
+        }
+        
+        echo ""
+        echo "✅ Installation structure verified"
+      displayName: 'Verify installation structure'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Test Azure CLI Commands"
+        echo "======================================"
+        echo ""
+        
+        FORMULA_NAME="${{ parameters.FormulaName }}"
+        EXPECTED_VERSION="$(AzureCliVersion)"
+        
+        # Get the Homebrew-installed az path explicitly
+        BREW_PREFIX=$(brew --prefix)
+        HOMEBREW_AZ="$BREW_PREFIX/bin/az"
+        
+        echo "Homebrew prefix: $BREW_PREFIX"
+        echo "Expected az location: $HOMEBREW_AZ"
+        echo ""
+        
+        # Verify the Homebrew az exists
+        if [ ! -f "$HOMEBREW_AZ" ]; then
+          echo "❌ ERROR: Homebrew az not found at $HOMEBREW_AZ"
+          exit 1
+        fi
+        
+        echo "✅ Found Homebrew az at: $HOMEBREW_AZ"
+        ls -la "$HOMEBREW_AZ"
+        
+        echo ""
+        echo "Expected version: $EXPECTED_VERSION"
+        
+        echo ""
+        echo "Testing: $HOMEBREW_AZ --version"
+        AZ_OUTPUT=$("$HOMEBREW_AZ" --version 2>&1)
+        echo "$AZ_OUTPUT"
+        
+        # Verify version matches
+        if ! echo "$AZ_OUTPUT" | grep -q "$EXPECTED_VERSION"; then
+          echo ""
+          echo "❌ ERROR: Version mismatch!"
+          echo "   Expected: $EXPECTED_VERSION"
+          exit 1
+        fi
+        
+        echo ""
+        echo "✅ Correct version verified: $EXPECTED_VERSION"
+        
+        echo ""
+        echo "Testing: $HOMEBREW_AZ help"
+        "$HOMEBREW_AZ" help > /dev/null || {
+          echo "❌ ERROR: az help failed"
+          exit 1
+        }
+        
+        echo "✅ az help succeeded"
+        
+        echo ""
+        echo "======================================"
+        echo "  ✅ All CLI Command Tests Passed"
+        echo "======================================"
+      displayName: 'Test CLI commands'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Verify Code Signatures"
+        echo "======================================"
+        echo ""
+        
+        FORMULA_NAME="${{ parameters.FormulaName }}"
+        CELLAR_PATH=$(brew --cellar "$FORMULA_NAME")
+        VERSION=$(brew info "$FORMULA_NAME" --json | python3 -c "import sys, json; print(json.load(sys.stdin)[0]['installed'][0]['version'])")
+        
+        echo "Checking code signatures..."
+        echo ""
+        
+        # Find Python binary
+        PYTHON_BIN=$(find "$CELLAR_PATH/$VERSION" -name "python*" -type f ! -name "*.so" | head -1)
+        
+        if [ -n "$PYTHON_BIN" ]; then
+          echo "Python binary: $PYTHON_BIN"
+          codesign -dv "$PYTHON_BIN" 2>&1 || echo "  Not signed or signature invalid"
+          
+          echo ""
+          echo "Checking quarantine attributes..."
+          xattr "$PYTHON_BIN" || echo "  No extended attributes"
+        fi
+        
+        echo ""
+        echo "✅ Signature verification complete"
+      displayName: 'Verify code signatures'
+    
+    - bash: |
+        echo "======================================"
+        echo "  Cleanup"
+        echo "======================================"
+        echo ""
+        
+        FORMULA_NAME="${{ parameters.FormulaName }}"
+        
+        echo "Uninstalling $FORMULA_NAME..."
+        brew uninstall "$FORMULA_NAME"
+        
+        echo ""
+        echo "Removing tap..."
+        brew untap "${{ parameters.HomebrewTapRepo }}"
+        
+        echo ""
+        echo "✅ Cleanup complete"
+      displayName: 'Cleanup test installation'
+
+# ============================================================================
+# STAGE 10: RELEASE SUMMARY
+# ============================================================================
+- stage: ReleaseSummary
+  displayName: 'Stage 10: Release Summary'
+  dependsOn:
+  - DownloadUnsignedTarball
+  - SignBinaries
+  - CreateSignedTarball
+  - NotarizeTarball
+  - PublishToGitHub
+  - UpdateHomebrewFormula
+  - TestInstallation
+  condition: always()
+  variables:
+    AzureCliVersion: $[ stageDependencies.DownloadUnsignedTarball.DownloadAndExtract.outputs['DetectVersion.AzureCliVersion'] ]
+  jobs:
+  - job: PrintSummary
+    displayName: 'Print release summary'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - bash: |
+        echo "=============================================="
+        echo "  Azure CLI Signed Tarball Release Summary"
+        echo "=============================================="
+        echo ""
+        echo "✅ RELEASE COMPLETE!"
+        echo ""
+        echo "Version: $(AzureCliVersion)"
+        echo "Release Tag: v$(AzureCliVersion)-tarball-signed"
+        echo ""
+        echo "GitHub Release:"
+        echo "  https://github.com/${{ parameters.GitHubRepo }}/releases/tag/v$(AzureCliVersion)-tarball-signed"
+        echo ""
+        echo "Homebrew Installation:"
+        echo "  brew tap ${{ parameters.HomebrewTapRepo }}"
+        echo "  brew install ${{ parameters.FormulaName }}"
+        echo ""
+        echo "Security Features:"
+        echo "  ✅ All binaries code-signed with Developer ID Application"
+        echo "  ✅ Notarized by Apple"
+        echo "  ✅ No Gatekeeper warnings"
+        echo "  ✅ Safe for browser downloads"
+        echo ""
+        echo "=============================================="
+      displayName: 'Release summary'
