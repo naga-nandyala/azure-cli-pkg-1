@@ -1,10 +1,11 @@
-# Azure CLI - macOS CLI Build Pipeline (v2)
+# Azure CLI - macOS Tarball Build Pipeline (v2)
 # 
-# Phase 2: Build CLI Package Using Pre-built Python Base
+# Phase 2: Build CLI Tarball Using Pre-built Python Base
 # 
 # This pipeline builds the Azure CLI tar.gz using a pre-built Python base.
 # It can use either:
-# - A signed+notarized Python base (RECOMMENDED - minimal additional signing)
+# - Artifacts from Python Base pipeline (RECOMMENDED)
+# - A signed+notarized Python base from URL
 # - An unsigned Python base (requires full signing of all binaries)
 #
 # Stages:
@@ -20,8 +21,30 @@
 trigger: none
 
 parameters:
+  - name: PythonBaseSource
+    displayName: 'Python Base Source'
+    type: string
+    default: 'pipeline'
+    values:
+    - pipeline    # Download from Python Base pipeline artifacts
+    - url         # Download from URL (GitHub release, etc.)
+  
+  - name: PythonBaseBuildId
+    displayName: 'Python Base Build ID (for pipeline source)'
+    type: string
+    default: '292484'
+  
+  - name: PythonBaseArtifact
+    displayName: 'Python Base Artifact Name'
+    type: string
+    default: 'python-base-signed-notarized'
+    values:
+    - python-base-signed-notarized   # Recommended: signed + notarized
+    - python-base-signed-only        # Signed but not notarized
+    - python-base-unsigned           # Unsigned (requires full signing)
+  
   - name: PythonBaseUrl
-    displayName: 'URL to Python Base tar.gz (signed or unsigned)'
+    displayName: 'URL to Python Base tar.gz (for url source)'
     type: string
     default: 'https://github.com/naga-nandyala/azure-cli-pkg-1/releases/download/python-base/python-3.13.1-macos-arm64-signed-notarized.tar.gz'
   
@@ -37,13 +60,6 @@ parameters:
     values:
     - arm64
     - x86_64
-  
-  - name: PythonBaseIsSigned
-    displayName: 'Is Python base already signed+notarized?'
-    type: boolean
-    default: true
-    # If true: Only CLI-specific binaries need signing (~30)
-    # If false: All binaries need signing (~100)
   
   - name: PublishToGitHub
     displayName: 'Publish unsigned tar.gz to GitHub'
@@ -86,7 +102,7 @@ variables:
   - name: skipNugetSecurityAnalysis
     value: true
 
-name: cli-build-v2-$(Build.BuildId)-${{ parameters.Architecture }}
+name: tarball-build-v2-$(Build.BuildId)-${{ parameters.Architecture }}
 
 stages:
 # ============================================================================
@@ -107,33 +123,93 @@ stages:
     - checkout: self
       fetchDepth: 1
     
-    - bash: |
-        set -e
-        
-        echo "=== Downloading Python Base ==="
-        PYTHON_BASE_URL="${{ parameters.PythonBaseUrl }}"
-        
-        mkdir -p $(Build.ArtifactStagingDirectory)/python-base
-        
-        # Handle file:// URLs for local testing
-        if [[ "$PYTHON_BASE_URL" == file://* ]]; then
-          LOCAL_PATH="${PYTHON_BASE_URL#file://}"
-          cp "$LOCAL_PATH" $(Build.ArtifactStagingDirectory)/python-base/python-base.tar.gz
-          echo "Copied from local: $LOCAL_PATH"
-        else
-          curl -L -o $(Build.ArtifactStagingDirectory)/python-base/python-base.tar.gz "$PYTHON_BASE_URL"
-          echo "Downloaded from: $PYTHON_BASE_URL"
-        fi
-        
-        echo ""
-        echo "Downloaded:"
-        ls -lh $(Build.ArtifactStagingDirectory)/python-base/
-        
-        # Verify it's a valid tar.gz
-        tar -tzf $(Build.ArtifactStagingDirectory)/python-base/python-base.tar.gz > /dev/null
-        echo "✅ Valid tar.gz archive"
-        
-      displayName: 'Download Python base'
+    # Option 1: Download from Python Base pipeline artifacts
+    - ${{ if eq(parameters.PythonBaseSource, 'pipeline') }}:
+      - task: DownloadPipelineArtifact@2
+        displayName: 'Download from Python Base Pipeline (Build ${{ parameters.PythonBaseBuildId }})'
+        inputs:
+          buildType: 'specific'
+          project: 'release'
+          definition: 'macos-python-base-v2'
+          buildVersionToDownload: 'specific'
+          buildId: ${{ parameters.PythonBaseBuildId }}
+          artifactName: '${{ parameters.PythonBaseArtifact }}'
+          targetPath: '$(Pipeline.Workspace)/python-base-download'
+      
+      - bash: |
+          set -e
+          
+          echo "=== Python Base from Pipeline Artifacts ==="
+          echo "Build ID: ${{ parameters.PythonBaseBuildId }}"
+          echo "Artifact: ${{ parameters.PythonBaseArtifact }}"
+          echo ""
+          
+          echo "=== Downloaded Files ==="
+          ls -lh $(Pipeline.Workspace)/python-base-download/
+          echo ""
+          
+          mkdir -p $(Build.ArtifactStagingDirectory)/python-base
+          
+          # Find the tarball in the downloaded artifact
+          TARBALL=$(find $(Pipeline.Workspace)/python-base-download -name "*.tar.gz" | head -1)
+          
+          if [ -z "$TARBALL" ]; then
+            echo "❌ ERROR: No tar.gz found in artifact!"
+            ls -la $(Pipeline.Workspace)/python-base-download/
+            exit 1
+          fi
+          
+          echo "✅ Found: $TARBALL"
+          echo "   Size: $(du -h "$TARBALL" | cut -f1)"
+          cp "$TARBALL" $(Build.ArtifactStagingDirectory)/python-base/python-base.tar.gz
+          
+          echo ""
+          echo "Copied to:"
+          ls -lh $(Build.ArtifactStagingDirectory)/python-base/
+          
+          # Verify it's a valid tar.gz
+          tar -tzf $(Build.ArtifactStagingDirectory)/python-base/python-base.tar.gz > /dev/null
+          echo "✅ Valid tar.gz archive"
+          
+          # Set signing status based on artifact name
+          ARTIFACT="${{ parameters.PythonBaseArtifact }}"
+          if [[ "$ARTIFACT" == *"signed"* ]]; then
+            echo "##vso[task.setvariable variable=ExpectedSigned]true"
+          else
+            echo "##vso[task.setvariable variable=ExpectedSigned]false"
+          fi
+          
+        displayName: 'Prepare Python base from pipeline'
+    
+    # Option 2: Download from URL
+    - ${{ if eq(parameters.PythonBaseSource, 'url') }}:
+      - bash: |
+          set -e
+          
+          echo "=== Downloading Python Base from URL ==="
+          PYTHON_BASE_URL="${{ parameters.PythonBaseUrl }}"
+          
+          mkdir -p $(Build.ArtifactStagingDirectory)/python-base
+          
+          # Handle file:// URLs for local testing
+          if [[ "$PYTHON_BASE_URL" == file://* ]]; then
+            LOCAL_PATH="${PYTHON_BASE_URL#file://}"
+            cp "$LOCAL_PATH" $(Build.ArtifactStagingDirectory)/python-base/python-base.tar.gz
+            echo "Copied from local: $LOCAL_PATH"
+          else
+            curl -L -o $(Build.ArtifactStagingDirectory)/python-base/python-base.tar.gz "$PYTHON_BASE_URL"
+            echo "Downloaded from: $PYTHON_BASE_URL"
+          fi
+          
+          echo ""
+          echo "Downloaded:"
+          ls -lh $(Build.ArtifactStagingDirectory)/python-base/
+          
+          # Verify it's a valid tar.gz
+          tar -tzf $(Build.ArtifactStagingDirectory)/python-base/python-base.tar.gz > /dev/null
+          echo "✅ Valid tar.gz archive"
+          
+        displayName: 'Download Python base from URL'
     
     - bash: |
         set -e

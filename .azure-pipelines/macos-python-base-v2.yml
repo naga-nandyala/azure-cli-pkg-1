@@ -803,7 +803,7 @@ stages:
         fi
         echo "╠════════════════════════════════════════════════════════════════╣"
         echo "║ NEXT STEP:                                                     ║"
-        echo "║   Use this artifact as input to macos-cli-build-v2.yml         ║"
+        echo "║   Use this artifact as input to macos-tarball-build-v2.yml     ║"
         echo "╚════════════════════════════════════════════════════════════════╝"
         
       displayName: 'Print summary'
