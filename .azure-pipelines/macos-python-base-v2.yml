@@ -1,0 +1,685 @@
+# Azure CLI - macOS Python Base Build Pipeline (v2)
+# 
+# Phase 1: Build Relocatable Python Base
+# 
+# This pipeline builds a relocatable Python base with PGO+LTO optimizations.
+# The output is a reusable tar.gz that can be used by the CLI build pipeline.
+#
+# Stages:
+# 1. Build Python Base (PGO+LTO)
+# 2. Sign Python Binaries (ESRP)
+# 3. Notarize with Apple (ESRP)
+# 4. Create Final Signed Tar.gz
+# 5. Publish to Azure Artifacts / GitHub
+#
+# Benefits of pre-signing Python base:
+# - Python has ~70 Mach-O binaries (python3, libpython, .so modules)
+# - CLI adds ~30 more binaries
+# - Pre-signing Python saves ~70% of signing time for each CLI release
+
+trigger: none
+
+parameters:
+  - name: PythonVersion
+    displayName: 'Python Version'
+    type: string
+    default: '3.13.1'
+  
+  - name: Architecture
+    displayName: 'Architecture'
+    type: string
+    default: 'arm64'
+    values:
+    - arm64
+    - x86_64
+  
+  - name: EnablePGO
+    displayName: 'Enable Profile Guided Optimization'
+    type: boolean
+    default: true
+  
+  - name: EnableLTO
+    displayName: 'Enable Link Time Optimization'
+    type: boolean
+    default: true
+  
+  - name: SignAndNotarize
+    displayName: 'Sign and Notarize Python binaries'
+    type: boolean
+    default: true
+  
+  - name: PublishToGitHub
+    displayName: 'Publish to GitHub Release'
+    type: boolean
+    default: false
+  
+  - name: GitHubRepo
+    displayName: 'GitHub Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+
+resources:
+  repositories:
+  - repository: selfRepo
+    type: github
+    endpoint: 'github.com_naga-nandyala'
+    name: naga-nandyala/azure-cli-pkg-1
+    ref: main
+
+variables:
+  - group: 'AME ESRP Variable Group'
+  
+  # Disable auto-injection tasks
+  - name: Codeql.Enabled
+    value: false
+  - name: Codeql.SkipTaskAutoInjection
+    value: true
+  - name: CodeQL.enabled
+    value: false
+  - name: runCodesignValidationInjection
+    value: false
+  - name: DOTNET_CLI_TELEMETRY_OPTOUT
+    value: 1
+  - name: DOTNET_NOLOGO
+    value: 1
+  - name: NugetSecurityAnalysisWarningLevel
+    value: none
+  - name: skipNugetSecurityAnalysis
+    value: true
+  - name: GitHubRepo
+    value: ${{ parameters.GitHubRepo }}
+
+name: python-base-v2-$(Build.BuildId)-${{ parameters.PythonVersion }}-${{ parameters.Architecture }}
+
+stages:
+# ============================================================================
+# STAGE 1: BUILD PYTHON BASE WITH PGO+LTO
+# ============================================================================
+- stage: BuildPythonBase
+  displayName: 'Stage 1: Build Python Base'
+  jobs:
+  - job: BuildPython
+    displayName: 'Build Python ${{ parameters.PythonVersion }} (${{ parameters.Architecture }})'
+    pool:
+      vmImage: 'macOS-14'
+    timeoutInMinutes: 120
+    
+    steps:
+    - checkout: self
+      fetchDepth: 1
+    
+    - bash: |
+        echo "=== System Information ==="
+        sw_vers
+        uname -m
+        echo ""
+        echo "=== Build Configuration ==="
+        echo "Python Version: ${{ parameters.PythonVersion }}"
+        echo "Architecture: ${{ parameters.Architecture }}"
+        echo "PGO Enabled: ${{ parameters.EnablePGO }}"
+        echo "LTO Enabled: ${{ parameters.EnableLTO }}"
+        echo ""
+        
+        # Install dependencies
+        brew install openssl@3 xz zlib readline sqlite ncurses
+        
+        echo "OpenSSL path: $(brew --prefix openssl@3)"
+        
+      displayName: 'Setup build environment'
+    
+    - bash: |
+        set -e
+        
+        cd $(Build.SourcesDirectory)
+        
+        # Map architecture to platform-tag
+        PLATFORM_TAG="macos-${{ parameters.Architecture }}"
+        
+        # Build Python base using our v2 script
+        # Note: PGO/LTO are enabled by default in the script
+        python3 scripts/release/macos/build_python_base_v2.py \
+          --platform-tag "$PLATFORM_TAG" \
+          --python-version ${{ parameters.PythonVersion }} \
+          --output-dir $(Build.ArtifactStagingDirectory)/python-base
+        
+        echo ""
+        echo "=== Build Output ==="
+        ls -lh $(Build.ArtifactStagingDirectory)/python-base/
+        
+        # Extract version info
+        TARBALL=$(find $(Build.ArtifactStagingDirectory)/python-base -name "*.tar.gz" | head -1)
+        echo "##vso[task.setvariable variable=PythonTarball;isOutput=true]$TARBALL"
+        echo "##vso[task.setvariable variable=PythonVersion;isOutput=true]${{ parameters.PythonVersion }}"
+        
+      displayName: 'Build Python with PGO+LTO'
+      name: BuildStep
+    
+    - bash: |
+        set -e
+        
+        echo "=== Identifying Mach-O binaries ==="
+        
+        TARBALL=$(find $(Build.ArtifactStagingDirectory)/python-base -name "*.tar.gz" | head -1)
+        EXTRACT_DIR=$(mktemp -d)
+        
+        tar -xzf "$TARBALL" -C "$EXTRACT_DIR"
+        
+        # Find all Mach-O binaries
+        FILES_LIST="$(Build.ArtifactStagingDirectory)/python-binaries-list.txt"
+        
+        find "$EXTRACT_DIR" -type f | while read filepath; do
+          filetype=$(file -b "$filepath")
+          if echo "$filetype" | grep -q -i "Mach-O"; then
+            # Store relative path
+            echo "${filepath#$EXTRACT_DIR/}"
+          fi
+        done | sort -u > "$FILES_LIST"
+        
+        BINARY_COUNT=$(wc -l < "$FILES_LIST")
+        echo "Total Mach-O binaries: $BINARY_COUNT"
+        echo "##vso[task.setvariable variable=BinaryCount;isOutput=true]$BINARY_COUNT"
+        echo ""
+        echo "Sample binaries:"
+        head -20 "$FILES_LIST"
+        
+        rm -rf "$EXTRACT_DIR"
+        
+      displayName: 'Identify binaries for signing'
+      name: IdentifyStep
+    
+    - publish: $(Build.ArtifactStagingDirectory)/python-base
+      artifact: python-base-unsigned
+      displayName: 'Publish unsigned Python base'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/python-binaries-list.txt
+      artifact: python-binaries-list
+      displayName: 'Publish binaries list'
+
+# ============================================================================
+# STAGE 2: SIGN PYTHON BINARIES (ESRP)
+# ============================================================================
+- stage: SignPythonBinaries
+  displayName: 'Stage 2: Sign Python Binaries'
+  dependsOn: BuildPythonBase
+  condition: and(succeeded(), eq('${{ parameters.SignAndNotarize }}', true))
+  variables:
+    BinaryCount: $[ stageDependencies.BuildPythonBase.BuildPython.outputs['IdentifyStep.BinaryCount'] ]
+  jobs:
+  - job: SignWithESRP
+    displayName: 'Sign Python binaries with ESRP ($(BinaryCount) binaries)'
+    pool:
+      vmImage: 'windows-latest'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: python-base-unsigned
+      displayName: 'Download unsigned Python base'
+    
+    - download: current
+      artifact: python-binaries-list
+      displayName: 'Download binaries list'
+    
+    - pwsh: |
+        Write-Host "=== Preparing Python binaries for ESRP signing ==="
+        Write-Host "NOTE: ESRP requires binaries in ZIP format"
+        Write-Host ""
+        
+        # Extract tar.gz
+        $tarball = Get-ChildItem "$(Pipeline.Workspace)/python-base-unsigned/*.tar.gz" | Select-Object -First 1
+        $extractPath = "$(Pipeline.Workspace)/python-extracted"
+        
+        Write-Host "Extracting: $($tarball.Name)"
+        New-Item -ItemType Directory -Path $extractPath -Force | Out-Null
+        tar -xzf $tarball -C $extractPath
+        
+        # Read binaries list
+        $fileListPath = "$(Pipeline.Workspace)/python-binaries-list/python-binaries-list.txt"
+        $filesToSign = Get-Content $fileListPath
+        
+        Write-Host "Files to sign: $($filesToSign.Count)"
+        
+        # Create ZIP for each binary
+        $toBeSignedDir = "$(Pipeline.Workspace)/toBeSigned"
+        New-Item -ItemType Directory -Path $toBeSignedDir -Force | Out-Null
+        
+        $fileMapping = @{}
+        $count = 0
+        
+        foreach ($relativePath in $filesToSign) {
+          $fullPath = Join-Path $extractPath $relativePath
+          
+          if (Test-Path $fullPath) {
+            $flatName = $relativePath -replace '[/\\]', '__'
+            $zipName = "$flatName.zip"
+            $zipPath = Join-Path $toBeSignedDir $zipName
+            
+            Compress-Archive -Path $fullPath -DestinationPath $zipPath -Force
+            
+            $fileMapping[$zipName] = @{
+              "OriginalPath" = $relativePath
+              "FileName" = (Split-Path $relativePath -Leaf)
+            }
+            
+            $count++
+            if ($count -le 5) {
+              Write-Host "  $relativePath -> $zipName"
+            }
+          }
+        }
+        
+        Write-Host ""
+        Write-Host "Created $count ZIP files for signing"
+        
+        # Save mapping
+        $mappingPath = "$(Pipeline.Workspace)/file-mapping.json"
+        $fileMapping | ConvertTo-Json -Depth 10 | Set-Content $mappingPath
+        
+      displayName: 'Prepare binaries for signing (create ZIPs)'
+    
+    - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
+      displayName: 'ESRP - Sign Python binaries'
+      inputs:
+        ConnectedServiceName: 'ame_esrp_connection'
+        AppRegistrationClientId: '$(ESRPAppClientId)'
+        AppRegistrationTenantId: '$(ESRPAppTenantId)'
+        AuthAKVName: '$(ESRPKVName)'
+        AuthCertName: '$(ESRPAuthCertName)'
+        AuthSignCertName: '$(ESRPSignCertName)'
+        FolderPath: '$(Pipeline.Workspace)/toBeSigned'
+        Pattern: '*.zip'
+        signConfigType: 'inlineSignParams'
+        inlineOperation: |
+          [
+            {
+              "KeyCode": "CP-401337-Apple",
+              "OperationCode": "MacAppDeveloperSign",
+              "ToolName": "sign",
+              "ToolVersion": "1.0",
+              "Parameters": {
+                "Hardening": "--options=runtime"
+              }
+            }
+          ]
+        SessionTimeout: '120'
+        MaxConcurrency: '50'
+        MaxRetryAttempts: '5'
+    
+    - pwsh: |
+        Write-Host "=== Extracting signed binaries from ZIPs ==="
+        
+        $signedZipsDir = "$(Pipeline.Workspace)/toBeSigned"
+        $outputDir = "$(Build.ArtifactStagingDirectory)/signed-binaries"
+        $mappingPath = "$(Pipeline.Workspace)/file-mapping.json"
+        
+        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+        
+        $fileMapping = Get-Content $mappingPath | ConvertFrom-Json
+        $count = 0
+        
+        foreach ($entry in $fileMapping.PSObject.Properties) {
+          $zipName = $entry.Name
+          $fileInfo = $entry.Value
+          $zipPath = Join-Path $signedZipsDir $zipName
+          
+          if (Test-Path $zipPath) {
+            $tempExtract = "$(Pipeline.Workspace)/temp_extract/$zipName"
+            Expand-Archive -Path $zipPath -DestinationPath $tempExtract -Force
+            
+            $extractedFile = Get-ChildItem -Path $tempExtract -File | Select-Object -First 1
+            
+            if ($extractedFile) {
+              $targetPath = Join-Path $outputDir $fileInfo.OriginalPath
+              $targetDir = Split-Path $targetPath -Parent
+              New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+              Copy-Item -Path $extractedFile.FullName -Destination $targetPath -Force
+              $count++
+            }
+          }
+        }
+        
+        Write-Host "Extracted $count signed binaries"
+        
+      displayName: 'Extract signed binaries from ZIPs'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/signed-binaries
+      artifact: python-signed-binaries
+      displayName: 'Publish signed binaries'
+
+# ============================================================================
+# STAGE 3: NOTARIZE WITH APPLE (ESRP)
+# ============================================================================
+- stage: NotarizeWithApple
+  displayName: 'Stage 3: Notarize with Apple'
+  dependsOn:
+  - BuildPythonBase
+  - SignPythonBinaries
+  condition: and(succeeded(), eq('${{ parameters.SignAndNotarize }}', true))
+  jobs:
+  - job: CreateNotarizationBundle
+    displayName: 'Create ZIP bundle for notarization'
+    pool:
+      vmImage: 'macOS-14'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: python-base-unsigned
+      displayName: 'Download unsigned Python base'
+    
+    - download: current
+      artifact: python-signed-binaries
+      displayName: 'Download signed binaries'
+    
+    - bash: |
+        set -e
+        
+        echo "=== Merging signed binaries into Python base ==="
+        
+        # Extract original tarball (preserves symlinks)
+        TARBALL=$(find "$(Pipeline.Workspace)/python-base-unsigned" -name "*.tar.gz" | head -1)
+        MERGED_DIR="$(Build.ArtifactStagingDirectory)/merged-python"
+        
+        mkdir -p "$MERGED_DIR"
+        tar -xzf "$TARBALL" -C "$MERGED_DIR"
+        
+        echo "Original structure extracted with symlinks"
+        
+        # Overlay signed binaries
+        SIGNED_DIR="$(Pipeline.Workspace)/python-signed-binaries"
+        
+        cd "$SIGNED_DIR"
+        REPLACED=0
+        find . -type f | while read signed_file; do
+          target="$MERGED_DIR/$signed_file"
+          if [ -f "$target" ]; then
+            cp "$signed_file" "$target"
+            REPLACED=$((REPLACED + 1))
+          fi
+        done
+        
+        echo "Replaced signed binaries"
+        
+        # Restore permissions
+        find "$MERGED_DIR" -type f \( -name "python*" -o -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \;
+        
+        echo "Permissions restored"
+        
+        # Verify a sample signature
+        echo ""
+        echo "=== Verifying Signature ==="
+        PYTHON_BIN=$(find "$MERGED_DIR" -name "python3" -type f | head -1)
+        if [ -n "$PYTHON_BIN" ]; then
+          codesign -dvv "$PYTHON_BIN" 2>&1 | grep -E "Authority|TeamIdentifier|Signature" || true
+        fi
+        
+        # Create ZIP for notarization (Apple requires ZIP format)
+        cd "$MERGED_DIR"
+        ZIP_PATH="$(Build.ArtifactStagingDirectory)/python-for-notarization.zip"
+        zip -r -y "$ZIP_PATH" .
+        
+        echo ""
+        echo "Created ZIP for notarization:"
+        ls -lh "$ZIP_PATH"
+        
+      displayName: 'Merge signed binaries and create ZIP'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/python-for-notarization.zip
+      artifact: python-notarization-bundle
+      displayName: 'Publish notarization bundle'
+  
+  - job: NotarizeBundle
+    displayName: 'Submit to Apple for notarization'
+    dependsOn: CreateNotarizationBundle
+    pool:
+      vmImage: 'windows-latest'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: python-notarization-bundle
+      displayName: 'Download notarization bundle'
+    
+    - pwsh: |
+        $zipPath = "$(Pipeline.Workspace)/python-notarization-bundle/python-for-notarization.zip"
+        $targetPath = "$(Pipeline.Workspace)/python-for-notarization.zip"
+        
+        Copy-Item -Path $zipPath -Destination $targetPath -Force
+        
+        Write-Host "ZIP ready for notarization:"
+        $file = Get-Item $targetPath
+        Write-Host "  Name: $($file.Name)"
+        Write-Host "  Size: $([math]::Round($file.Length / 1MB, 2)) MB"
+        
+      displayName: 'Prepare ZIP for notarization'
+    
+    - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
+      displayName: 'ESRP - Notarize with Apple'
+      inputs:
+        ConnectedServiceName: 'ame_esrp_connection'
+        AppRegistrationClientId: '$(ESRPAppClientId)'
+        AppRegistrationTenantId: '$(ESRPAppTenantId)'
+        AuthAKVName: '$(ESRPKVName)'
+        AuthCertName: '$(ESRPAuthCertName)'
+        AuthSignCertName: '$(ESRPSignCertName)'
+        FolderPath: '$(Pipeline.Workspace)'
+        Pattern: 'python-for-notarization.zip'
+        signConfigType: 'inlineSignParams'
+        inlineOperation: |
+          [
+            {
+              "KeyCode": "CP-401337-Apple",
+              "OperationCode": "MacAppNotarize",
+              "ToolName": "sign",
+              "ToolVersion": "1.0",
+              "Parameters": {
+                "BundleId": "com.microsoft.azure.cli.python"
+              }
+            }
+          ]
+        SessionTimeout: '120'
+        MaxConcurrency: '50'
+        MaxRetryAttempts: '5'
+    
+    - pwsh: |
+        Write-Host "============================================"
+        Write-Host "NOTARIZATION COMPLETE"
+        Write-Host "============================================"
+        Write-Host ""
+        Write-Host "Apple has recorded the signatures for all Python binaries."
+        Write-Host ""
+        Write-Host "When users run these binaries:"
+        Write-Host "  1. macOS checks the code signature"
+        Write-Host "  2. macOS queries Apple's servers for notarization ticket"
+        Write-Host "  3. If found, binary runs without Gatekeeper warning"
+        Write-Host ""
+        Write-Host "NOTE: First run requires internet to verify with Apple."
+        Write-Host "      Subsequent runs are cached locally."
+        
+      displayName: 'Notarization complete'
+
+# ============================================================================
+# STAGE 4: CREATE FINAL SIGNED+NOTARIZED TAR.GZ
+# ============================================================================
+- stage: CreateFinalTarball
+  displayName: 'Stage 4: Create Final Tar.gz'
+  dependsOn:
+  - BuildPythonBase
+  - NotarizeWithApple
+  condition: and(succeeded(), eq('${{ parameters.SignAndNotarize }}', true))
+  variables:
+    PythonVersion: $[ stageDependencies.BuildPythonBase.BuildPython.outputs['BuildStep.PythonVersion'] ]
+  jobs:
+  - job: CreateSignedTarball
+    displayName: 'Create signed+notarized tar.gz'
+    pool:
+      vmImage: 'macOS-14'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: python-base-unsigned
+      displayName: 'Download unsigned base (for structure)'
+    
+    - download: current
+      artifact: python-signed-binaries
+      displayName: 'Download signed binaries'
+    
+    - bash: |
+        set -e
+        
+        VERSION="${{ parameters.PythonVersion }}"
+        ARCH="${{ parameters.Architecture }}"
+        
+        echo "=== Creating Final Signed+Notarized Tar.gz ==="
+        echo "Python Version: $VERSION"
+        echo "Architecture: $ARCH"
+        echo ""
+        
+        # Extract original (preserves symlinks)
+        TARBALL=$(find "$(Pipeline.Workspace)/python-base-unsigned" -name "*.tar.gz" | head -1)
+        FINAL_DIR="$(Build.ArtifactStagingDirectory)/python-final"
+        OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/output"
+        
+        mkdir -p "$FINAL_DIR" "$OUTPUT_DIR"
+        tar -xzf "$TARBALL" -C "$FINAL_DIR"
+        
+        echo "Extracted original structure with symlinks"
+        
+        # Overlay signed binaries
+        SIGNED_DIR="$(Pipeline.Workspace)/python-signed-binaries"
+        cd "$SIGNED_DIR"
+        find . -type f | while read signed_file; do
+          target="$FINAL_DIR/$signed_file"
+          if [ -f "$target" ]; then
+            cp "$signed_file" "$target"
+          fi
+        done
+        
+        echo "Overlaid signed binaries"
+        
+        # Restore permissions
+        find "$FINAL_DIR" -type f \( -name "python*" -o -name "*.dylib" -o -name "*.so" \) -exec chmod +x {} \;
+        
+        echo "Permissions restored"
+        echo ""
+        
+        # Verify symlinks
+        echo "=== Verifying Symlinks ==="
+        ls -la "$FINAL_DIR/bin/" | head -10
+        
+        # Create final tar.gz
+        cd "$FINAL_DIR"
+        TARBALL_NAME="python-${VERSION}-macos-${ARCH}-signed-notarized.tar.gz"
+        tar -czf "$OUTPUT_DIR/$TARBALL_NAME" --preserve-permissions .
+        
+        # Calculate SHA256
+        cd "$OUTPUT_DIR"
+        shasum -a 256 "$TARBALL_NAME" | tee "$TARBALL_NAME.sha256"
+        
+        echo ""
+        echo "=== Final Output ==="
+        ls -lh "$OUTPUT_DIR"
+        
+        # Verify signature preserved
+        echo ""
+        echo "=== Verifying Signature After Extraction ==="
+        TEST_DIR=$(mktemp -d)
+        tar -xzf "$OUTPUT_DIR/$TARBALL_NAME" -C "$TEST_DIR"
+        
+        PYTHON_BIN=$(find "$TEST_DIR" -name "python3" -type f | head -1)
+        if [ -n "$PYTHON_BIN" ]; then
+          codesign -v "$PYTHON_BIN" && echo "✅ Signature VALID" || echo "❌ Signature INVALID"
+          codesign -dvv "$PYTHON_BIN" 2>&1 | grep -E "Authority|TeamIdentifier" || true
+        fi
+        
+        rm -rf "$TEST_DIR"
+        
+      displayName: 'Create signed tar.gz'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/output
+      artifact: python-base-signed-notarized
+      displayName: 'Publish signed+notarized Python base'
+
+# ============================================================================
+# STAGE 5: PUBLISH UNSIGNED (SKIP SIGNING PATH)
+# ============================================================================
+- stage: PublishUnsigned
+  displayName: 'Stage 5: Publish Unsigned'
+  dependsOn: BuildPythonBase
+  condition: and(succeeded(), eq('${{ parameters.SignAndNotarize }}', false))
+  jobs:
+  - job: PublishUnsignedTarball
+    displayName: 'Publish unsigned Python base'
+    pool:
+      vmImage: 'macOS-14'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: python-base-unsigned
+      displayName: 'Download Python base'
+    
+    - bash: |
+        mkdir -p $(Build.ArtifactStagingDirectory)/output
+        cp $(Pipeline.Workspace)/python-base-unsigned/* $(Build.ArtifactStagingDirectory)/output/
+        
+        echo "=== Unsigned Python base ==="
+        ls -lh $(Build.ArtifactStagingDirectory)/output/
+        
+      displayName: 'Prepare output'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/output
+      artifact: python-base-final
+      displayName: 'Publish Python base'
+
+# ============================================================================
+# STAGE 6: SUMMARY
+# ============================================================================
+- stage: Summary
+  displayName: 'Stage 6: Build Summary'
+  dependsOn:
+  - BuildPythonBase
+  - CreateFinalTarball
+  - PublishUnsigned
+  condition: always()
+  variables:
+    PythonVersion: $[ stageDependencies.BuildPythonBase.BuildPython.outputs['BuildStep.PythonVersion'] ]
+    BinaryCount: $[ stageDependencies.BuildPythonBase.BuildPython.outputs['IdentifyStep.BinaryCount'] ]
+  jobs:
+  - job: PrintSummary
+    displayName: 'Print Summary'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo "╔════════════════════════════════════════════════════════════════╗"
+        echo "║         PYTHON BASE BUILD SUMMARY (v2)                         ║"
+        echo "╠════════════════════════════════════════════════════════════════╣"
+        echo "║ Python Version:   ${{ parameters.PythonVersion }}"
+        echo "║ Architecture:     ${{ parameters.Architecture }}"
+        echo "║ PGO Enabled:      ${{ parameters.EnablePGO }}"
+        echo "║ LTO Enabled:      ${{ parameters.EnableLTO }}"
+        echo "║ Signed:           ${{ parameters.SignAndNotarize }}"
+        echo "║ Binaries:         $(BinaryCount)"
+        echo "╠════════════════════════════════════════════════════════════════╣"
+        echo "║ OUTPUT ARTIFACT:                                               ║"
+        if [ "${{ parameters.SignAndNotarize }}" = "true" ]; then
+          echo "║   python-base-signed-notarized                               ║"
+        else
+          echo "║   python-base-final                                          ║"
+        fi
+        echo "╠════════════════════════════════════════════════════════════════╣"
+        echo "║ NEXT STEP:                                                     ║"
+        echo "║   Use this artifact as input to macos-cli-build-v2.yml         ║"
+        echo "╚════════════════════════════════════════════════════════════════╝"
+        
+      displayName: 'Print summary'

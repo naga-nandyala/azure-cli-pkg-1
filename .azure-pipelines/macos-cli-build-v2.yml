@@ -1,0 +1,515 @@
+# Azure CLI - macOS CLI Build Pipeline (v2)
+# 
+# Phase 2: Build CLI Package Using Pre-built Python Base
+# 
+# This pipeline builds the Azure CLI tar.gz using a pre-built Python base.
+# It can use either:
+# - A signed+notarized Python base (RECOMMENDED - minimal additional signing)
+# - An unsigned Python base (requires full signing of all binaries)
+#
+# Stages:
+# 1. Download Python Base
+# 2. Build Azure CLI
+# 3. Create Unsigned Tar.gz
+# 4. Verify Build
+# 5. Publish Artifacts
+#
+# The output is an UNSIGNED tar.gz that needs to be signed and notarized
+# in a separate pipeline (macos-tarball-sign-notarize-v2.yml)
+
+trigger: none
+
+parameters:
+  - name: PythonBaseUrl
+    displayName: 'URL to Python Base tar.gz (signed or unsigned)'
+    type: string
+    default: 'https://github.com/naga-nandyala/azure-cli-pkg-1/releases/download/python-base/python-3.13.1-macos-arm64-signed-notarized.tar.gz'
+  
+  - name: AzureCliVersion
+    displayName: 'Azure CLI Version (leave empty to detect from source)'
+    type: string
+    default: ''
+  
+  - name: Architecture
+    displayName: 'Architecture'
+    type: string
+    default: 'arm64'
+    values:
+    - arm64
+    - x86_64
+  
+  - name: PythonBaseIsSigned
+    displayName: 'Is Python base already signed+notarized?'
+    type: boolean
+    default: true
+    # If true: Only CLI-specific binaries need signing (~30)
+    # If false: All binaries need signing (~100)
+  
+  - name: PublishToGitHub
+    displayName: 'Publish unsigned tar.gz to GitHub'
+    type: boolean
+    default: false
+  
+  - name: GitHubRepo
+    displayName: 'GitHub Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+
+resources:
+  repositories:
+  - repository: selfRepo
+    type: github
+    endpoint: 'github.com_naga-nandyala'
+    name: naga-nandyala/azure-cli-pkg-1
+    ref: main
+
+variables:
+  # Parameter variable mappings
+  - name: GitHubRepo
+    value: ${{ parameters.GitHubRepo }}
+  
+  # Disable auto-injection tasks
+  - name: Codeql.Enabled
+    value: false
+  - name: Codeql.SkipTaskAutoInjection
+    value: true
+  - name: CodeQL.enabled
+    value: false
+  - name: runCodesignValidationInjection
+    value: false
+  - name: DOTNET_CLI_TELEMETRY_OPTOUT
+    value: 1
+  - name: DOTNET_NOLOGO
+    value: 1
+  - name: NugetSecurityAnalysisWarningLevel
+    value: none
+  - name: skipNugetSecurityAnalysis
+    value: true
+
+name: cli-build-v2-$(Build.BuildId)-${{ parameters.Architecture }}
+
+stages:
+# ============================================================================
+# STAGE 1: DOWNLOAD AND VERIFY PYTHON BASE
+# ============================================================================
+- stage: DownloadPythonBase
+  displayName: 'Stage 1: Download Python Base'
+  jobs:
+  - job: DownloadAndVerify
+    displayName: 'Download and Verify Python Base'
+    pool:
+      vmImage: 'macOS-14'
+    
+    steps:
+    - checkout: self
+      fetchDepth: 1
+    
+    - bash: |
+        set -e
+        
+        echo "=== Downloading Python Base ==="
+        PYTHON_BASE_URL="${{ parameters.PythonBaseUrl }}"
+        
+        mkdir -p $(Build.ArtifactStagingDirectory)/python-base
+        
+        # Handle file:// URLs for local testing
+        if [[ "$PYTHON_BASE_URL" == file://* ]]; then
+          LOCAL_PATH="${PYTHON_BASE_URL#file://}"
+          cp "$LOCAL_PATH" $(Build.ArtifactStagingDirectory)/python-base/python-base.tar.gz
+          echo "Copied from local: $LOCAL_PATH"
+        else
+          curl -L -o $(Build.ArtifactStagingDirectory)/python-base/python-base.tar.gz "$PYTHON_BASE_URL"
+          echo "Downloaded from: $PYTHON_BASE_URL"
+        fi
+        
+        echo ""
+        echo "Downloaded:"
+        ls -lh $(Build.ArtifactStagingDirectory)/python-base/
+        
+        # Verify it's a valid tar.gz
+        tar -tzf $(Build.ArtifactStagingDirectory)/python-base/python-base.tar.gz > /dev/null
+        echo "✅ Valid tar.gz archive"
+        
+      displayName: 'Download Python base'
+    
+    - bash: |
+        set -e
+        
+        echo "=== Verifying Python Base Signature Status ==="
+        
+        TARBALL=$(Build.ArtifactStagingDirectory)/python-base/python-base.tar.gz
+        EXTRACT_DIR=$(mktemp -d)
+        
+        tar -xzf "$TARBALL" -C "$EXTRACT_DIR"
+        
+        # Find Python binary
+        PYTHON_BIN=$(find "$EXTRACT_DIR" -name "python3" -type f | head -1)
+        
+        if [ -z "$PYTHON_BIN" ]; then
+          PYTHON_BIN=$(find "$EXTRACT_DIR" -path "*/bin/python*" -type f | head -1)
+        fi
+        
+        if [ -n "$PYTHON_BIN" ]; then
+          echo "Found Python binary: $PYTHON_BIN"
+          echo ""
+          
+          if codesign -v "$PYTHON_BIN" 2>/dev/null; then
+            echo "✅ Python base is SIGNED"
+            echo "##vso[task.setvariable variable=PythonIsSigned;isOutput=true]true"
+            codesign -dvv "$PYTHON_BIN" 2>&1 | grep -E "Authority|TeamIdentifier" || true
+          else
+            echo "⚠️  Python base is UNSIGNED"
+            echo "##vso[task.setvariable variable=PythonIsSigned;isOutput=true]false"
+          fi
+        else
+          echo "⚠️  Could not find Python binary to verify"
+          echo "##vso[task.setvariable variable=PythonIsSigned;isOutput=true]unknown"
+        fi
+        
+        # Count binaries
+        echo ""
+        echo "=== Python Base Binary Count ==="
+        PYTHON_BINARY_COUNT=$(find "$EXTRACT_DIR" -type f -exec file {} \; | grep -i "Mach-O" | wc -l)
+        echo "Python binaries: $PYTHON_BINARY_COUNT"
+        echo "##vso[task.setvariable variable=PythonBinaryCount;isOutput=true]$PYTHON_BINARY_COUNT"
+        
+        rm -rf "$EXTRACT_DIR"
+        
+      displayName: 'Verify Python base signature'
+      name: VerifyStep
+    
+    - publish: $(Build.ArtifactStagingDirectory)/python-base
+      artifact: python-base
+      displayName: 'Publish Python base artifact'
+
+# ============================================================================
+# STAGE 2: BUILD AZURE CLI
+# ============================================================================
+- stage: BuildAzureCli
+  displayName: 'Stage 2: Build Azure CLI'
+  dependsOn: DownloadPythonBase
+  variables:
+    PythonIsSigned: $[ stageDependencies.DownloadPythonBase.DownloadAndVerify.outputs['VerifyStep.PythonIsSigned'] ]
+    PythonBinaryCount: $[ stageDependencies.DownloadPythonBase.DownloadAndVerify.outputs['VerifyStep.PythonBinaryCount'] ]
+  jobs:
+  - job: BuildCli
+    displayName: 'Build Azure CLI (Python $(PythonBinaryCount) binaries)'
+    pool:
+      vmImage: 'macOS-14'
+    timeoutInMinutes: 60
+    
+    steps:
+    - checkout: self
+      fetchDepth: 1
+    
+    - download: current
+      artifact: python-base
+      displayName: 'Download Python base'
+    
+    - bash: |
+        set -e
+        
+        echo "=== Build Configuration ==="
+        echo "Architecture: ${{ parameters.Architecture }}"
+        echo "Python Base Signed: $(PythonIsSigned)"
+        echo "Python Binaries: $(PythonBinaryCount)"
+        echo ""
+        
+        # Detect Azure CLI version from source
+        if [ -n "${{ parameters.AzureCliVersion }}" ]; then
+          VERSION="${{ parameters.AzureCliVersion }}"
+        else
+          # Try multiple locations
+          VERSION=""
+          if [ -f "$(Build.SourcesDirectory)/src/azure-cli/azure/cli/__main__.py" ]; then
+            VERSION=$(grep -E "^__version__" "$(Build.SourcesDirectory)/src/azure-cli/azure/cli/__main__.py" | cut -d'"' -f2 || true)
+          fi
+          if [ -z "$VERSION" ] && [ -f "$(Build.SourcesDirectory)/src/azure-cli/setup.py" ]; then
+            VERSION=$(grep -E "version=" "$(Build.SourcesDirectory)/src/azure-cli/setup.py" | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1 || true)
+          fi
+          if [ -z "$VERSION" ]; then
+            VERSION="2.77.0"
+            echo "⚠️  Could not detect version, using default: $VERSION"
+          fi
+        fi
+        
+        echo "Azure CLI Version: $VERSION"
+        echo "##vso[task.setvariable variable=AzureCliVersion;isOutput=true]$VERSION"
+        
+        # Install dependencies
+        brew install openssl@3
+        
+      displayName: 'Setup build environment'
+      name: SetupStep
+    
+    - bash: |
+        set -e
+        
+        echo "=== Building Azure CLI Package ==="
+        
+        PYTHON_BASE="$(Pipeline.Workspace)/python-base/python-base.tar.gz"
+        OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/cli-build"
+        
+        mkdir -p "$OUTPUT_DIR"
+        
+        # Map architecture to platform-tag
+        PLATFORM_TAG="macos-${{ parameters.Architecture }}"
+        
+        # Use our v2 build script with pre-built Python base
+        # Note: Output goes to dist/binary_tar_gz_source/ by default
+        python3 scripts/release/macos/build_binary_tar_gz_v2.py \
+          --platform-tag "$PLATFORM_TAG" \
+          --python-base-url "file://$PYTHON_BASE"
+        
+        # Copy output to expected location
+        cp -v dist/binary_tar_gz_source/*.tar.gz "$OUTPUT_DIR/" 2>/dev/null || \
+          cp -v dist/binary_tar_gz_source/azure-cli-*.tar.gz "$OUTPUT_DIR/" || \
+          echo "Output should be in dist/binary_tar_gz_source/"
+        
+        echo ""
+        echo "=== Build Output ==="
+        ls -lh "$OUTPUT_DIR"/
+        
+        # Find the tarball
+        TARBALL=$(find "$OUTPUT_DIR" -name "azure-cli-*.tar.gz" | head -1)
+        echo "##vso[task.setvariable variable=TarballPath;isOutput=true]$TARBALL"
+        echo "##vso[task.setvariable variable=TarballName;isOutput=true]$(basename $TARBALL)"
+        
+      displayName: 'Build CLI package'
+      name: BuildStep
+    
+    - bash: |
+        set -e
+        
+        echo "=== Analyzing Binaries to Sign ==="
+        
+        TARBALL=$(find $(Build.ArtifactStagingDirectory)/cli-build -name "azure-cli-*.tar.gz" | head -1)
+        EXTRACT_DIR=$(mktemp -d)
+        
+        tar -xzf "$TARBALL" -C "$EXTRACT_DIR"
+        
+        # Find ALL Mach-O binaries
+        ALL_BINARIES="$(Build.ArtifactStagingDirectory)/all-binaries.txt"
+        CLI_ONLY_BINARIES="$(Build.ArtifactStagingDirectory)/cli-only-binaries.txt"
+        
+        find "$EXTRACT_DIR" -type f -exec file {} \; | \
+          grep -i "Mach-O" | \
+          cut -d: -f1 | \
+          sed "s|$EXTRACT_DIR/||" | \
+          sort -u > "$ALL_BINARIES"
+        
+        TOTAL_COUNT=$(wc -l < "$ALL_BINARIES")
+        echo "Total Mach-O binaries: $TOTAL_COUNT"
+        echo "##vso[task.setvariable variable=TotalBinaryCount;isOutput=true]$TOTAL_COUNT"
+        
+        # Categorize binaries
+        echo ""
+        echo "=== Binary Categories ==="
+        
+        # Python core (bin/python*, lib/libpython*)
+        PYTHON_CORE=$(grep -E "^(bin/python|lib/libpython|libexec/bin/python|libexec/lib/libpython)" "$ALL_BINARIES" | wc -l || echo "0")
+        echo "Python core binaries: $PYTHON_CORE"
+        
+        # Python stdlib (.so files in lib/python*/lib-dynload/)
+        PYTHON_STDLIB=$(grep -E "lib-dynload/.*\.so$" "$ALL_BINARIES" | wc -l || echo "0")
+        echo "Python stdlib modules: $PYTHON_STDLIB"
+        
+        # CLI extensions (site-packages/**/*.so)
+        CLI_EXTENSIONS=$(grep -E "site-packages/.*\.so$" "$ALL_BINARIES" | wc -l || echo "0")
+        echo "CLI extension modules: $CLI_EXTENSIONS"
+        
+        # If Python base is signed, only CLI extensions need signing
+        if [ "$(PythonIsSigned)" = "true" ]; then
+          echo ""
+          echo "✅ Python base is signed - only CLI extensions need signing"
+          grep -E "site-packages/.*\.so$" "$ALL_BINARIES" > "$CLI_ONLY_BINARIES" || touch "$CLI_ONLY_BINARIES"
+          CLI_TO_SIGN=$(wc -l < "$CLI_ONLY_BINARIES")
+          echo "Binaries to sign: $CLI_TO_SIGN"
+          echo "##vso[task.setvariable variable=BinariesToSign;isOutput=true]$CLI_TO_SIGN"
+        else
+          echo ""
+          echo "⚠️  Python base is unsigned - ALL binaries need signing"
+          cp "$ALL_BINARIES" "$CLI_ONLY_BINARIES"
+          echo "Binaries to sign: $TOTAL_COUNT"
+          echo "##vso[task.setvariable variable=BinariesToSign;isOutput=true]$TOTAL_COUNT"
+        fi
+        
+        echo ""
+        echo "=== Sample Binaries ==="
+        head -20 "$ALL_BINARIES"
+        
+        rm -rf "$EXTRACT_DIR"
+        
+      displayName: 'Analyze binaries for signing'
+      name: AnalyzeStep
+    
+    - publish: $(Build.ArtifactStagingDirectory)/cli-build
+      artifact: cli-build-unsigned
+      displayName: 'Publish unsigned CLI build'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/all-binaries.txt
+      artifact: all-binaries-list
+      displayName: 'Publish all binaries list'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/cli-only-binaries.txt
+      artifact: cli-only-binaries-list
+      displayName: 'Publish CLI-only binaries list'
+
+# ============================================================================
+# STAGE 3: VERIFY BUILD
+# ============================================================================
+- stage: VerifyBuild
+  displayName: 'Stage 3: Verify Build'
+  dependsOn: BuildAzureCli
+  variables:
+    AzureCliVersion: $[ stageDependencies.BuildAzureCli.BuildCli.outputs['SetupStep.AzureCliVersion'] ]
+  jobs:
+  - job: VerifyTarball
+    displayName: 'Verify tar.gz package'
+    pool:
+      vmImage: 'macOS-14'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: cli-build-unsigned
+      displayName: 'Download CLI build'
+    
+    - bash: |
+        set -e
+        
+        echo "=== Verifying Build ==="
+        
+        TARBALL=$(find "$(Pipeline.Workspace)/cli-build-unsigned" -name "azure-cli-*.tar.gz" | head -1)
+        TEST_DIR=$(mktemp -d)
+        
+        echo "Extracting: $(basename $TARBALL)"
+        tar -xzf "$TARBALL" -C "$TEST_DIR"
+        
+        echo ""
+        echo "=== Directory Structure ==="
+        ls -la "$TEST_DIR"
+        ls -la "$TEST_DIR/bin"
+        
+        echo ""
+        echo "=== Symlinks ==="
+        if [ -L "$TEST_DIR/bin/az" ]; then
+          echo "✅ bin/az is symlink: $(readlink $TEST_DIR/bin/az)"
+        else
+          echo "⚠️  bin/az is not a symlink"
+        fi
+        
+        if [ -L "$TEST_DIR/libexec/bin/python" ]; then
+          echo "✅ libexec/bin/python is symlink: $(readlink $TEST_DIR/libexec/bin/python)"
+        fi
+        
+        echo ""
+        echo "=== Testing az command ==="
+        export PATH="$TEST_DIR/bin:$PATH"
+        
+        # Test --version
+        az --version 2>&1 | head -10
+        
+        echo ""
+        echo "=== Testing --help ==="
+        az --help 2>&1 | head -5
+        
+        echo ""
+        echo "=== Size Summary ==="
+        echo "Compressed: $(ls -lh $TARBALL | awk '{print $5}')"
+        echo "Extracted: $(du -sh $TEST_DIR | cut -f1)"
+        
+        rm -rf "$TEST_DIR"
+        
+        echo ""
+        echo "✅ Build verification complete"
+        
+      displayName: 'Test az command'
+    
+    - bash: |
+        set -e
+        
+        echo "=== Relocatability Test ==="
+        
+        TARBALL=$(find "$(Pipeline.Workspace)/cli-build-unsigned" -name "azure-cli-*.tar.gz" | head -1)
+        
+        # Test 1: Original location
+        DIR1=$(mktemp -d)/azure-cli
+        mkdir -p "$DIR1"
+        tar -xzf "$TARBALL" -C "$DIR1"
+        
+        echo "Test 1: $DIR1"
+        "$DIR1/bin/az" --version 2>&1 | head -1
+        
+        # Test 2: Different location
+        DIR2=$(mktemp -d)/different-path/cli
+        mkdir -p "$DIR2"
+        tar -xzf "$TARBALL" -C "$DIR2"
+        
+        echo "Test 2: $DIR2"
+        "$DIR2/bin/az" --version 2>&1 | head -1
+        
+        # Test 3: Move directory
+        DIR3=$(mktemp -d)/moved-cli
+        mv "$DIR1" "$DIR3"
+        
+        echo "Test 3: $DIR3 (moved)"
+        "$DIR3/bin/az" --version 2>&1 | head -1
+        
+        echo ""
+        echo "✅ Relocatability test passed - az works from any location"
+        
+      displayName: 'Test relocatability'
+
+# ============================================================================
+# STAGE 4: SUMMARY
+# ============================================================================
+- stage: Summary
+  displayName: 'Stage 4: Build Summary'
+  dependsOn:
+  - DownloadPythonBase
+  - BuildAzureCli
+  - VerifyBuild
+  condition: always()
+  variables:
+    AzureCliVersion: $[ stageDependencies.BuildAzureCli.BuildCli.outputs['SetupStep.AzureCliVersion'] ]
+    TotalBinaryCount: $[ stageDependencies.BuildAzureCli.BuildCli.outputs['AnalyzeStep.TotalBinaryCount'] ]
+    BinariesToSign: $[ stageDependencies.BuildAzureCli.BuildCli.outputs['AnalyzeStep.BinariesToSign'] ]
+    PythonIsSigned: $[ stageDependencies.DownloadPythonBase.DownloadAndVerify.outputs['VerifyStep.PythonIsSigned'] ]
+  jobs:
+  - job: PrintSummary
+    displayName: 'Print Build Summary'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo "╔══════════════════════════════════════════════════════════════════════╗"
+        echo "║              AZURE CLI BUILD SUMMARY (v2)                            ║"
+        echo "╠══════════════════════════════════════════════════════════════════════╣"
+        echo "║ CLI Version:          $(AzureCliVersion)"
+        echo "║ Architecture:         ${{ parameters.Architecture }}"
+        echo "║ Python Base Signed:   $(PythonIsSigned)"
+        echo "╠══════════════════════════════════════════════════════════════════════╣"
+        echo "║ BINARY ANALYSIS:                                                     ║"
+        echo "║   Total binaries:     $(TotalBinaryCount)"
+        echo "║   Binaries to sign:   $(BinariesToSign)"
+        if [ "$(PythonIsSigned)" = "true" ]; then
+          echo "║   ✅ Python pre-signed - signing ~70% faster!                       ║"
+        else
+          echo "║   ⚠️  Python unsigned - full signing required                        ║"
+        fi
+        echo "╠══════════════════════════════════════════════════════════════════════╣"
+        echo "║ OUTPUT ARTIFACT:                                                     ║"
+        echo "║   cli-build-unsigned                                                 ║"
+        echo "╠══════════════════════════════════════════════════════════════════════╣"
+        echo "║ NEXT STEP:                                                           ║"
+        echo "║   Run macos-tarball-sign-notarize-v2.yml to sign and notarize        ║"
+        echo "║   Input: cli-build-unsigned artifact                                 ║"
+        echo "║   Uses: cli-only-binaries-list for optimized signing                 ║"
+        echo "╚══════════════════════════════════════════════════════════════════════╝"
+        
+      displayName: 'Print summary'
