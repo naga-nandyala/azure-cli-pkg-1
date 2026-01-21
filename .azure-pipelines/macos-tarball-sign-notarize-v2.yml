@@ -189,36 +189,56 @@ stages:
         set -e
         
         echo "=== Analyzing Binaries to Sign ==="
+        echo "Note: Python base was signed in Phase 1, only CLI extensions need signing"
+        echo ""
         
         TARBALL="$(Build.ArtifactStagingDirectory)/unsigned/unsigned.tar.gz"
         EXTRACT_DIR=$(mktemp -d)
         
         tar -xzf "$TARBALL" -C "$EXTRACT_DIR"
         
-        # Find all Mach-O binaries
-        BINARIES_LIST="$(Build.ArtifactStagingDirectory)/binaries-to-sign.txt"
-        
+        # Find all Mach-O binaries first (for summary)
+        # IMPORTANT: Filter out "(for architecture ...)" lines from universal binaries
+        # The 'file' command outputs extra lines for fat binaries which are NOT valid paths
+        ALL_BINARIES="$(Build.ArtifactStagingDirectory)/all-binaries.txt"
         find "$EXTRACT_DIR" -type f -exec file {} \; | \
           grep -i "Mach-O" | \
+          grep -v "(for architecture" | \
           cut -d: -f1 | \
           sed "s|$EXTRACT_DIR/||" | \
-          sort -u > "$BINARIES_LIST"
+          sort -u > "$ALL_BINARIES"
         
-        BINARY_COUNT=$(wc -l < "$BINARIES_LIST")
-        echo "Total Mach-O binaries: $BINARY_COUNT"
-        echo "##vso[task.setvariable variable=BinaryCount;isOutput=true]$BINARY_COUNT"
+        TOTAL_COUNT=$(wc -l < "$ALL_BINARIES")
+        echo "Total Mach-O binaries in tarball: $TOTAL_COUNT"
         
-        # Show categories
+        # Count by category
+        PYTHON_CORE=$(grep -cE '^(bin/python|libexec/bin/python|lib/libpython)' "$ALL_BINARIES" || echo 0)
+        STDLIB_MODULES=$(grep -cE 'lib-dynload.*\.so$' "$ALL_BINARIES" || echo 0)
+        CLI_EXTENSIONS=$(grep -cE 'site-packages.*\.so$' "$ALL_BINARIES" || echo 0)
+        DYLIBS=$(grep -cE '\.dylib$' "$ALL_BINARIES" || echo 0)
+        
         echo ""
         echo "=== Binary Categories ==="
-        echo "Python binaries: $(grep -cE '^(bin/python|libexec/bin/python|lib/libpython)' $BINARIES_LIST || echo 0)"
-        echo "Stdlib modules: $(grep -cE 'lib-dynload.*\.so$' $BINARIES_LIST || echo 0)"
-        echo "CLI extensions: $(grep -cE 'site-packages.*\.so$' $BINARIES_LIST || echo 0)"
-        echo "Dylibs: $(grep -cE '\.dylib$' $BINARIES_LIST || echo 0)"
+        echo "Python core binaries: $PYTHON_CORE"
+        echo "Stdlib modules (.so): $STDLIB_MODULES"
+        echo "CLI extension modules: $CLI_EXTENSIONS"
+        echo "Dynamic libraries:    $DYLIBS"
+        
+        # Copy all-binaries list to binaries-to-sign (sign ALL for notarization)
+        BINARIES_LIST="$(Build.ArtifactStagingDirectory)/binaries-to-sign.txt"
+        cp "$ALL_BINARIES" "$BINARIES_LIST"
+        
+        BINARY_COUNT=$(wc -l < "$BINARIES_LIST")
+        echo ""
+        echo "=== Binaries to Sign ===" 
+        echo "Total: $BINARY_COUNT"
+        echo "##vso[task.setvariable variable=BinaryCount;isOutput=true]$BINARY_COUNT"
         
         echo ""
-        echo "=== Sample Binaries ==="
         head -20 "$BINARIES_LIST"
+        if [ $BINARY_COUNT -gt 20 ]; then
+          echo "... and $((BINARY_COUNT - 20)) more"
+        fi
         
         # Keep extracted contents for signing
         mkdir -p $(Build.ArtifactStagingDirectory)/unsigned-contents
@@ -226,7 +246,7 @@ stages:
         
         rm -rf "$EXTRACT_DIR"
         
-      displayName: 'Analyze binaries'
+      displayName: 'Analyze and list all binaries'
       name: AnalyzeStep
     
     - publish: $(Build.ArtifactStagingDirectory)/unsigned
