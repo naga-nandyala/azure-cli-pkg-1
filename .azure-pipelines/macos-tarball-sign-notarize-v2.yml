@@ -52,7 +52,7 @@ parameters:
   - name: PublishToGitHub
     displayName: 'Publish to GitHub Release'
     type: boolean
-    default: false
+    default: true
   
   - name: GitHubRepo
     displayName: 'GitHub Repository (owner/repo)'
@@ -62,7 +62,7 @@ parameters:
   - name: UpdateHomebrew
     displayName: 'Update Homebrew formula after release'
     type: boolean
-    default: false
+    default: true
   
   - name: HomebrewTapRepo
     displayName: 'Homebrew Tap Repository'

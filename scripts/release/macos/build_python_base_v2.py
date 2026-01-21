@@ -315,6 +315,203 @@ def _make_python_relocatable(install_dir: Path, python_major_minor: str) -> None
         print("  ✅ Relocatability fixes applied")
 
 
+def _get_library_dependencies(binary_path: Path) -> list[str]:
+    """Get list of library dependencies for a binary using otool."""
+    try:
+        output = _run_output(["otool", "-L", str(binary_path)])
+        deps = []
+        for line in output.split("\n")[1:]:  # Skip first line (the binary itself)
+            line = line.strip()
+            if line and not line.startswith("@"):
+                # Extract path (before the compatibility version info)
+                path = line.split(" (")[0].strip()
+                if path:
+                    deps.append(path)
+        return deps
+    except Exception:
+        return []
+
+
+def _is_system_library(lib_path: str) -> bool:
+    """Check if a library is a system library that doesn't need bundling.
+
+    System libraries are signed by Apple and always available on macOS.
+    """
+    system_prefixes = [
+        "/usr/lib/",
+        "/System/Library/",
+        "/Library/Apple/",
+    ]
+    return any(lib_path.startswith(prefix) for prefix in system_prefixes)
+
+
+def _find_external_libraries(install_dir: Path) -> dict[str, set[Path]]:
+    """Scan all binaries and find external (non-system) library dependencies.
+
+    Returns:
+        Dict mapping external library paths to set of binaries that use them
+    """
+    print("  Scanning for external library dependencies...")
+
+    external_libs: dict[str, set[Path]] = {}
+
+    # Find all Mach-O binaries
+    binaries = []
+    for pattern in ["*.so", "*.dylib"]:
+        binaries.extend(install_dir.rglob(pattern))
+
+    # Also check executables in bin/
+    bin_dir = install_dir / "bin"
+    if bin_dir.exists():
+        for exe in bin_dir.iterdir():
+            if exe.is_file() and not exe.is_symlink():
+                # Check if it's a Mach-O binary
+                try:
+                    file_type = _run_output(["file", str(exe)])
+                    if "Mach-O" in file_type:
+                        binaries.append(exe)
+                except Exception:
+                    pass
+
+    for binary in binaries:
+        if binary.is_symlink():
+            continue
+
+        deps = _get_library_dependencies(binary)
+        for dep in deps:
+            if not _is_system_library(dep) and not dep.startswith("@"):
+                if dep not in external_libs:
+                    external_libs[dep] = set()
+                external_libs[dep].add(binary)
+
+    return external_libs
+
+
+def _bundle_external_libraries(install_dir: Path, python_major_minor: str) -> None:
+    """Dynamically detect and bundle all external (non-system) library dependencies.
+
+    This function:
+    1. Scans all .so and .dylib files for external dependencies
+    2. Copies external libraries (e.g., from Homebrew) into the package
+    3. Rewrites library paths to use @loader_path/@rpath for relocatability
+    4. Ad-hoc signs the bundled libraries
+
+    This ensures the package works with hardened runtime (required for notarization)
+    where library validation enforces Team ID matching.
+    """
+    print("Bundling external libraries...")
+
+    lib_dir = install_dir / "lib"
+
+    # Find all external dependencies
+    external_libs = _find_external_libraries(install_dir)
+
+    if not external_libs:
+        print("  No external libraries to bundle")
+        return
+
+    print(f"  Found {len(external_libs)} external libraries to bundle:")
+    for lib_path in sorted(external_libs.keys()):
+        lib_name = Path(lib_path).name
+        users = len(external_libs[lib_path])
+        print(f"    - {lib_name} (used by {users} binaries)")
+
+    # Copy libraries and track new locations
+    bundled_libs: dict[str, Path] = {}  # original_path -> new_path
+
+    for original_path in external_libs:
+        original = Path(original_path)
+        if not original.exists():
+            print(f"  ⚠️  Library not found: {original_path}")
+            continue
+
+        lib_name = original.name
+        new_path = lib_dir / lib_name
+
+        # Copy the library
+        print(f"  Copying: {lib_name}")
+        shutil.copy2(original, new_path)
+
+        # Make writable for install_name_tool
+        new_path.chmod(0o755)
+
+        bundled_libs[original_path] = new_path
+
+        # Change the library's own install name
+        new_id = f"@rpath/{lib_name}"
+        try:
+            _run(["install_name_tool", "-id", new_id, str(new_path)])
+        except BuildError as e:
+            print(f"  ⚠️  Could not set install name for {lib_name}: {e}")
+
+    # Now fix references in bundled libraries (they may depend on each other)
+    # Use @loader_path for inter-library references since they're in the same directory
+    # IMPORTANT: We need to scan the bundled libs for their actual internal references,
+    # which may differ from the paths found when scanning Python binaries
+    # (e.g., symlink path vs actual Cellar path in Homebrew)
+    print("  Fixing inter-library references...")
+
+    # Build a mapping of library names to their new @loader_path references
+    lib_name_to_loader_path: dict[str, str] = {}
+    for new_path in bundled_libs.values():
+        lib_name_to_loader_path[new_path.name] = f"@loader_path/{new_path.name}"
+
+    for lib_path in bundled_libs.values():
+        # Get actual dependencies from the bundled library itself
+        deps = _get_library_dependencies(lib_path)
+        for dep in deps:
+            dep_name = Path(dep).name
+            # If this dependency matches one of our bundled libraries, rewrite it
+            if dep_name in lib_name_to_loader_path:
+                try:
+                    _run(["install_name_tool", "-change", dep, lib_name_to_loader_path[dep_name], str(lib_path)])
+                except BuildError:
+                    pass
+
+    # Fix references in all binaries that use these libraries
+    print("  Fixing binary references...")
+    for original_path, users in external_libs.items():
+        if original_path not in bundled_libs:
+            continue
+
+        lib_name = bundled_libs[original_path].name
+
+        for binary in users:
+            # Calculate relative path from binary to lib/
+            try:
+                # For .so files in lib-dynload, path is ../../libname
+                if "lib-dynload" in str(binary):
+                    new_ref = f"@loader_path/../../{lib_name}"
+                # For executables in bin/, path is ../lib/libname
+                elif "/bin/" in str(binary):
+                    new_ref = f"@executable_path/../lib/{lib_name}"
+                else:
+                    # Default: use @rpath
+                    new_ref = f"@rpath/{lib_name}"
+
+                _run(["install_name_tool", "-change", original_path, new_ref, str(binary)])
+            except BuildError:
+                pass
+
+    # Add rpath to bundled libraries pointing to their own directory
+    print("  Adding rpath to bundled libraries...")
+    for lib_path in bundled_libs.values():
+        try:
+            _run(["install_name_tool", "-add_rpath", "@loader_path", str(lib_path)])
+        except BuildError:
+            pass
+
+    # Ad-hoc sign the bundled libraries
+    print("  Ad-hoc signing bundled libraries...")
+    for lib_path in bundled_libs.values():
+        try:
+            _run(["codesign", "--force", "--sign", "-", str(lib_path)])
+        except BuildError as e:
+            print(f"  ⚠️  Could not sign {lib_path.name}: {e}")
+
+    print(f"  ✅ Bundled {len(bundled_libs)} external libraries")
+
+
 def _install_pip(python_path: Path) -> None:
     """Install pip using get-pip.py."""
     print("Installing pip...")
@@ -460,28 +657,32 @@ def build_python_base(*, platform_tag: str, python_version: str, output_dir: Pat
         print("\n6. Making Python relocatable...")
         _make_python_relocatable(install_dir, python_major_minor)
 
-        # Step 7: Install pip
-        print("\n7. Installing pip...")
+        # Step 7: Bundle external libraries (e.g., OpenSSL, mpdecimal, xz)
+        print("\n7. Bundling external libraries...")
+        _bundle_external_libraries(install_dir, python_major_minor)
+
+        # Step 8: Install pip
+        print("\n8. Installing pip...")
         python_path = install_dir / "bin" / "python3"
         _install_pip(python_path)
 
-        # Step 8: Prune bytecode
-        print("\n8. Pruning bytecode...")
+        # Step 9: Prune bytecode
+        print("\n9. Pruning bytecode...")
         _prune_bytecode(install_dir)
 
-        # Step 9: Create metadata
-        print("\n9. Creating metadata...")
+        # Step 10: Create metadata
+        print("\n10. Creating metadata...")
         _create_metadata_file(install_dir, python_version, arch)
 
         # Calculate size
         final_size = sum(f.stat().st_size for f in install_dir.rglob("*") if f.is_file())
         print(f"  Final size: {final_size / (1024*1024):.1f} MB")
 
-        # Step 10: Create tarball
-        print("\n10. Creating tarball...")
+        # Step 11: Create tarball
+        print("\n11. Creating tarball...")
         archive_path = _create_base_tarball(install_dir, python_version, arch, output_dir)
 
-        # Step 11: Generate checksum
+        # Step 12: Generate checksum
         checksum_path = _emit_sha256(archive_path)
 
     # Print summary
@@ -496,15 +697,19 @@ def build_python_base(*, platform_tag: str, python_version: str, output_dir: Pat
     print()
     print("Contents:")
     print("  - Python runtime (PGO + LTO optimized)")
-    print("  - Relocatable paths (@executable_path)")
+    print("  - Relocatable paths (@executable_path, @loader_path)")
+    print("  - Bundled external libraries (OpenSSL, mpdecimal, xz, etc.)")
     print("  - pip pre-installed")
     print("  - NO Azure CLI (add during packaging)")
+    print()
+    print("Note: All external libraries are bundled and paths rewritten.")
+    print("      This ensures compatibility with hardened runtime (notarization).")
     print()
     print("Upload to storage:")
     print(f"  az storage blob upload -f {archive_path} -c python-base -n {archive_path.name}")
     print()
     print("Use in Azure CLI build:")
-    print(f"  python build_binary_tar_gz_python_source.py \\")
+    print("  python build_binary_tar_gz_python_source.py \\")
     print(f"    --platform-tag {platform_tag} \\")
     print(f"    --python-base-url https://your-storage.blob.core.windows.net/python-base/{archive_path.name}")
     print("=" * 70)
