@@ -212,6 +212,7 @@ stages:
     displayName: 'Sign Python binaries with ESRP ($(BinaryCount) binaries)'
     pool:
       vmImage: 'windows-latest'
+    timeoutInMinutes: 90
     
     steps:
     - checkout: none
@@ -351,6 +352,114 @@ stages:
       displayName: 'Publish signed binaries'
 
 # ============================================================================
+# STAGE 2.5: CREATE SIGNED-ONLY TAR.GZ (NO NOTARIZATION)
+# ============================================================================
+- stage: CreateSignedOnlyTarball
+  displayName: 'Stage 2.5: Create Signed-Only Tar.gz'
+  dependsOn:
+  - BuildPythonBase
+  - SignPythonBinaries
+  condition: and(succeeded(), eq('${{ parameters.SignAndNotarize }}', true))
+  variables:
+    PythonVersion: $[ stageDependencies.BuildPythonBase.BuildPython.outputs['BuildStep.PythonVersion'] ]
+  jobs:
+  - job: CreateSignedOnlyTarball
+    displayName: 'Create signed-only tar.gz (no notarization)'
+    pool:
+      ${{ if eq(parameters.Architecture, 'arm64') }}:
+        vmImage: 'macos-15-arm64'
+      ${{ else }}:
+        vmImage: 'macos-15'
+    timeoutInMinutes: 30
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: python-base-unsigned
+      displayName: 'Download unsigned base (for structure)'
+    
+    - download: current
+      artifact: python-signed-binaries
+      displayName: 'Download signed binaries'
+    
+    - bash: |
+        set -e
+        
+        VERSION="${{ parameters.PythonVersion }}"
+        ARCH="${{ parameters.Architecture }}"
+        
+        echo "=== Creating Signed-Only Tar.gz (NO Notarization) ==="
+        echo "Python Version: $VERSION"
+        echo "Architecture: $ARCH"
+        echo ""
+        echo "NOTE: This tarball contains code-signed binaries but is NOT notarized."
+        echo "      Use this for faster builds or if notarization times out."
+        echo "      Binaries will work but may show first-run Gatekeeper prompts."
+        echo ""
+        
+        # Extract original (preserves symlinks)
+        TARBALL=$(find "$(Pipeline.Workspace)/python-base-unsigned" -name "*.tar.gz" | head -1)
+        FINAL_DIR="$(Build.ArtifactStagingDirectory)/python-signed-only"
+        OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/output"
+        
+        mkdir -p "$FINAL_DIR" "$OUTPUT_DIR"
+        tar -xzf "$TARBALL" -C "$FINAL_DIR"
+        
+        echo "Extracted original structure with symlinks"
+        
+        # Overlay signed binaries
+        SIGNED_DIR="$(Pipeline.Workspace)/python-signed-binaries"
+        
+        cd "$SIGNED_DIR"
+        REPLACED=0
+        for signed_file in $(find . -type f); do
+          REL_PATH="${signed_file#./}"
+          TARGET="$FINAL_DIR/$REL_PATH"
+          
+          if [ -f "$TARGET" ] && [ ! -L "$TARGET" ]; then
+            cp "$signed_file" "$TARGET"
+            REPLACED=$((REPLACED + 1))
+          fi
+        done
+        
+        echo "Replaced $REPLACED binaries with signed versions"
+        
+        # Create final tarball
+        TARBALL_NAME="python-${VERSION}-macos-${ARCH}-signed-only.tar.gz"
+        cd "$FINAL_DIR"
+        tar -czf "$OUTPUT_DIR/$TARBALL_NAME" .
+        
+        # Create SHA256
+        cd "$OUTPUT_DIR"
+        shasum -a 256 "$TARBALL_NAME" > "${TARBALL_NAME}.sha256"
+        
+        echo ""
+        echo "=== Signed-Only Tarball Created ==="
+        ls -lh "$OUTPUT_DIR"
+        cat "${TARBALL_NAME}.sha256"
+        
+        # Verify signature
+        echo ""
+        echo "=== Verifying Code Signature ==="
+        TEST_DIR=$(mktemp -d)
+        tar -xzf "$OUTPUT_DIR/$TARBALL_NAME" -C "$TEST_DIR"
+        
+        PYTHON_BIN=$(find "$TEST_DIR" -name "python3" -type f | head -1)
+        if [ -n "$PYTHON_BIN" ]; then
+          codesign -v "$PYTHON_BIN" && echo "✅ Code Signature VALID" || echo "❌ Signature INVALID"
+          codesign -dvv "$PYTHON_BIN" 2>&1 | grep -E "Authority|TeamIdentifier" || true
+        fi
+        
+        rm -rf "$TEST_DIR"
+        
+      displayName: 'Create signed-only tar.gz'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/output
+      artifact: python-base-signed-only
+      displayName: 'Publish signed-only Python base'
+
+# ============================================================================
 # STAGE 3: NOTARIZE WITH APPLE (ESRP)
 # ============================================================================
 - stage: NotarizeWithApple
@@ -367,6 +476,7 @@ stages:
         vmImage: 'macos-15-arm64'
       ${{ else }}:
         vmImage: 'macos-15'
+    timeoutInMinutes: 30
     
     steps:
     - checkout: none
@@ -441,6 +551,7 @@ stages:
     dependsOn: CreateNotarizationBundle
     pool:
       vmImage: 'windows-latest'
+    timeoutInMinutes: 120
     
     steps:
     - checkout: none
@@ -526,6 +637,7 @@ stages:
         vmImage: 'macos-15-arm64'
       ${{ else }}:
         vmImage: 'macos-15'
+    timeoutInMinutes: 30
     
     steps:
     - checkout: none
