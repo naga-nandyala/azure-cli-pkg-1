@@ -387,14 +387,43 @@ def _find_external_libraries(install_dir: Path) -> dict[str, set[Path]]:
     return external_libs
 
 
+def _copy_library_symlinks(source_dir: Path, dest_dir: Path, lib_name: str) -> None:
+    """Copy symlinks that point to the given library.
+
+    Homebrew often has symlink chains like:
+        libcrypto.dylib -> libcrypto.3.dylib -> libcrypto.3.6.0.dylib
+
+    We need to preserve these so binaries referencing any name will work.
+    """
+    # Find all symlinks in the source directory that ultimately resolve to a file
+    # with the same base name pattern
+    base_name = lib_name.split('.')[0]  # e.g., "libcrypto" from "libcrypto.3.dylib"
+
+    for item in source_dir.iterdir():
+        if item.is_symlink() and item.name.startswith(base_name):
+            target = os.readlink(item)
+            dest_link = dest_dir / item.name
+
+            # Only create if it doesn't exist and target is a relative name
+            if not dest_link.exists() and not target.startswith('/'):
+                # Check if target exists in dest_dir (we may have copied it)
+                if (dest_dir / target).exists() or (dest_dir / Path(target).name).exists():
+                    try:
+                        dest_link.symlink_to(target)
+                        print(f"    Created symlink: {item.name} -> {target}")
+                    except OSError:
+                        pass  # Symlink already exists or can't be created
+
+
 def _bundle_external_libraries(install_dir: Path, python_major_minor: str) -> None:
     """Dynamically detect and bundle all external (non-system) library dependencies.
 
     This function:
     1. Scans all .so and .dylib files for external dependencies
     2. Copies external libraries (e.g., from Homebrew) into the package
-    3. Rewrites library paths to use @loader_path/@rpath for relocatability
-    4. Ad-hoc signs the bundled libraries
+    3. Preserves symlink chains for library compatibility
+    4. Rewrites library paths to use @loader_path/@rpath for relocatability
+    5. Ad-hoc signs the bundled libraries
 
     This ensures the package works with hardened runtime (required for notarization)
     where library validation enforces Team ID matching.
@@ -422,15 +451,20 @@ def _bundle_external_libraries(install_dir: Path, python_major_minor: str) -> No
     for original_path in external_libs:
         original = Path(original_path)
         if not original.exists():
-            print(f"  ⚠️  Library not found: {original_path}")
-            continue
+            raise BuildError(f"External library not found: {original_path}. Cannot create relocatable build.")
 
+        # Resolve the library to get the real file (follow symlinks)
+        real_lib = original.resolve()
         lib_name = original.name
         new_path = lib_dir / lib_name
 
-        # Copy the library
+        # Copy the library (the real file)
         print(f"  Copying: {lib_name}")
-        shutil.copy2(original, new_path)
+        shutil.copy2(real_lib, new_path)
+
+        # Also create any symlinks that exist in the source directory
+        # This handles Homebrew's symlink chains (e.g., libcrypto.dylib -> libcrypto.3.dylib)
+        _copy_library_symlinks(original.parent, lib_dir, lib_name)
 
         # Make writable for install_name_tool
         new_path.chmod(0o755)
@@ -563,6 +597,73 @@ BUILD_TYPE=base
     print(f"Created metadata: {metadata_path}")
 
 
+def _validate_relocatability(install_dir: Path) -> None:
+    """Validate that all binaries are relocatable (pre-signing integrity gate).
+
+    This function ensures:
+    1. No absolute paths to external locations (e.g., /opt/homebrew, /usr/local)
+    2. All dependencies use @rpath, @loader_path, @executable_path, or system libs
+    3. Build will fail early if issues are found (before signing/notarization)
+
+    Raises:
+        BuildError: If any binary has invalid dependencies
+    """
+    print("  Checking all binaries for external dependencies...")
+
+    errors: list[str] = []
+    checked_count = 0
+
+    # Find all Mach-O binaries
+    binaries: list[Path] = []
+    for pattern in ["*.so", "*.dylib"]:
+        binaries.extend(install_dir.rglob(pattern))
+
+    # Also check executables in bin/
+    bin_dir = install_dir / "bin"
+    if bin_dir.exists():
+        for exe in bin_dir.iterdir():
+            if exe.is_file() and not exe.is_symlink():
+                try:
+                    file_type = _run_output(["file", str(exe)])
+                    if "Mach-O" in file_type:
+                        binaries.append(exe)
+                except Exception:
+                    pass
+
+    for binary in binaries:
+        if binary.is_symlink():
+            continue
+
+        checked_count += 1
+        deps = _get_library_dependencies(binary)
+
+        for dep in deps:
+            # Valid dependencies:
+            # - @rpath, @loader_path, @executable_path (relocatable)
+            # - /usr/lib/, /System/Library/ (system libraries)
+            if dep.startswith("@"):
+                continue  # Relocatable reference
+            if _is_system_library(dep):
+                continue  # System library
+
+            # Invalid: absolute path to external location
+            relative_binary = binary.relative_to(install_dir)
+            errors.append(f"{relative_binary}: {dep}")
+
+    if errors:
+        print(f"  ❌ Found {len(errors)} invalid dependencies:")
+        for error in errors[:10]:  # Show first 10
+            print(f"      {error}")
+        if len(errors) > 10:
+            print(f"      ... and {len(errors) - 10} more")
+        raise BuildError(
+            f"Relocatability validation failed: {len(errors)} binaries have external dependencies. "
+            "All dependencies must use @rpath/@loader_path or be system libraries."
+        )
+
+    print(f"  ✅ Validated {checked_count} binaries - all dependencies are relocatable")
+
+
 def _create_base_tarball(
     install_dir: Path,
     version: str,
@@ -683,15 +784,19 @@ def build_python_base(*, platform_tag: str, python_version: str, output_dir: Pat
         print("\n10. Creating metadata...")
         _create_metadata_file(install_dir, python_version, arch)
 
+        # Step 11: Validate relocatability (pre-signing integrity gate)
+        print("\n11. Validating relocatability...")
+        _validate_relocatability(install_dir)
+
         # Calculate size
         final_size = sum(f.stat().st_size for f in install_dir.rglob("*") if f.is_file())
         print(f"  Final size: {final_size / (1024*1024):.1f} MB")
 
-        # Step 11: Create tarball
-        print("\n11. Creating tarball...")
+        # Step 12: Create tarball
+        print("\n12. Creating tarball...")
         archive_path = _create_base_tarball(install_dir, python_version, arch, output_dir)
 
-        # Step 12: Generate checksum
+        # Step 13: Generate checksum
         checksum_path = _emit_sha256(archive_path)
 
     # Print summary
