@@ -469,13 +469,9 @@ def _bundle_external_libraries(install_dir: Path, python_major_minor: str) -> No
         # Make writable for install_name_tool
         new_path.chmod(0o755)
 
-        # Remove any existing code signature before modifying
-        # This is critical: Homebrew libraries are signed, and install_name_tool
-        # will corrupt the signature. We must remove it, modify, then re-sign.
-        try:
-            _run(["codesign", "--remove-signature", str(new_path)])
-        except BuildError:
-            pass  # Library may not have been signed
+        # Note: We don't remove the existing signature here. install_name_tool will
+        # invalidate the signature when it modifies the binary, and we'll ad-hoc sign
+        # at the end. ESRP will then re-sign with the proper Microsoft certificate.
 
         bundled_libs[original_path] = new_path
 
@@ -484,7 +480,7 @@ def _bundle_external_libraries(install_dir: Path, python_major_minor: str) -> No
         try:
             _run(["install_name_tool", "-id", new_id, str(new_path)])
         except BuildError as e:
-            print(f"  ⚠️  Could not set install name for {lib_name}: {e}")
+            raise BuildError(f"Failed to set install name for {lib_name}: {e}")
 
     # Now fix references in bundled libraries (they may depend on each other)
     # Use @loader_path for inter-library references since they're in the same directory
