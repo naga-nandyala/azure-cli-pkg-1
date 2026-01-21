@@ -37,11 +37,6 @@ parameters:
     - python-base-signed-only        # Signed but not notarized
     - python-base-unsigned           # Unsigned (requires full signing)
   
-  - name: AzureCliVersion
-    displayName: 'Azure CLI Version (leave empty to detect from source)'
-    type: string
-    default: ''
-  
   - name: Architecture
     displayName: 'Architecture'
     type: string
@@ -255,27 +250,6 @@ stages:
         echo "Python Binaries: $(PythonBinaryCount)"
         echo ""
         
-        # Detect Azure CLI version from source
-        if [ -n "${{ parameters.AzureCliVersion }}" ]; then
-          VERSION="${{ parameters.AzureCliVersion }}"
-        else
-          # Try multiple locations
-          VERSION=""
-          if [ -f "$(Build.SourcesDirectory)/src/azure-cli/azure/cli/__main__.py" ]; then
-            VERSION=$(grep -E "^__version__" "$(Build.SourcesDirectory)/src/azure-cli/azure/cli/__main__.py" | cut -d'"' -f2 || true)
-          fi
-          if [ -z "$VERSION" ] && [ -f "$(Build.SourcesDirectory)/src/azure-cli/setup.py" ]; then
-            VERSION=$(grep -E "version=" "$(Build.SourcesDirectory)/src/azure-cli/setup.py" | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1 || true)
-          fi
-          if [ -z "$VERSION" ]; then
-            VERSION="2.77.0"
-            echo "⚠️  Could not detect version, using default: $VERSION"
-          fi
-        fi
-        
-        echo "Azure CLI Version: $VERSION"
-        echo "##vso[task.setvariable variable=AzureCliVersion;isOutput=true]$VERSION"
-        
         # Install dependencies
         brew install openssl@3
         
@@ -310,10 +284,20 @@ stages:
         echo "=== Build Output ==="
         ls -lh "$OUTPUT_DIR"/
         
-        # Find the tarball
+        # Find the tarball and extract version from filename
         TARBALL=$(find "$OUTPUT_DIR" -name "azure-cli-*.tar.gz" | head -1)
+        TARBALL_NAME=$(basename "$TARBALL")
+        
+        # Extract version from tarball name (e.g., azure-cli-2.68.0-macos-arm64.tar.gz)
+        VERSION=$(echo "$TARBALL_NAME" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        if [ -z "$VERSION" ]; then
+          VERSION="unknown"
+        fi
+        
+        echo "Detected Azure CLI Version: $VERSION"
         echo "##vso[task.setvariable variable=TarballPath;isOutput=true]$TARBALL"
-        echo "##vso[task.setvariable variable=TarballName;isOutput=true]$(basename $TARBALL)"
+        echo "##vso[task.setvariable variable=TarballName;isOutput=true]$TARBALL_NAME"
+        echo "##vso[task.setvariable variable=AzureCliVersion;isOutput=true]$VERSION"
         
       displayName: 'Build CLI package'
       name: BuildStep
@@ -402,7 +386,7 @@ stages:
   displayName: 'Stage 3: Verify Build'
   dependsOn: BuildAzureCli
   variables:
-    AzureCliVersion: $[ stageDependencies.BuildAzureCli.BuildCli.outputs['SetupStep.AzureCliVersion'] ]
+    AzureCliVersion: $[ stageDependencies.BuildAzureCli.BuildCli.outputs['BuildStep.AzureCliVersion'] ]
   jobs:
   - job: VerifyTarball
     displayName: 'Verify tar.gz package'
@@ -516,7 +500,7 @@ stages:
   - VerifyBuild
   condition: always()
   variables:
-    AzureCliVersion: $[ stageDependencies.BuildAzureCli.BuildCli.outputs['SetupStep.AzureCliVersion'] ]
+    AzureCliVersion: $[ stageDependencies.BuildAzureCli.BuildCli.outputs['BuildStep.AzureCliVersion'] ]
     TotalBinaryCount: $[ stageDependencies.BuildAzureCli.BuildCli.outputs['AnalyzeStep.TotalBinaryCount'] ]
     BinariesToSign: $[ stageDependencies.BuildAzureCli.BuildCli.outputs['AnalyzeStep.BinariesToSign'] ]
     PythonIsSigned: $[ stageDependencies.DownloadPythonBase.DownloadAndVerify.outputs['VerifyStep.PythonIsSigned'] ]
