@@ -98,7 +98,10 @@ stages:
   - job: DownloadAndVerify
     displayName: 'Download and Verify Python Base'
     pool:
-      vmImage: 'macOS-14'
+      ${{ if eq(parameters.Architecture, 'arm64') }}:
+        vmImage: 'macos-15-arm64'
+      ${{ else }}:
+        vmImage: 'macos-15'
     
     steps:
     - checkout: self
@@ -195,7 +198,10 @@ stages:
   - job: BuildCli
     displayName: 'Build Azure CLI (Python $(PythonBinaryCount) binaries)'
     pool:
-      vmImage: 'macOS-14'
+      ${{ if eq(parameters.Architecture, 'arm64') }}:
+        vmImage: 'macos-15-arm64'
+      ${{ else }}:
+        vmImage: 'macos-15'
     timeoutInMinutes: 60
     
     steps:
@@ -367,7 +373,10 @@ stages:
   - job: VerifyTarball
     displayName: 'Verify tar.gz package'
     pool:
-      vmImage: 'macOS-14'
+      ${{ if eq(parameters.Architecture, 'arm64') }}:
+        vmImage: 'macos-15-arm64'
+      ${{ else }}:
+        vmImage: 'macos-15'
     
     steps:
     - checkout: none

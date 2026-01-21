@@ -101,7 +101,10 @@ stages:
   - job: BuildPython
     displayName: 'Build Python ${{ parameters.PythonVersion }} (${{ parameters.Architecture }})'
     pool:
-      vmImage: 'macOS-14'
+      ${{ if eq(parameters.Architecture, 'arm64') }}:
+        vmImage: 'macos-15-arm64'
+      ${{ else }}:
+        vmImage: 'macos-15'
     timeoutInMinutes: 120
     
     steps:
@@ -360,7 +363,10 @@ stages:
   - job: CreateNotarizationBundle
     displayName: 'Create ZIP bundle for notarization'
     pool:
-      vmImage: 'macOS-14'
+      ${{ if eq(parameters.Architecture, 'arm64') }}:
+        vmImage: 'macos-15-arm64'
+      ${{ else }}:
+        vmImage: 'macos-15'
     
     steps:
     - checkout: none
@@ -516,7 +522,10 @@ stages:
   - job: CreateSignedTarball
     displayName: 'Create signed+notarized tar.gz'
     pool:
-      vmImage: 'macOS-14'
+      ${{ if eq(parameters.Architecture, 'arm64') }}:
+        vmImage: 'macos-15-arm64'
+      ${{ else }}:
+        vmImage: 'macos-15'
     
     steps:
     - checkout: none
@@ -616,7 +625,10 @@ stages:
   - job: PublishUnsignedTarball
     displayName: 'Publish unsigned Python base'
     pool:
-      vmImage: 'macOS-14'
+      ${{ if eq(parameters.Architecture, 'arm64') }}:
+        vmImage: 'macos-15-arm64'
+      ${{ else }}:
+        vmImage: 'macos-15'
     
     steps:
     - checkout: none

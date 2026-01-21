@@ -117,7 +117,10 @@ stages:
   - job: DownloadAndAnalyze
     displayName: 'Download unsigned tar.gz and analyze binaries'
     pool:
-      vmImage: 'macOS-14'
+      ${{ if eq(parameters.Architecture, 'arm64') }}:
+        vmImage: 'macos-15-arm64'
+      ${{ else }}:
+        vmImage: 'macos-15'
     
     steps:
     - checkout: none
@@ -383,7 +386,10 @@ stages:
   - job: MergeAndBundle
     displayName: 'Merge signed binaries and create ZIP bundle'
     pool:
-      vmImage: 'macOS-14'
+      ${{ if eq(parameters.Architecture, 'arm64') }}:
+        vmImage: 'macos-15-arm64'
+      ${{ else }}:
+        vmImage: 'macos-15'
     
     steps:
     - checkout: none
@@ -592,7 +598,10 @@ stages:
   - job: CreateFinal
     displayName: 'Create final signed+notarized tar.gz'
     pool:
-      vmImage: 'macOS-14'
+      ${{ if eq(parameters.Architecture, 'arm64') }}:
+        vmImage: 'macos-15-arm64'
+      ${{ else }}:
+        vmImage: 'macos-15'
     
     steps:
     - checkout: none
