@@ -2,11 +2,14 @@
 # 
 # Phase 3: Sign and Notarize CLI Package
 # 
-# This pipeline takes an unsigned CLI tar.gz and:
+# This pipeline takes an unsigned CLI tar.gz from macos-tarball-build-v2 and:
 # 1. Signs all Mach-O binaries with ESRP (Developer ID Application)
 # 2. Creates a ZIP bundle of signed binaries
 # 3. Submits to Apple for notarization via ESRP
 # 4. Repackages as final signed+notarized tar.gz
+#
+# Input: Unsigned CLI tarball artifact from Build ID (default: 292543)
+#   - cli-build-unsigned artifact from macos-tarball-build-v2 pipeline
 #
 # Workflow:
 # ┌─────────────┐    ┌──────────────┐    ┌─────────────────┐    ┌──────────────┐
@@ -23,15 +26,15 @@
 trigger: none
 
 parameters:
-  - name: UnsignedTarballUrl
-    displayName: 'URL to Unsigned CLI tar.gz'
+  - name: TarballBuildId
+    displayName: 'CLI Tarball Build ID (from macos-tarball-build-v2 pipeline)'
     type: string
-    default: 'https://github.com/naga-nandyala/azure-cli-pkg-1/releases/download/v2.77.0-unsigned/azure-cli-2.77.0-macos-arm64.tar.gz'
+    default: '292543'
   
-  - name: BinariesToSignUrl
-    displayName: 'URL to binaries-to-sign list (optional - signs all if empty)'
+  - name: TarballArtifact
+    displayName: 'Tarball Artifact Name'
     type: string
-    default: ''
+    default: 'cli-build-unsigned'
   
   - name: Architecture
     displayName: 'Architecture'
@@ -123,39 +126,63 @@ stages:
         vmImage: 'macos-15'
     
     steps:
-    - checkout: none
+    - checkout: self
+      fetchDepth: 1
+    
+    # Download from Tarball Build pipeline artifacts (Build 292543)
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download from Tarball Build Pipeline (Build ${{ parameters.TarballBuildId }})'
+      inputs:
+        buildType: 'specific'
+        project: 'release'
+        definition: 'macos-tarball-build-v2'
+        buildVersionToDownload: 'specific'
+        buildId: ${{ parameters.TarballBuildId }}
+        artifactName: '${{ parameters.TarballArtifact }}'
+        targetPath: '$(Pipeline.Workspace)/tarball-download'
     
     - bash: |
         set -e
         
-        echo "=== Downloading Unsigned Tar.gz ==="
-        URL="${{ parameters.UnsignedTarballUrl }}"
+        echo "=== Unsigned Tarball from Pipeline Artifacts ==="
+        echo "Build ID: ${{ parameters.TarballBuildId }}"
+        echo "Artifact: ${{ parameters.TarballArtifact }}"
+        echo ""
+        
+        echo "=== Downloaded Files ==="
+        ls -lh $(Pipeline.Workspace)/tarball-download/
+        echo ""
         
         mkdir -p $(Build.ArtifactStagingDirectory)/unsigned
         
-        # Handle file:// URLs
-        if [[ "$URL" == file://* ]]; then
-          LOCAL_PATH="${URL#file://}"
-          cp "$LOCAL_PATH" $(Build.ArtifactStagingDirectory)/unsigned/unsigned.tar.gz
-          echo "Copied from: $LOCAL_PATH"
-        else
-          curl -L -o $(Build.ArtifactStagingDirectory)/unsigned/unsigned.tar.gz "$URL"
-          echo "Downloaded from: $URL"
+        # Find the tarball in the downloaded artifact
+        TARBALL=$(find $(Pipeline.Workspace)/tarball-download -name "azure-cli-*.tar.gz" | head -1)
+        
+        if [ -z "$TARBALL" ]; then
+          echo "❌ ERROR: No azure-cli-*.tar.gz found in artifact"
+          find $(Pipeline.Workspace)/tarball-download -type f
+          exit 1
         fi
         
-        ls -lh $(Build.ArtifactStagingDirectory)/unsigned/
+        echo "✅ Found: $TARBALL"
+        TARBALL_NAME=$(basename "$TARBALL")
+        echo "   Name: $TARBALL_NAME"
+        echo "   Size: $(du -h "$TARBALL" | cut -f1)"
         
-        # Detect version
-        FILENAME=$(basename "$URL")
-        VERSION=$(echo "$FILENAME" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        cp "$TARBALL" $(Build.ArtifactStagingDirectory)/unsigned/unsigned.tar.gz
+        
+        # Extract version from tarball name (e.g., azure-cli-2.68.0-macos-arm64.tar.gz)
+        VERSION=$(echo "$TARBALL_NAME" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
         if [ -z "$VERSION" ]; then
-          VERSION="2.77.0"
+          VERSION="unknown"
         fi
         
+        echo ""
         echo "Detected version: $VERSION"
         echo "##vso[task.setvariable variable=AzureCliVersion;isOutput=true]$VERSION"
+        echo "##vso[task.setvariable variable=TarballName;isOutput=true]$TARBALL_NAME"
         
-      displayName: 'Download unsigned tar.gz'
+      displayName: 'Prepare tarball from pipeline artifacts'
       name: DownloadStep
     
     - bash: |

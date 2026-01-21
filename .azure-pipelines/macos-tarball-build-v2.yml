@@ -302,82 +302,9 @@ stages:
       displayName: 'Build CLI package'
       name: BuildStep
     
-    - bash: |
-        set -e
-        
-        echo "=== Analyzing Binaries to Sign ==="
-        
-        TARBALL=$(find $(Build.ArtifactStagingDirectory)/cli-build -name "azure-cli-*.tar.gz" | head -1)
-        EXTRACT_DIR=$(mktemp -d)
-        
-        tar -xzf "$TARBALL" -C "$EXTRACT_DIR"
-        
-        # Find ALL Mach-O binaries
-        ALL_BINARIES="$(Build.ArtifactStagingDirectory)/all-binaries.txt"
-        CLI_ONLY_BINARIES="$(Build.ArtifactStagingDirectory)/cli-only-binaries.txt"
-        
-        find "$EXTRACT_DIR" -type f -exec file {} \; | \
-          grep -i "Mach-O" | \
-          cut -d: -f1 | \
-          sed "s|$EXTRACT_DIR/||" | \
-          sort -u > "$ALL_BINARIES"
-        
-        TOTAL_COUNT=$(wc -l < "$ALL_BINARIES")
-        echo "Total Mach-O binaries: $TOTAL_COUNT"
-        echo "##vso[task.setvariable variable=TotalBinaryCount;isOutput=true]$TOTAL_COUNT"
-        
-        # Categorize binaries
-        echo ""
-        echo "=== Binary Categories ==="
-        
-        # Python core (bin/python*, lib/libpython*)
-        PYTHON_CORE=$(grep -E "^(bin/python|lib/libpython|libexec/bin/python|libexec/lib/libpython)" "$ALL_BINARIES" | wc -l || echo "0")
-        echo "Python core binaries: $PYTHON_CORE"
-        
-        # Python stdlib (.so files in lib/python*/lib-dynload/)
-        PYTHON_STDLIB=$(grep -E "lib-dynload/.*\.so$" "$ALL_BINARIES" | wc -l || echo "0")
-        echo "Python stdlib modules: $PYTHON_STDLIB"
-        
-        # CLI extensions (site-packages/**/*.so)
-        CLI_EXTENSIONS=$(grep -E "site-packages/.*\.so$" "$ALL_BINARIES" | wc -l || echo "0")
-        echo "CLI extension modules: $CLI_EXTENSIONS"
-        
-        # If Python base is signed, only CLI extensions need signing
-        if [ "$(PythonIsSigned)" = "true" ]; then
-          echo ""
-          echo "✅ Python base is signed - only CLI extensions need signing"
-          grep -E "site-packages/.*\.so$" "$ALL_BINARIES" > "$CLI_ONLY_BINARIES" || touch "$CLI_ONLY_BINARIES"
-          CLI_TO_SIGN=$(wc -l < "$CLI_ONLY_BINARIES")
-          echo "Binaries to sign: $CLI_TO_SIGN"
-          echo "##vso[task.setvariable variable=BinariesToSign;isOutput=true]$CLI_TO_SIGN"
-        else
-          echo ""
-          echo "⚠️  Python base is unsigned - ALL binaries need signing"
-          cp "$ALL_BINARIES" "$CLI_ONLY_BINARIES"
-          echo "Binaries to sign: $TOTAL_COUNT"
-          echo "##vso[task.setvariable variable=BinariesToSign;isOutput=true]$TOTAL_COUNT"
-        fi
-        
-        echo ""
-        echo "=== Sample Binaries ==="
-        head -20 "$ALL_BINARIES"
-        
-        rm -rf "$EXTRACT_DIR"
-        
-      displayName: 'Analyze binaries for signing'
-      name: AnalyzeStep
-    
     - publish: $(Build.ArtifactStagingDirectory)/cli-build
       artifact: cli-build-unsigned
       displayName: 'Publish unsigned CLI build'
-    
-    - publish: $(Build.ArtifactStagingDirectory)/all-binaries.txt
-      artifact: all-binaries-list
-      displayName: 'Publish all binaries list'
-    
-    - publish: $(Build.ArtifactStagingDirectory)/cli-only-binaries.txt
-      artifact: cli-only-binaries-list
-      displayName: 'Publish CLI-only binaries list'
 
 # ============================================================================
 # STAGE 3: VERIFY BUILD
@@ -501,8 +428,6 @@ stages:
   condition: always()
   variables:
     AzureCliVersion: $[ stageDependencies.BuildAzureCli.BuildCli.outputs['BuildStep.AzureCliVersion'] ]
-    TotalBinaryCount: $[ stageDependencies.BuildAzureCli.BuildCli.outputs['AnalyzeStep.TotalBinaryCount'] ]
-    BinariesToSign: $[ stageDependencies.BuildAzureCli.BuildCli.outputs['AnalyzeStep.BinariesToSign'] ]
     PythonIsSigned: $[ stageDependencies.DownloadPythonBase.DownloadAndVerify.outputs['VerifyStep.PythonIsSigned'] ]
   jobs:
   - job: PrintSummary
@@ -520,23 +445,15 @@ stages:
         echo "║ CLI Version:          $(AzureCliVersion)"
         echo "║ Architecture:         ${{ parameters.Architecture }}"
         echo "║ Python Base Signed:   $(PythonIsSigned)"
-        echo "╠══════════════════════════════════════════════════════════════════════╣"
-        echo "║ BINARY ANALYSIS:                                                     ║"
-        echo "║   Total binaries:     $(TotalBinaryCount)"
-        echo "║   Binaries to sign:   $(BinariesToSign)"
-        if [ "$(PythonIsSigned)" = "true" ]; then
-          echo "║   ✅ Python pre-signed - signing ~70% faster!                       ║"
-        else
-          echo "║   ⚠️  Python unsigned - full signing required                        ║"
-        fi
+        echo "║ Python Base Build:    ${{ parameters.PythonBaseBuildId }}"
+        echo "║ Python Base Artifact: ${{ parameters.PythonBaseArtifact }}"
         echo "╠══════════════════════════════════════════════════════════════════════╣"
         echo "║ OUTPUT ARTIFACT:                                                     ║"
         echo "║   cli-build-unsigned                                                 ║"
         echo "╠══════════════════════════════════════════════════════════════════════╣"
         echo "║ NEXT STEP:                                                           ║"
         echo "║   Run macos-tarball-sign-notarize-v2.yml to sign and notarize        ║"
-        echo "║   Input: cli-build-unsigned artifact                                 ║"
-        echo "║   Uses: cli-only-binaries-list for optimized signing                 ║"
+        echo "║   Input: cli-build-unsigned artifact from this build                 ║"
         echo "╚══════════════════════════════════════════════════════════════════════╝"
         
       displayName: 'Print summary'
