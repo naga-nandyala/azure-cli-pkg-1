@@ -435,6 +435,14 @@ def _bundle_external_libraries(install_dir: Path, python_major_minor: str) -> No
         # Make writable for install_name_tool
         new_path.chmod(0o755)
 
+        # Remove any existing code signature before modifying
+        # This is critical: Homebrew libraries are signed, and install_name_tool
+        # will corrupt the signature. We must remove it, modify, then re-sign.
+        try:
+            _run(["codesign", "--remove-signature", str(new_path)])
+        except BuildError:
+            pass  # Library may not have been signed
+
         bundled_libs[original_path] = new_path
 
         # Change the library's own install name
@@ -502,6 +510,7 @@ def _bundle_external_libraries(install_dir: Path, python_major_minor: str) -> No
             pass
 
     # Ad-hoc sign the bundled libraries
+    # This is a temporary signature; ESRP will re-sign with proper identity and hardened runtime
     print("  Ad-hoc signing bundled libraries...")
     for lib_path in bundled_libs.values():
         try:
