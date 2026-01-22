@@ -26,7 +26,7 @@ parameters:
   - name: PythonBaseBuildId
     displayName: 'Python Base Build ID (from macos-python-base-v2 pipeline)'
     type: string
-    default: '292484'
+    default: '292650'
   
   - name: PythonBaseArtifact
     displayName: 'Python Base Artifact Name'
