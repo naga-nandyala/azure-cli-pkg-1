@@ -140,7 +140,8 @@ stages:
         echo ""
         echo "✅ Auto-detected version from PKG: $VERSION"
         echo "##vso[task.setvariable variable=AzureCliVersion;isOutput=true]$VERSION"
-        echo "##vso[task.setvariable variable=ReleaseTag;isOutput=true]v$VERSION"
+        # Use versioned suffix to avoid conflicts with existing releases
+        echo "##vso[task.setvariable variable=ReleaseTag;isOutput=true]v${VERSION}-pkg-v2"
         
         # Create extraction directory
         EXTRACT_DIR="$(Pipeline.Workspace)/pkg-extracted"

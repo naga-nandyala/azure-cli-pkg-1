@@ -695,9 +695,9 @@ stages:
         chmod +x "$FINAL_DIR/bin/az" 2>/dev/null || true
         chmod +x "$FINAL_DIR/libexec/bin/az" 2>/dev/null || true
         
-        # Create final tar.gz
+        # Create final tar.gz (signed and notarized)
         cd "$FINAL_DIR"
-        TARBALL_NAME="azure-cli-${VERSION}-macos-${ARCH}.tar.gz"
+        TARBALL_NAME="azure-cli-${VERSION}-macos-${ARCH}-signed-notarized.tar.gz"
         tar -czf "$OUTPUT_DIR/$TARBALL_NAME" --preserve-permissions .
         
         # SHA256
@@ -792,10 +792,20 @@ stages:
         echo "Size: $(ls -lh $TARBALL | awk '{print $5}')"
         echo "SHA256: $(cat $SHA256_FILE)"
         
-        # Set output variable for release tag
-        echo "##vso[task.setvariable variable=ReleaseTag]v${VERSION}"
+        # Set output variable for release tag (with suffix to avoid conflicts)
+        echo "##vso[task.setvariable variable=ReleaseTag]v${VERSION}-tarball-v2"
         
       displayName: 'Prepare release files'
+    
+    # Delete existing release if it exists (to allow re-running the pipeline)
+    - task: GitHubRelease@1
+      displayName: 'Delete existing release if present'
+      continueOnError: true
+      inputs:
+        gitHubConnection: 'github.com_naga-nandyala'
+        repositoryName: '$(GitHubRepo)'
+        action: 'delete'
+        tag: '$(ReleaseTag)'
     
     - task: GitHubRelease@1
       displayName: 'Create GitHub Release'
@@ -809,24 +819,39 @@ stages:
         title: 'Azure CLI $(AzureCliVersion) - macOS ${{ parameters.Architecture }}'
         releaseNotesSource: 'inline'
         releaseNotesInline: |
-          ## Azure CLI $(AzureCliVersion) - macOS ${{ parameters.Architecture }}
+          ## Azure CLI $(AzureCliVersion) - macOS ${{ parameters.Architecture }} (Signed & Notarized)
           
           **Signed and notarized macOS tar.gz distribution.**
           
           ### Installation
           ```bash
           # Download and extract
-          curl -LO https://github.com/${{ parameters.GitHubRepo }}/releases/download/$(ReleaseTag)/azure-cli-$(AzureCliVersion)-macos-${{ parameters.Architecture }}.tar.gz
-          tar -xzf azure-cli-$(AzureCliVersion)-macos-${{ parameters.Architecture }}.tar.gz
+          curl -LO https://github.com/${{ parameters.GitHubRepo }}/releases/download/$(ReleaseTag)/azure-cli-$(AzureCliVersion)-macos-${{ parameters.Architecture }}-signed-notarized.tar.gz
+          tar -xzf azure-cli-$(AzureCliVersion)-macos-${{ parameters.Architecture }}-signed-notarized.tar.gz
           
           # Run
-          ./azure-cli/az --version
+          ./bin/az --version
+          ```
+          
+          ### Homebrew Installation (Formula)
+          ```bash
+          brew tap $(HomebrewTapRepo)
+          brew install azure-cli-tarball-signed-notarized-v2
+          ```
+          
+          ### Homebrew Installation (Cask)
+          ```bash
+          brew tap $(HomebrewTapRepo)
+          brew install --cask azure-cli-tarball-signed-notarized-v2
           ```
           
           ### Verification
           ```bash
           # Verify SHA256
-          shasum -a 256 -c azure-cli-$(AzureCliVersion)-macos-${{ parameters.Architecture }}.tar.gz.sha256
+          shasum -a 256 -c azure-cli-$(AzureCliVersion)-macos-${{ parameters.Architecture }}-signed-notarized.tar.gz.sha256
+          
+          # Verify code signature
+          codesign -v ./bin/az
           ```
         assets: '$(Build.ArtifactStagingDirectory)/release/*'
         addChangeLog: false
@@ -879,14 +904,15 @@ stages:
         cd $(Pipeline.Workspace)/homebrew-tap
         
         # Create Formula using printf line-by-line to avoid YAML parsing issues
+        # File: azure-cli-tarball-signed-notarized-v2.rb
         mkdir -p Formula
-        FORMULA_FILE="Formula/azure-cli-tarball-signed.rb"
-        printf 'class AzureCliTarballSigned < Formula\n' > "$FORMULA_FILE"
-        printf '  desc "Microsoft Azure CLI - Code-Signed and Notarized Tarball"\n' >> "$FORMULA_FILE"
+        FORMULA_FILE="Formula/azure-cli-tarball-signed-notarized-v2.rb"
+        printf 'class AzureCliTarballSignedNotarizedV2 < Formula\n' > "$FORMULA_FILE"
+        printf '  desc "Microsoft Azure CLI - Code-Signed and Notarized Tarball (v2)"\n' >> "$FORMULA_FILE"
         printf '  homepage "https://learn.microsoft.com/cli/azure/"\n' >> "$FORMULA_FILE"
         printf '  version "%s"\n' "$VERSION" >> "$FORMULA_FILE"
         printf '\n' >> "$FORMULA_FILE"
-        printf '  url "https://github.com/%s/releases/download/v%s/azure-cli-%s-macos-%s.tar.gz"\n' "$GITHUB_REPO" "$VERSION" "$VERSION" "$ARCH" >> "$FORMULA_FILE"
+        printf '  url "https://github.com/%s/releases/download/v%s-tarball-v2/azure-cli-%s-macos-%s-signed-notarized.tar.gz"\n' "$GITHUB_REPO" "$VERSION" "$VERSION" "$ARCH" >> "$FORMULA_FILE"
         printf '  sha256 "%s"\n' "$SHA256" >> "$FORMULA_FILE"
         printf '\n' >> "$FORMULA_FILE"
         printf '  def install\n' >> "$FORMULA_FILE"
@@ -904,15 +930,16 @@ stages:
         cat "$FORMULA_FILE"
         
         # Create Cask using printf line-by-line - simple pattern matching tested local version
+        # File: azure-cli-tarball-signed-notarized-v2.rb
         mkdir -p Casks
-        CASK_FILE="Casks/azure-cli-tarball.rb"
-        printf 'cask "azure-cli-tarball" do\n' > "$CASK_FILE"
+        CASK_FILE="Casks/azure-cli-tarball-signed-notarized-v2.rb"
+        printf 'cask "azure-cli-tarball-signed-notarized-v2" do\n' > "$CASK_FILE"
         printf '  version "%s"\n' "$VERSION" >> "$CASK_FILE"
         printf '  sha256 "%s"\n' "$SHA256" >> "$CASK_FILE"
         printf '\n' >> "$CASK_FILE"
-        printf '  url "https://github.com/%s/releases/download/v%s/azure-cli-%s-macos-%s.tar.gz"\n' "$GITHUB_REPO" "$VERSION" "$VERSION" "$ARCH" >> "$CASK_FILE"
-        printf '  name "Azure CLI (Tarball)"\n' >> "$CASK_FILE"
-        printf '  desc "Microsoft Azure CLI installed via tar.gz (passwordless)"\n' >> "$CASK_FILE"
+        printf '  url "https://github.com/%s/releases/download/v%s-tarball-v2/azure-cli-%s-macos-%s-signed-notarized.tar.gz"\n' "$GITHUB_REPO" "$VERSION" "$VERSION" "$ARCH" >> "$CASK_FILE"
+        printf '  name "Azure CLI (Tarball - Signed & Notarized v2)"\n' >> "$CASK_FILE"
+        printf '  desc "Microsoft Azure CLI installed via tar.gz - signed and notarized (passwordless)"\n' >> "$CASK_FILE"
         printf '  homepage "https://learn.microsoft.com/cli/azure/"\n' >> "$CASK_FILE"
         printf '\n' >> "$CASK_FILE"
         printf '  binary "bin/az"\n' >> "$CASK_FILE"
@@ -926,8 +953,8 @@ stages:
         # Commit and push
         git config user.name "Azure Pipeline"
         git config user.email "azure-pipeline@microsoft.com"
-        git add Formula/azure-cli-tarball-signed.rb Casks/azure-cli-tarball.rb
-        git commit -m "Update Azure CLI tarball to $VERSION" || echo "No changes to commit"
+        git add Formula/azure-cli-tarball-signed-notarized-v2.rb Casks/azure-cli-tarball-signed-notarized-v2.rb
+        git commit -m "Update Azure CLI tarball (signed-notarized) to $VERSION" || echo "No changes to commit"
         git push origin HEAD:main
         
         echo "✅ Homebrew tap updated successfully"
@@ -979,6 +1006,8 @@ stages:
           brew uninstall --cask azure-cli 2>/dev/null || true
           brew uninstall azure-cli-tarball-signed 2>/dev/null || true
           brew uninstall --cask azure-cli-tarball 2>/dev/null || true
+          brew uninstall azure-cli-tarball-signed-notarized-v2 2>/dev/null || true
+          brew uninstall --cask azure-cli-tarball-signed-notarized-v2 2>/dev/null || true
           
           # Remove symlinks
           echo "Removing symlinks..."
@@ -1027,7 +1056,7 @@ stages:
         echo ""
         
         echo "=== Step 2: Install Formula ==="
-        brew install azure-cli-tarball-signed
+        brew install azure-cli-tarball-signed-notarized-v2
         echo ""
         
         echo "=== Step 3: Verify Installation ==="
@@ -1081,7 +1110,7 @@ stages:
     
     - bash: |
         echo "=== Cleanup ==="
-        brew uninstall azure-cli-tarball-signed 2>/dev/null || true
+        brew uninstall azure-cli-tarball-signed-notarized-v2 2>/dev/null || true
         echo "✅ Cleanup complete"
       displayName: 'Cleanup'
       condition: always()
@@ -1110,6 +1139,8 @@ stages:
           brew uninstall --cask azure-cli 2>/dev/null || true
           brew uninstall azure-cli-tarball-signed 2>/dev/null || true
           brew uninstall --cask azure-cli-tarball 2>/dev/null || true
+          brew uninstall azure-cli-tarball-signed-notarized-v2 2>/dev/null || true
+          brew uninstall --cask azure-cli-tarball-signed-notarized-v2 2>/dev/null || true
           
           sudo rm -f /usr/local/bin/az /opt/homebrew/bin/az
           sudo rm -rf /usr/local/microsoft/azure-cli /usr/local/az
@@ -1135,7 +1166,7 @@ stages:
         
         echo "=== Step 2: Install via Cask ==="
         echo "Note: Cask installation should NOT require password"
-        brew install --cask azure-cli-tarball
+        brew install --cask azure-cli-tarball-signed-notarized-v2
         echo ""
         
         echo "=== Step 3: Verify Installation ==="
@@ -1144,7 +1175,7 @@ stages:
         echo ""
         
         echo "=== Step 4: Verify Code Signatures Preserved ==="
-        AZ_CELLAR="/opt/homebrew/Cellar/azure-cli-tarball/$(AzureCliVersion)"
+        AZ_CELLAR="/opt/homebrew/Caskroom/azure-cli-tarball-signed-notarized-v2/$(AzureCliVersion)"
         if [ -d "$AZ_CELLAR" ]; then
           LIBPYTHON=$(find "$AZ_CELLAR" -name "libpython*.dylib" | head -1)
           if [ -n "$LIBPYTHON" ]; then
@@ -1176,7 +1207,7 @@ stages:
     
     - bash: |
         echo "=== Cleanup ==="
-        brew uninstall --cask azure-cli-tarball 2>/dev/null || true
+        brew uninstall --cask azure-cli-tarball-signed-notarized-v2 2>/dev/null || true
         echo "✅ Cleanup complete"
       displayName: 'Cleanup'
       condition: always()
