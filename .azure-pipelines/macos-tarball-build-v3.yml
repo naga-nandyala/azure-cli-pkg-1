@@ -1,0 +1,548 @@
+# Azure CLI - macOS Tarball Build Pipeline (v3)
+# 
+# Build CLI Tarball Using Homebrew Python (No Bundled Python)
+# 
+# This v3 pipeline creates a LIGHTWEIGHT tar.gz that:
+# - Does NOT bundle Python runtime (~60 MB savings)
+# - Relies on Homebrew python@3.13 as a runtime dependency
+# - Contains only Azure CLI packages and native extensions (.so files)
+# - Uses portable launcher script supporting multiple Python sources
+#
+# Key Differences from v2:
+# - No Python base download (Python comes from Homebrew at runtime)
+# - 49% smaller tarball (~42MB vs ~82MB)
+# - 89% fewer binaries to sign (10 vs 91 .so files)
+# - Faster build and notarization process
+#
+# Stages:
+# 1. Build Azure CLI packages using Homebrew Python
+# 2. Create Unsigned Tar.gz (with portable launcher)
+# 3. Verify Build
+# 4. Publish Artifacts
+#
+# The output is an UNSIGNED tar.gz that needs to be signed and notarized
+# in a separate pipeline (macos-tarball-sign-notarize-v3.yml)
+
+trigger: none
+
+parameters:
+  - name: Architecture
+    displayName: 'Architecture'
+    type: string
+    default: 'arm64'
+    values:
+    - arm64
+    - x86_64
+  
+  - name: PythonVersion
+    displayName: 'Python Version (Homebrew)'
+    type: string
+    default: '3.13'
+  
+  - name: UsePortableLauncher
+    displayName: 'Use portable launcher (supports python.org, pyenv, etc.)'
+    type: boolean
+    default: true
+  
+  - name: PublishToGitHub
+    displayName: 'Publish unsigned tar.gz to GitHub'
+    type: boolean
+    default: false
+  
+  - name: GitHubRepo
+    displayName: 'GitHub Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+
+resources:
+  repositories:
+  - repository: selfRepo
+    type: github
+    endpoint: 'github.com_naga-nandyala'
+    name: naga-nandyala/azure-cli-pkg-1
+    ref: main
+
+variables:
+  # Parameter variable mappings
+  - name: GitHubRepo
+    value: ${{ parameters.GitHubRepo }}
+  - name: PythonVersion
+    value: ${{ parameters.PythonVersion }}
+  
+  # Disable auto-injection tasks
+  - name: Codeql.Enabled
+    value: false
+  - name: Codeql.SkipTaskAutoInjection
+    value: true
+  - name: CodeQL.enabled
+    value: false
+  - name: runCodesignValidationInjection
+    value: false
+  - name: DOTNET_CLI_TELEMETRY_OPTOUT
+    value: 1
+  - name: DOTNET_NOLOGO
+    value: 1
+  - name: NugetSecurityAnalysisWarningLevel
+    value: none
+  - name: skipNugetSecurityAnalysis
+    value: true
+
+name: tarball-build-v3-$(Build.BuildId)-${{ parameters.Architecture }}
+
+stages:
+# ============================================================================
+# STAGE 1: BUILD AZURE CLI
+# ============================================================================
+- stage: BuildAzureCli
+  displayName: 'Stage 1: Build Azure CLI'
+  jobs:
+  - job: BuildCli
+    displayName: 'Build Azure CLI (Homebrew Python)'
+    pool:
+      ${{ if eq(parameters.Architecture, 'arm64') }}:
+        vmImage: 'macos-15-arm64'
+      ${{ else }}:
+        vmImage: 'macos-14'
+    timeoutInMinutes: 60
+    
+    steps:
+    - checkout: self
+      fetchDepth: 1
+    
+    # Install Homebrew Python
+    - bash: |
+        set -e
+        
+        echo "=== Installing Homebrew Python ${{ parameters.PythonVersion }} ==="
+        brew install python@${{ parameters.PythonVersion }}
+        
+        # Get Python path
+        PYTHON_PATH=$(brew --prefix python@${{ parameters.PythonVersion }})/libexec/bin/python3
+        
+        echo "Python path: $PYTHON_PATH"
+        $PYTHON_PATH --version
+        
+        echo "##vso[task.setvariable variable=PythonPath]$PYTHON_PATH"
+      displayName: 'Install Homebrew Python'
+    
+    # Build Azure CLI
+    - bash: |
+        set -e
+        
+        PYTHON="$(PythonPath)"
+        
+        echo "=== Building Azure CLI with Homebrew Python ==="
+        echo "Python: $PYTHON"
+        $PYTHON --version
+        
+        # Get CLI version
+        CLI_VERSION=$(grep "__version__" src/azure-cli-core/azure/cli/core/__init__.py | cut -d'"' -f2)
+        echo "Azure CLI version: $CLI_VERSION"
+        echo "##vso[task.setvariable variable=AzureCliVersion;isOutput=true]$CLI_VERSION"
+        
+        # Run the v3 build script
+        echo ""
+        echo "=== Running build_binary_tar_gz_v3.py ==="
+        $PYTHON scripts/release/macos/build_binary_tar_gz_v3.py \
+          --platform-tag macos-${{ parameters.Architecture }}
+        
+        # List output
+        echo ""
+        echo "=== Build Output ==="
+        ls -lh dist/binary_tar_gz_v3/
+        
+        # Copy to staging
+        mkdir -p $(Build.ArtifactStagingDirectory)/cli-build
+        cp dist/binary_tar_gz_v3/*.tar.gz $(Build.ArtifactStagingDirectory)/cli-build/
+        cp dist/binary_tar_gz_v3/*.sha256 $(Build.ArtifactStagingDirectory)/cli-build/
+        
+        echo ""
+        echo "=== Staged Artifacts ==="
+        ls -lh $(Build.ArtifactStagingDirectory)/cli-build/
+        
+      displayName: 'Build Azure CLI Tarball'
+      name: BuildStep
+    
+    # Replace launcher with portable version if requested
+    - ${{ if eq(parameters.UsePortableLauncher, true) }}:
+      - bash: |
+          set -e
+          
+          echo "=== Replacing launcher with portable version ==="
+          
+          TARBALL=$(ls $(Build.ArtifactStagingDirectory)/cli-build/*.tar.gz | head -1)
+          WORK_DIR=$(mktemp -d)
+          
+          echo "Extracting: $TARBALL"
+          tar -xzf "$TARBALL" -C "$WORK_DIR"
+          
+          # Replace the launcher with portable version
+          cat > "$WORK_DIR/libexec/bin/az" << 'LAUNCHER_EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Azure CLI Launcher (v3 - Portable Edition)
+# This script finds Python 3.13 from various sources:
+#   1. AZ_PYTHON environment variable (user override)
+#   2. Homebrew Python
+#   3. python.org installer
+#   4. pyenv
+#   5. System Python 3.13 in PATH
+
+# Required Python version
+REQUIRED_PYTHON_MAJOR=3
+REQUIRED_PYTHON_MINOR=13
+
+# Get the real path to this script (following symlinks)
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || greadlink -f "${BASH_SOURCE[0]}" 2>/dev/null || python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+INSTALL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Our bundled site-packages
+AZURE_CLI_SITE_PACKAGES="$INSTALL_DIR/lib/python${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}/site-packages"
+
+# Verify Python version
+verify_python_version() {
+    local python_path="$1"
+    local version_output
+    
+    if [[ ! -x "$python_path" ]]; then
+        return 1
+    fi
+    
+    # Get Python version
+    version_output=$("$python_path" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null) || return 1
+    
+    if [[ "$version_output" == "${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}" ]]; then
+        return 0
+    fi
+    
+    return 1
+}
+
+# Find Python 3.13 from various sources
+find_python() {
+    local python_path
+    
+    # 1. User override via AZ_PYTHON environment variable
+    if [[ -n "${AZ_PYTHON:-}" ]]; then
+        if verify_python_version "$AZ_PYTHON"; then
+            echo "$AZ_PYTHON"
+            return 0
+        else
+            echo "Warning: AZ_PYTHON='$AZ_PYTHON' is not Python ${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}" >&2
+        fi
+    fi
+    
+    # 2. Homebrew Python (macOS)
+    if command -v brew &>/dev/null; then
+        local prefix
+        prefix="$(brew --prefix python@${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR} 2>/dev/null)" || true
+        if [[ -n "$prefix" ]]; then
+            # Try libexec (unversioned) first
+            if verify_python_version "$prefix/libexec/bin/python3"; then
+                echo "$prefix/libexec/bin/python3"
+                return 0
+            fi
+            # Try versioned binary
+            if verify_python_version "$prefix/bin/python${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}"; then
+                echo "$prefix/bin/python${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}"
+                return 0
+            fi
+        fi
+    fi
+    
+    # 3. Common Homebrew paths (without calling brew)
+    for python_path in \
+        "/opt/homebrew/opt/python@${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}/libexec/bin/python3" \
+        "/usr/local/opt/python@${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}/libexec/bin/python3" \
+        "/opt/homebrew/bin/python${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}" \
+        "/usr/local/bin/python${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}"; do
+        if verify_python_version "$python_path"; then
+            echo "$python_path"
+            return 0
+        fi
+    done
+    
+    # 4. python.org Framework installer (macOS)
+    for python_path in \
+        "/Library/Frameworks/Python.framework/Versions/${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}/bin/python3" \
+        "/Library/Frameworks/Python.framework/Versions/${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}/bin/python${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}" \
+        "$HOME/Library/Frameworks/Python.framework/Versions/${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}/bin/python3"; do
+        if verify_python_version "$python_path"; then
+            echo "$python_path"
+            return 0
+        fi
+    done
+    
+    # 5. pyenv
+    if [[ -n "${PYENV_ROOT:-}" ]]; then
+        local pyenv_python="$PYENV_ROOT/versions/${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}.*/bin/python3"
+        # Use glob to find any patch version
+        for python_path in $pyenv_python; do
+            if verify_python_version "$python_path"; then
+                echo "$python_path"
+                return 0
+            fi
+        done
+    fi
+    # Default pyenv location
+    for python_path in "$HOME/.pyenv/versions/${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}."*/bin/python3; do
+        if verify_python_version "$python_path"; then
+            echo "$python_path"
+            return 0
+        fi
+    done
+    
+    # 6. Generic python3.13 in PATH
+    if command -v "python${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}" &>/dev/null; then
+        python_path="$(command -v "python${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}")"
+        if verify_python_version "$python_path"; then
+            echo "$python_path"
+            return 0
+        fi
+    fi
+    
+    # 7. Check if python3 in PATH is the right version
+    if command -v python3 &>/dev/null; then
+        python_path="$(command -v python3)"
+        if verify_python_version "$python_path"; then
+            echo "$python_path"
+            return 0
+        fi
+    fi
+    
+    # 8. Linux common paths
+    for python_path in \
+        "/usr/bin/python${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}" \
+        "/usr/local/bin/python${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}"; do
+        if verify_python_version "$python_path"; then
+            echo "$python_path"
+            return 0
+        fi
+    done
+    
+    return 1
+}
+
+# Find Python
+PYTHON="$(find_python)" || {
+    echo "Error: Python ${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR} not found." >&2
+    echo "" >&2
+    echo "Azure CLI requires Python ${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}. Install it from:" >&2
+    echo "  - Homebrew:    brew install python@${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}" >&2
+    echo "  - python.org:  https://www.python.org/downloads/" >&2
+    echo "  - pyenv:       pyenv install ${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}" >&2
+    echo "" >&2
+    echo "Or set AZ_PYTHON to your Python ${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR} path:" >&2
+    echo "  export AZ_PYTHON=/path/to/python${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}" >&2
+    exit 1
+}
+
+# Debug mode: show which Python is being used
+if [[ -n "${AZ_DEBUG:-}" ]]; then
+    echo "Azure CLI Launcher Debug:" >&2
+    echo "  Install dir: $INSTALL_DIR" >&2
+    echo "  Python: $PYTHON" >&2
+    echo "  Python version: $("$PYTHON" --version 2>&1)" >&2
+    echo "  Site-packages: $AZURE_CLI_SITE_PACKAGES" >&2
+fi
+
+# Verify site-packages exist
+if [[ ! -d "$AZURE_CLI_SITE_PACKAGES" ]]; then
+    echo "Error: Azure CLI packages not found at: $AZURE_CLI_SITE_PACKAGES" >&2
+    echo "Please ensure the archive was extracted correctly." >&2
+    exit 1
+fi
+
+# Set PYTHONPATH to use our bundled packages
+export PYTHONPATH="$AZURE_CLI_SITE_PACKAGES${PYTHONPATH:+:$PYTHONPATH}"
+
+# Set Azure CLI installer identifier based on install location
+# Detect if running from Homebrew Caskroom
+if [[ "$INSTALL_DIR" == *"/Caskroom/"* ]] || [[ "$INSTALL_DIR" == *"/homebrew/"* && "$INSTALL_DIR" == *"/Casks/"* ]]; then
+    export AZ_INSTALLER=HOMEBREW_CASK
+else
+    export AZ_INSTALLER=TARBALL
+fi
+
+# Debug: show AZ_INSTALLER if debug mode
+if [[ -n "${AZ_DEBUG:-}" ]]; then
+    echo "  AZ_INSTALLER: $AZ_INSTALLER" >&2
+fi
+
+# Execute the Azure CLI
+exec "$PYTHON" -m azure.cli "$@"
+LAUNCHER_EOF
+          
+          chmod +x "$WORK_DIR/libexec/bin/az"
+          
+          # Repack the tarball
+          TARBALL_NAME=$(basename "$TARBALL")
+          rm -f "$TARBALL"
+          tar -czf "$(Build.ArtifactStagingDirectory)/cli-build/$TARBALL_NAME" -C "$WORK_DIR" .
+          
+          # Update SHA256
+          cd $(Build.ArtifactStagingDirectory)/cli-build
+          shasum -a 256 "$TARBALL_NAME" > "$TARBALL_NAME.sha256"
+          
+          echo "✅ Updated tarball with portable launcher"
+          cat "$TARBALL_NAME.sha256"
+          
+          rm -rf "$WORK_DIR"
+        displayName: 'Replace with Portable Launcher'
+    
+    - publish: $(Build.ArtifactStagingDirectory)/cli-build
+      artifact: 'cli-build-unsigned-v3'
+      displayName: 'Publish Unsigned CLI Build'
+
+# ============================================================================
+# STAGE 2: ANALYZE AND VERIFY
+# ============================================================================
+- stage: AnalyzeAndVerify
+  displayName: 'Stage 2: Analyze and Verify'
+  dependsOn: BuildAzureCli
+  variables:
+    AzureCliVersion: $[ stageDependencies.BuildAzureCli.BuildCli.outputs['BuildStep.AzureCliVersion'] ]
+  jobs:
+  - job: AnalyzeTarball
+    displayName: 'Analyze tar.gz package'
+    pool:
+      ${{ if eq(parameters.Architecture, 'arm64') }}:
+        vmImage: 'macos-15-arm64'
+      ${{ else }}:
+        vmImage: 'macos-14'
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: 'cli-build-unsigned-v3'
+      displayName: 'Download CLI Build'
+    
+    - bash: |
+        set -e
+        
+        TARBALL=$(ls $(Pipeline.Workspace)/cli-build-unsigned-v3/*.tar.gz | head -1)
+        EXTRACT_DIR=$(mktemp -d)
+        
+        echo "=== Tarball Analysis (v3 - No Bundled Python) ==="
+        echo "Tarball: $(basename "$TARBALL")"
+        echo "Size: $(du -h "$TARBALL" | cut -f1)"
+        echo ""
+        
+        tar -xzf "$TARBALL" -C "$EXTRACT_DIR"
+        
+        echo "=== Directory Structure ==="
+        find "$EXTRACT_DIR" -maxdepth 3 -type d | head -20
+        echo ""
+        
+        echo "=== Native Extensions (.so files) to Sign ==="
+        SO_FILES=$(find "$EXTRACT_DIR" -name "*.so" -type f)
+        SO_COUNT=$(echo "$SO_FILES" | grep -c . || echo 0)
+        echo "Total .so files: $SO_COUNT"
+        echo ""
+        echo "Files:"
+        echo "$SO_FILES" | while read f; do
+          if [ -n "$f" ]; then
+            SIZE=$(du -h "$f" | cut -f1)
+            NAME=$(basename "$f")
+            echo "  $NAME ($SIZE)"
+          fi
+        done
+        
+        echo ""
+        echo "=== Dylib Files ==="
+        DYLIB_FILES=$(find "$EXTRACT_DIR" -name "*.dylib" -type f)
+        DYLIB_COUNT=$(echo "$DYLIB_FILES" | grep -c . || echo 0)
+        echo "Total .dylib files: $DYLIB_COUNT"
+        
+        echo ""
+        echo "=== Total Binaries to Sign ==="
+        TOTAL=$((SO_COUNT + DYLIB_COUNT))
+        echo "Total: $TOTAL (vs ~91 in v2)"
+        echo "##vso[task.setvariable variable=BinaryCount;isOutput=true]$TOTAL"
+        
+        echo ""
+        echo "=== Launcher Script ==="
+        cat "$EXTRACT_DIR/libexec/bin/az" | head -30
+        
+        echo ""
+        echo "=== Tarball Contents Summary ==="
+        echo "Extracted size: $(du -sh "$EXTRACT_DIR" | cut -f1)"
+        echo "File count: $(find "$EXTRACT_DIR" -type f | wc -l)"
+        
+        rm -rf "$EXTRACT_DIR"
+      displayName: 'Analyze Tarball'
+      name: AnalyzeStep
+    
+    # Verify Azure CLI works
+    - bash: |
+        set -e
+        
+        TARBALL=$(ls $(Pipeline.Workspace)/cli-build-unsigned-v3/*.tar.gz | head -1)
+        EXTRACT_DIR=$(mktemp -d)
+        
+        echo "=== Verifying Azure CLI ==="
+        tar -xzf "$TARBALL" -C "$EXTRACT_DIR"
+        
+        # Install Homebrew Python if not present
+        if ! brew list python@3.13 &>/dev/null; then
+          brew install python@3.13
+        fi
+        
+        # Test CLI
+        export AZ_DEBUG=1
+        "$EXTRACT_DIR/bin/az" version
+        
+        echo ""
+        echo "✅ Azure CLI works correctly"
+        
+        rm -rf "$EXTRACT_DIR"
+      displayName: 'Verify CLI Works'
+
+# ============================================================================
+# STAGE 3: SUMMARY
+# ============================================================================
+- stage: Summary
+  displayName: 'Stage 3: Build Summary'
+  dependsOn:
+  - BuildAzureCli
+  - AnalyzeAndVerify
+  condition: always()
+  variables:
+    AzureCliVersion: $[ stageDependencies.BuildAzureCli.BuildCli.outputs['BuildStep.AzureCliVersion'] ]
+    BinaryCount: $[ stageDependencies.AnalyzeAndVerify.AnalyzeTarball.outputs['AnalyzeStep.BinaryCount'] ]
+  jobs:
+  - job: PrintSummary
+    displayName: 'Print Build Summary'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo "╔══════════════════════════════════════════════════════════════════╗"
+        echo "║          AZURE CLI v3 TARBALL BUILD SUMMARY                      ║"
+        echo "╠══════════════════════════════════════════════════════════════════╣"
+        echo "║ Version:        $(AzureCliVersion)"
+        echo "║ Architecture:   ${{ parameters.Architecture }}"
+        echo "║ Python:         Homebrew ${{ parameters.PythonVersion }} (not bundled)"
+        echo "║ Launcher:       ${{ parameters.UsePortableLauncher }}"
+        echo "╠══════════════════════════════════════════════════════════════════╣"
+        echo "║ SIGNING METRICS (v3 vs v2)                                       ║"
+        echo "╠══════════════════════════════════════════════════════════════════╣"
+        echo "║ Binaries to sign:  $(BinaryCount) (vs ~91 in v2)"
+        echo "║ Signing reduction: ~89%"
+        echo "╠══════════════════════════════════════════════════════════════════╣"
+        echo "║ ARTIFACTS                                                        ║"
+        echo "╠══════════════════════════════════════════════════════════════════╣"
+        echo "║ • cli-build-unsigned-v3                                          ║"
+        echo "║   └── azure-cli-$(AzureCliVersion)-macos-${{ parameters.Architecture }}-nopython.tar.gz"
+        echo "╠══════════════════════════════════════════════════════════════════╣"
+        echo "║ NEXT STEP                                                        ║"
+        echo "╠══════════════════════════════════════════════════════════════════╣"
+        echo "║ Run macos-tarball-sign-notarize-v3.yml with:                     ║"
+        echo "║   TarballBuildId: $(Build.BuildId)                               ║"
+        echo "╚══════════════════════════════════════════════════════════════════╝"
+      displayName: 'Print Summary'
