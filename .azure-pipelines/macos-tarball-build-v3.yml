@@ -294,7 +294,6 @@ stages:
         echo "║ Version:        $(AzureCliVersion)"
         echo "║ Architecture:   ${{ parameters.Architecture }}"
         echo "║ Python:         Homebrew ${{ parameters.PythonVersion }} (not bundled)"
-        echo "║ Launcher:       ${{ parameters.UsePortableLauncher }}"
         echo "╠══════════════════════════════════════════════════════════════════╣"
         echo "║ SIGNING METRICS (v3 vs v2)                                       ║"
         echo "╠══════════════════════════════════════════════════════════════════╣"
