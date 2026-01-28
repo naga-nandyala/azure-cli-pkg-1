@@ -660,14 +660,20 @@ stages:
         echo "=== Creating Final Signed+Notarized Tarball (v3) ==="
         
         VERSION="$(AzureCliVersion)"
-        TARBALL_NAME="azure-cli-${VERSION}-macos-${{ parameters.Architecture }}-nopython.tar.gz"
+        TARBALL_NAME="azure-cli-${VERSION}-macos-${{ parameters.Architecture }}-nopython-signed-notarized.tar.gz"
         OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/final"
         
         mkdir -p "$OUTPUT_DIR"
         
-        # Create tarball from signed contents
+        # Ensure execute permissions before creating tarball
         cd "$(Pipeline.Workspace)/signed-merged"
-        tar -czf "$OUTPUT_DIR/$TARBALL_NAME" .
+        chmod +x bin/az 2>/dev/null || true
+        chmod +x libexec/bin/az 2>/dev/null || true
+        find . -name "*.so" -exec chmod +x {} \; 2>/dev/null || true
+        find . -name "*.dylib" -exec chmod +x {} \; 2>/dev/null || true
+        
+        # Create tarball from signed contents
+        tar -czf "$OUTPUT_DIR/$TARBALL_NAME" --preserve-permissions .
         
         # Generate SHA256
         cd "$OUTPUT_DIR"
@@ -891,7 +897,7 @@ stages:
         printf '  version "%s"\n' "$VERSION" >> "$CASK_FILE"
         printf '  sha256 "%s"\n' "$SHA256" >> "$CASK_FILE"
         printf '\n' >> "$CASK_FILE"
-        printf '  url "https://github.com/%s/releases/download/v%s-v3/azure-cli-%s-macos-%s-nopython.tar.gz"\n' "$GITHUB_REPO" "$VERSION" "$VERSION" "$ARCH" >> "$CASK_FILE"
+        printf '  url "https://github.com/%s/releases/download/v%s-v3/azure-cli-%s-macos-%s-nopython-signed-notarized.tar.gz"\n' "$GITHUB_REPO" "$VERSION" "$VERSION" "$ARCH" >> "$CASK_FILE"
         printf '  name "Azure CLI"\n' >> "$CASK_FILE"
         printf '  desc "Microsoft Azure CLI (Lightweight - uses Homebrew Python)"\n' >> "$CASK_FILE"
         printf '  homepage "https://docs.microsoft.com/cli/azure/"\n' >> "$CASK_FILE"
@@ -899,9 +905,6 @@ stages:
         printf '  depends_on formula: "python@3.13"\n' >> "$CASK_FILE"
         printf '\n' >> "$CASK_FILE"
         printf '  binary "bin/az"\n' >> "$CASK_FILE"
-        printf '\n' >> "$CASK_FILE"
-        printf '  zsh_completion "libexec/share/zsh/site-functions/_az"\n' >> "$CASK_FILE"
-        printf '  bash_completion "libexec/share/bash-completion/completions/az"\n' >> "$CASK_FILE"
         printf '\n' >> "$CASK_FILE"
         printf '  zap trash: "~/.azure"\n' >> "$CASK_FILE"
         printf 'end\n' >> "$CASK_FILE"
@@ -945,11 +948,54 @@ stages:
     - checkout: none
     
     - bash: |
+        echo "╔══════════════════════════════════════════════════════════════════════╗"
+        echo "║  CLEANUP: Remove Pre-installed Azure CLI                             ║"
+        echo "╚══════════════════════════════════════════════════════════════════════╝"
+        echo ""
+        
+        if command -v az &> /dev/null; then
+          echo "Pre-installed Azure CLI detected: $(which az)"
+          az --version 2>/dev/null | head -3 || true
+          echo ""
+          
+          echo "Removing via Homebrew..."
+          brew uninstall azure-cli 2>/dev/null || true
+          brew uninstall --cask azure-cli 2>/dev/null || true
+          brew uninstall azure-cli-v3 2>/dev/null || true
+          brew uninstall --cask azure-cli-v3 2>/dev/null || true
+          
+          echo "Removing symlinks..."
+          sudo rm -f /usr/local/bin/az
+          sudo rm -f /opt/homebrew/bin/az
+          
+          echo "Removing installation directories..."
+          sudo rm -rf /usr/local/microsoft/azure-cli
+          sudo rm -rf /usr/local/az
+          sudo rm -rf /opt/az
+          sudo rm -rf /usr/local/Cellar/azure-cli*
+          sudo rm -rf /opt/homebrew/Cellar/azure-cli*
+          
+          hash -r
+        else
+          echo "No pre-installed Azure CLI detected"
+        fi
+        echo ""
+        echo "Cleanup complete"
+        
+      displayName: 'Remove pre-installed Azure CLI'
+    
+    - bash: |
         set -e
         
         echo "=== Testing Homebrew Cask Installation (v3) ==="
         
-        # Add tap and install
+        # Ensure Python 3.13 is installed first
+        if ! brew list python@3.13 &>/dev/null; then
+          echo "Installing Python 3.13..."
+          brew install python@3.13
+        fi
+        
+        # Add tap and install (NO --no-quarantine - binaries are signed+notarized!)
         brew tap ${{ parameters.HomebrewTapRepo }}
         brew install --cask azure-cli-v3
         
@@ -957,8 +1003,22 @@ stages:
         which az
         az version
         
+        EXPECTED_VERSION="$(AzureCliVersion)"
+        INSTALLED_VERSION=$(az version -o tsv --query '"azure-cli"' 2>/dev/null || echo "unknown")
+        
         echo ""
-        echo "✅ Cask installation successful"
+        echo "Expected version: $EXPECTED_VERSION"
+        echo "Installed version: $INSTALLED_VERSION"
+        
+        if [ "$INSTALLED_VERSION" == "$EXPECTED_VERSION" ]; then
+          echo "Version matches!"
+        else
+          echo "ERROR: Version mismatch!"
+          exit 1
+        fi
+        
+        echo ""
+        echo "Cask installation successful"
         
         # Cleanup
         brew uninstall --cask azure-cli-v3
@@ -975,6 +1035,37 @@ stages:
     
     steps:
     - checkout: none
+    
+    - bash: |
+        echo "╔══════════════════════════════════════════════════════════════════════╗"
+        echo "║  CLEANUP: Remove Pre-installed Azure CLI                             ║"
+        echo "╚══════════════════════════════════════════════════════════════════════╝"
+        echo ""
+        
+        if command -v az &> /dev/null; then
+          echo "Pre-installed Azure CLI detected: $(which az)"
+          az --version 2>/dev/null | head -3 || true
+          echo ""
+          
+          echo "Removing via Homebrew..."
+          brew uninstall azure-cli 2>/dev/null || true
+          brew uninstall --cask azure-cli 2>/dev/null || true
+          
+          echo "Removing symlinks..."
+          sudo rm -f /usr/local/bin/az
+          sudo rm -f /opt/homebrew/bin/az
+          
+          echo "Removing installation directories..."
+          sudo rm -rf /usr/local/Cellar/azure-cli*
+          sudo rm -rf /opt/homebrew/Cellar/azure-cli*
+          
+          hash -r
+        else
+          echo "No pre-installed Azure CLI detected"
+        fi
+        echo ""
+        
+      displayName: 'Remove pre-installed Azure CLI'
     
     - download: current
       artifact: 'cli-signed-notarized-v3'
@@ -1000,8 +1091,22 @@ stages:
         export AZ_DEBUG=1
         "$TEST_DIR/bin/az" version
         
+        EXPECTED_VERSION="$(AzureCliVersion)"
+        INSTALLED_VERSION=$("$TEST_DIR/bin/az" version -o tsv --query '"azure-cli"' 2>/dev/null || echo "unknown")
+        
         echo ""
-        echo "✅ Offline installation successful"
+        echo "Expected version: $EXPECTED_VERSION"
+        echo "Installed version: $INSTALLED_VERSION"
+        
+        if [ "$INSTALLED_VERSION" == "$EXPECTED_VERSION" ]; then
+          echo "Version matches!"
+        else
+          echo "ERROR: Version mismatch!"
+          exit 1
+        fi
+        
+        echo ""
+        echo "Offline installation successful"
         
         # Cleanup
         rm -rf "$TEST_DIR"
