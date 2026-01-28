@@ -216,6 +216,7 @@ def _create_launcher_script(bin_dir: Path, python_version: str) -> None:
     """Create az launcher script that uses Homebrew Python."""
 
     # This script finds Homebrew Python and sets PYTHONPATH to our site-packages
+    # Note: bin/az is a symlink to libexec/bin/az, so we need to go up 2 levels
     launcher_script = f"""#!/usr/bin/env bash
 set -euo pipefail
 
@@ -223,9 +224,11 @@ set -euo pipefail
 # This script uses Homebrew Python instead of bundled Python
 
 # Get the real path to this script (following symlinks)
+# The actual script lives in libexec/bin/az, with a symlink from bin/az
 SCRIPT_PATH="$(readlink -f "${{BASH_SOURCE[0]}}" 2>/dev/null || greadlink -f "${{BASH_SOURCE[0]}}" 2>/dev/null || python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${{BASH_SOURCE[0]}}")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
-INSTALL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Go up 2 levels: libexec/bin -> libexec -> root
+INSTALL_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Our bundled site-packages
 AZURE_CLI_SITE_PACKAGES="$INSTALL_DIR/libexec/lib/python{python_version}/site-packages"
