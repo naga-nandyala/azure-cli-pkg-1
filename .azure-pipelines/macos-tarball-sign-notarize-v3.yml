@@ -525,7 +525,7 @@ stages:
         VERSION="$(AzureCliVersion)"
         ZIP_NAME="azure-cli-${VERSION}-macos-${{ parameters.Architecture }}-nopython-signed.zip"
         
-        # Create ZIP for notarization
+        # Create ZIP for notarization (use -y to preserve symlinks in zip)
         cd "$MERGED_DIR"
         zip -r -y "$BUNDLE_DIR/$ZIP_NAME" .
         
@@ -536,9 +536,9 @@ stages:
         
       displayName: 'Create notarization ZIP'
     
-    - publish: $(Build.ArtifactStagingDirectory)/merged
-      artifact: signed-merged
-      displayName: 'Publish merged contents'
+    # Note: We only publish the ZIP bundle for notarization.
+    # Stage 5 will re-extract from unsigned-tarball to preserve symlinks,
+    # then overlay signed-binaries. Azure DevOps artifacts don't preserve symlinks.
     
     - publish: $(Build.ArtifactStagingDirectory)/notarization-bundle
       artifact: notarization-bundle
@@ -650,9 +650,15 @@ stages:
     steps:
     - checkout: none
     
+    # Download unsigned tarball (preserves symlinks when extracted)
     - download: current
-      artifact: signed-merged
-      displayName: 'Download signed merged contents'
+      artifact: unsigned-tarball
+      displayName: 'Download unsigned tarball'
+    
+    # Download signed binaries to overlay
+    - download: current
+      artifact: signed-binaries
+      displayName: 'Download signed binaries'
     
     - bash: |
         set -e
@@ -660,19 +666,59 @@ stages:
         echo "=== Creating Final Signed+Notarized Tarball (v3) ==="
         
         VERSION="$(AzureCliVersion)"
-        TARBALL_NAME="azure-cli-${VERSION}-macos-${{ parameters.Architecture }}-nopython-signed-notarized.tar.gz"
+        ARCH="${{ parameters.Architecture }}"
+        TARBALL_NAME="azure-cli-${VERSION}-macos-${ARCH}-nopython-signed-notarized.tar.gz"
         OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/final"
+        FINAL_DIR="$(Build.ArtifactStagingDirectory)/merged"
         
-        mkdir -p "$OUTPUT_DIR"
+        mkdir -p "$OUTPUT_DIR" "$FINAL_DIR"
         
-        # Ensure execute permissions before creating tarball
-        cd "$(Pipeline.Workspace)/signed-merged"
-        chmod +x bin/az 2>/dev/null || true
-        chmod +x libexec/bin/az 2>/dev/null || true
-        find . -name "*.so" -exec chmod +x {} \; 2>/dev/null || true
-        find . -name "*.dylib" -exec chmod +x {} \; 2>/dev/null || true
+        echo "Version: $VERSION"
+        echo "Architecture: $ARCH"
+        echo ""
         
-        # Create tarball from signed contents
+        # Extract unsigned tarball (preserves symlinks!)
+        echo "=== Extracting unsigned tarball (preserves symlinks) ==="
+        TARBALL="$(Pipeline.Workspace)/unsigned-tarball/unsigned.tar.gz"
+        tar -xzf "$TARBALL" -C "$FINAL_DIR"
+        
+        # Verify symlink is preserved
+        if [ -L "$FINAL_DIR/bin/az" ]; then
+          echo "✅ bin/az symlink preserved: $(readlink "$FINAL_DIR/bin/az")"
+        else
+          echo "⚠️ bin/az is not a symlink, will recreate..."
+          rm -f "$FINAL_DIR/bin/az"
+          ln -s ../libexec/bin/az "$FINAL_DIR/bin/az"
+          echo "✅ Recreated symlink: bin/az -> ../libexec/bin/az"
+        fi
+        
+        # Overlay signed binaries
+        echo ""
+        echo "=== Overlaying signed binaries ==="
+        SIGNED_DIR="$(Pipeline.Workspace)/signed-binaries"
+        cd "$SIGNED_DIR"
+        REPLACED=0
+        find . -type f | while read signed_file; do
+          target="$FINAL_DIR/$signed_file"
+          if [ -f "$target" ]; then
+            cp "$signed_file" "$target"
+            REPLACED=$((REPLACED + 1))
+            echo "  Replaced: $signed_file"
+          fi
+        done
+        echo "Overlaid signed binaries"
+        
+        # Restore permissions
+        echo ""
+        echo "=== Restoring permissions ==="
+        find "$FINAL_DIR" -name "*.so" -exec chmod +x {} \;
+        find "$FINAL_DIR" -name "*.dylib" -exec chmod +x {} \;
+        chmod +x "$FINAL_DIR/libexec/bin/az" 2>/dev/null || true
+        
+        # Create final tar.gz (preserves symlinks with default tar behavior)
+        echo ""
+        echo "=== Creating final tarball ==="
+        cd "$FINAL_DIR"
         tar -czf "$OUTPUT_DIR/$TARBALL_NAME" --preserve-permissions .
         
         # Generate SHA256
