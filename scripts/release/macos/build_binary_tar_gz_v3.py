@@ -228,7 +228,7 @@ SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 INSTALL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Our bundled site-packages
-AZURE_CLI_SITE_PACKAGES="$INSTALL_DIR/lib/python{python_version}/site-packages"
+AZURE_CLI_SITE_PACKAGES="$INSTALL_DIR/libexec/lib/python{python_version}/site-packages"
 
 # Find Homebrew Python {python_version}
 find_homebrew_python() {{
