@@ -39,7 +39,7 @@ parameters:
   - name: TarballBuildId
     displayName: 'CLI Tarball Build ID (from macos-tarball-build-v3 pipeline)'
     type: string
-    default: ''
+    default: '293789'
   
   - name: TarballArtifact
     displayName: 'Tarball Artifact Name'
@@ -760,73 +760,87 @@ stages:
       artifact: 'cli-signed-notarized-v3'
       displayName: 'Download signed tarball'
     
+    - task: CopyFiles@2
+      displayName: 'Copy release files to staging'
+      inputs:
+        SourceFolder: '$(Pipeline.Workspace)/cli-signed-notarized-v3'
+        Contents: |
+          azure-cli-*.tar.gz
+          azure-cli-*.tar.gz.sha256
+        TargetFolder: '$(Build.ArtifactStagingDirectory)/release'
+        flattenFolders: true
+    
     - bash: |
-        set -e
-        
         VERSION="$(AzureCliVersion)"
-        TAG="v${VERSION}-v3"
+        ARCH="${{ parameters.Architecture }}"
         
-        echo "=== Creating GitHub Release ==="
-        echo "Repository: ${{ parameters.GitHubRepo }}"
-        echo "Tag: $TAG"
+        TARBALL=$(find "$(Build.ArtifactStagingDirectory)/release" -name "azure-cli-*.tar.gz" ! -name "*.sha256" | head -1)
+        SHA256_FILE="$TARBALL.sha256"
+        
+        echo "=== GitHub Release ==="
         echo "Version: $VERSION"
+        echo "Architecture: $ARCH"
+        echo "Tarball: $(basename $TARBALL)"
+        echo "Size: $(ls -lh $TARBALL | awk '{print $5}')"
+        echo "SHA256: $(cat $SHA256_FILE)"
         
-        # Install GitHub CLI
-        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-        sudo apt update && sudo apt install gh -y
+        echo "##vso[task.setvariable variable=ReleaseTag]v${VERSION}-v3"
         
-        # Create release
-        cd $(Pipeline.Workspace)/cli-signed-notarized-v3
-        
-        RELEASE_NOTES="## Azure CLI ${VERSION} - macOS (v3 - Homebrew Python)
-        
-This release uses Homebrew Python instead of bundling Python runtime.
-
-### Requirements
-- macOS 11+ (Big Sur or later)
-- Homebrew Python 3.13: \`brew install python@3.13\`
-
-### Installation via Homebrew Cask
-\`\`\`bash
-brew tap azure/azure-cli
-brew install --cask azure-cli
-\`\`\`
-
-### Manual Installation
-\`\`\`bash
-# Install Python
-brew install python@3.13
-
-# Extract and run
-tar xzf azure-cli-${VERSION}-macos-${{ parameters.Architecture }}-nopython.tar.gz
-./bin/az version
-\`\`\`
-
-### Alternative Python Sources
-The portable launcher supports:
-- Homebrew Python
-- python.org installer
-- pyenv
-- Any Python 3.13 in PATH
-- Custom path via \`AZ_PYTHON\` environment variable
-
-### Package Info
-- Architecture: ${{ parameters.Architecture }}
-- Size: ~42 MB (49% smaller than v2)
-- Signed with: Microsoft Developer ID
-- Notarized: Yes (Apple approved)
-"
-        
-        gh release create "$TAG" \
-          --repo "${{ parameters.GitHubRepo }}" \
-          --title "Azure CLI $VERSION (macOS v3)" \
-          --notes "$RELEASE_NOTES" \
-          *.tar.gz *.sha256 || echo "Release may already exist"
-        
+      displayName: 'Prepare release files'
+    
+    - task: GitHubRelease@1
+      displayName: 'Delete existing release if present'
+      continueOnError: true
+      inputs:
+        gitHubConnection: 'github.com_naga-nandyala'
+        repositoryName: '$(GitHubRepo)'
+        action: 'delete'
+        tag: '$(ReleaseTag)'
+    
+    - task: GitHubRelease@1
       displayName: 'Create GitHub Release'
-      env:
-        GH_TOKEN: $(GITHUB_TOKEN)
+      inputs:
+        gitHubConnection: 'github.com_naga-nandyala'
+        repositoryName: '$(GitHubRepo)'
+        action: 'create'
+        target: '$(Build.SourceVersion)'
+        tagSource: 'userSpecifiedTag'
+        tag: '$(ReleaseTag)'
+        title: 'Azure CLI $(AzureCliVersion) - macOS v3 (Homebrew Python)'
+        releaseNotesSource: 'inline'
+        releaseNotesInline: |
+          ## Azure CLI $(AzureCliVersion) - macOS (v3 - Homebrew Python)
+          
+          This release uses Homebrew Python instead of bundling Python runtime.
+          Smaller download (~42MB vs ~83MB) and shares Python with other tools.
+          
+          ### Requirements
+          - macOS 11+ (Big Sur or later)
+          - Homebrew Python 3.13
+          
+          ### Installation via Homebrew Cask (Recommended)
+          ```bash
+          brew tap $(HomebrewTapRepo)
+          brew install --cask azure-cli-v3
+          ```
+          
+          ### Manual Installation
+          ```bash
+          brew install python@3.13
+          tar xzf azure-cli-$(AzureCliVersion)-macos-${{ parameters.Architecture }}-nopython.tar.gz
+          ./bin/az version
+          ```
+          
+          ### Alternative Python Sources
+          The portable launcher supports Homebrew, python.org, pyenv, or custom path via AZ_PYTHON.
+          
+          ### Verification
+          ```bash
+          codesign -v bin/az
+          spctl --assess -vv bin/az
+          ```
+        assets: '$(Build.ArtifactStagingDirectory)/release/*'
+        addChangeLog: false
 
 # ============================================================================
 # STAGE 7: UPDATE HOMEBREW CASK
@@ -849,6 +863,7 @@ The portable launcher supports:
     steps:
     - checkout: homebrewtap
       persistCredentials: true
+      path: homebrew-tap
     
     - download: current
       artifact: 'cli-signed-notarized-v3'
@@ -858,6 +873,8 @@ The portable launcher supports:
         set -e
         
         VERSION="$(AzureCliVersion)"
+        ARCH="${{ parameters.Architecture }}"
+        GITHUB_REPO="${{ parameters.GitHubRepo }}"
         TARBALL=$(ls $(Pipeline.Workspace)/cli-signed-notarized-v3/*.tar.gz | head -1)
         SHA256=$(cat $(Pipeline.Workspace)/cli-signed-notarized-v3/*.sha256 | cut -d' ' -f1)
         
@@ -865,47 +882,41 @@ The portable launcher supports:
         echo "Version: $VERSION"
         echo "SHA256: $SHA256"
         
-        # Create/update cask definition
-        mkdir -p Casks
-        cat > Casks/azure-cli-v3.rb << EOF
-# Azure CLI Homebrew Cask (v3 - Uses Homebrew Python)
-cask "azure-cli-v3" do
-  version "${VERSION}"
-  sha256 "${SHA256}"
-
-  url "https://github.com/${{ parameters.GitHubRepo }}/releases/download/v${VERSION}-v3/azure-cli-${VERSION}-macos-${{ parameters.Architecture }}-nopython.tar.gz"
-  name "Azure CLI"
-  desc "Microsoft Azure CLI (Lightweight - uses Homebrew Python)"
-  homepage "https://docs.microsoft.com/cli/azure/"
-
-  # Requires Homebrew Python 3.13
-  depends_on formula: "python@3.13"
-
-  # Binary symlink
-  binary "bin/az"
-
-  # Shell completions
-  zsh_completion "libexec/share/zsh/site-functions/_az"
-  bash_completion "libexec/share/bash-completion/completions/az"
-
-  caveats <<~EOS
-    Azure CLI v3 uses Homebrew Python for a smaller download.
-    
-    Debug mode: AZ_DEBUG=1 az version
-    Custom Python: export AZ_PYTHON=/path/to/python3.13
-  EOS
-end
-EOF
+        cd $(Pipeline.Workspace)/homebrew-tap
         
-        echo "Created cask definition:"
-        cat Casks/azure-cli-v3.rb
+        # Create Cask using printf line-by-line to avoid YAML parsing issues
+        mkdir -p Casks
+        CASK_FILE="Casks/azure-cli-v3.rb"
+        printf 'cask "azure-cli-v3" do\n' > "$CASK_FILE"
+        printf '  version "%s"\n' "$VERSION" >> "$CASK_FILE"
+        printf '  sha256 "%s"\n' "$SHA256" >> "$CASK_FILE"
+        printf '\n' >> "$CASK_FILE"
+        printf '  url "https://github.com/%s/releases/download/v%s-v3/azure-cli-%s-macos-%s-nopython.tar.gz"\n' "$GITHUB_REPO" "$VERSION" "$VERSION" "$ARCH" >> "$CASK_FILE"
+        printf '  name "Azure CLI"\n' >> "$CASK_FILE"
+        printf '  desc "Microsoft Azure CLI (Lightweight - uses Homebrew Python)"\n' >> "$CASK_FILE"
+        printf '  homepage "https://docs.microsoft.com/cli/azure/"\n' >> "$CASK_FILE"
+        printf '\n' >> "$CASK_FILE"
+        printf '  depends_on formula: "python@3.13"\n' >> "$CASK_FILE"
+        printf '\n' >> "$CASK_FILE"
+        printf '  binary "bin/az"\n' >> "$CASK_FILE"
+        printf '\n' >> "$CASK_FILE"
+        printf '  zsh_completion "libexec/share/zsh/site-functions/_az"\n' >> "$CASK_FILE"
+        printf '  bash_completion "libexec/share/bash-completion/completions/az"\n' >> "$CASK_FILE"
+        printf '\n' >> "$CASK_FILE"
+        printf '  zap trash: "~/.azure"\n' >> "$CASK_FILE"
+        printf 'end\n' >> "$CASK_FILE"
+        
+        echo "=== Updated Cask ==="
+        cat "$CASK_FILE"
         
         # Commit and push
-        git config user.name "Azure Pipelines"
-        git config user.email "azuredevops@microsoft.com"
+        git config user.name "Azure Pipeline"
+        git config user.email "azure-pipeline@microsoft.com"
         git add Casks/azure-cli-v3.rb
         git commit -m "Update azure-cli-v3 to $VERSION" || echo "No changes to commit"
-        git push origin main
+        git push origin HEAD:main
+        
+        echo "Homebrew cask updated successfully"
         
       displayName: 'Update cask definition'
 
