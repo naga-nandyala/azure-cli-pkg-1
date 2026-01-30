@@ -480,8 +480,8 @@ INSTALL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Set Python home for relocatable installation
 export PYTHONHOME="$INSTALL_DIR"
 
-# Set Azure CLI installer identifier
-export AZ_INSTALLER=HOMEBREW_FORMULA
+# Set Azure CLI installer identifier (matches homebrew-core formula)
+export AZ_INSTALLER=HOMEBREW
 
 # Execute the Azure CLI
 exec "$INSTALL_DIR/bin/python3" -m azure.cli "$@"

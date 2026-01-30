@@ -271,8 +271,8 @@ PYTHON="$(find_homebrew_python)" || {{
 # Set PYTHONPATH to use our bundled packages
 export PYTHONPATH="$AZURE_CLI_SITE_PACKAGES${{PYTHONPATH:+:$PYTHONPATH}}"
 
-# Set Azure CLI installer identifier
-export AZ_INSTALLER=HOMEBREW_CASK
+# Set Azure CLI installer identifier (matches homebrew-core formula)
+export AZ_INSTALLER=HOMEBREW
 
 # Execute the Azure CLI
 exec "$PYTHON" -m azure.cli "$@"
