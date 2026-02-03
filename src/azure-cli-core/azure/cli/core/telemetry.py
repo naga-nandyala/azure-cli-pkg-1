@@ -472,9 +472,10 @@ def set_region_identified(region_input, region_identified):
 
 # region authentication-related
 @decorators.suppress_all_exceptions()
-def set_broker_info(enable_broker_on_windows):
-    # Log the value of `enable_broker_on_windows`
+def set_broker_info(enable_broker_on_windows, enable_broker_on_mac=None):
+    # Log the value of `enable_broker_on_windows` and `enable_broker_on_mac`
     _session.enable_broker_on_windows = enable_broker_on_windows
+    _session.enable_broker_on_mac = enable_broker_on_mac
 
 
 @decorators.suppress_all_exceptions()

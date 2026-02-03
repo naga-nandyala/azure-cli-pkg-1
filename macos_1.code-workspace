@@ -1,11 +1,15 @@
 {
 	"folders": [
 		{
+			"name": "macos_1",
 			"path": ".."
 		},
 		{
-			"path": "../../../../../../../../opt/homebrew/Library"
+			"name": "Library",
+			"path": "../../../../../../../opt/homebrew/Library"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"azureTerraform.checkTerraformCmd": false
+	}
 }
