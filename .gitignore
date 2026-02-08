@@ -127,3 +127,4 @@ _naga*
 _scratch*
 _ref_repos*
 .venv*/
+.azure/

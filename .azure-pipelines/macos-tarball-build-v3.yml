@@ -7,6 +7,7 @@
 # - Relies on Homebrew python@3.13 as a runtime dependency
 # - Contains only Azure CLI packages and native extensions (.so files)
 # - Uses portable launcher script supporting multiple Python sources
+# - Builds BOTH ARM64 and x86_64 architectures in parallel
 #
 # Key Differences from v2:
 # - No Python base download (Python comes from Homebrew at runtime)
@@ -15,10 +16,13 @@
 # - Faster build and notarization process
 #
 # Stages:
-# 1. Build Azure CLI packages using Homebrew Python
-# 2. Create Unsigned Tar.gz
-# 3. Verify Build
-# 4. Publish Artifacts
+# 1. Build Azure CLI packages for both ARM64 and x86_64 (parallel)
+# 2. Analyze and Verify on corresponding architecture runners
+# 3. Summary
+#
+# Output Artifacts:
+# - cli-build-unsigned-v3-arm64
+# - cli-build-unsigned-v3-x86_64
 #
 # The output is an UNSIGNED tar.gz that needs to be signed and notarized
 # in a separate pipeline (macos-tarball-sign-notarize-v3.yml)
@@ -26,14 +30,6 @@
 trigger: none
 
 parameters:
-  - name: Architecture
-    displayName: 'Architecture'
-    type: string
-    default: 'arm64'
-    values:
-    - arm64
-    - x86_64
-  
   - name: PythonVersion
     displayName: 'Python Version (Homebrew)'
     type: string
@@ -82,22 +78,27 @@ variables:
   - name: skipNugetSecurityAnalysis
     value: true
 
-name: tarball-build-v3-$(Build.BuildId)-${{ parameters.Architecture }}
+name: tarball-build-v3-$(Build.BuildId)
 
 stages:
 # ============================================================================
-# STAGE 1: BUILD AZURE CLI
+# STAGE 1: BUILD AZURE CLI (BOTH ARCHITECTURES IN PARALLEL)
 # ============================================================================
 - stage: BuildAzureCli
   displayName: 'Stage 1: Build Azure CLI'
   jobs:
   - job: BuildCli
-    displayName: 'Build Azure CLI (Homebrew Python)'
+    displayName: 'Build'
+    strategy:
+      matrix:
+        ARM64:
+          Architecture: 'arm64'
+          vmImageName: 'macos-15-arm64'
+        Intel:
+          Architecture: 'x86_64'
+          vmImageName: 'macos-15'
     pool:
-      ${{ if eq(parameters.Architecture, 'arm64') }}:
-        vmImage: 'macos-15-arm64'
-      ${{ else }}:
-        vmImage: 'macos-14'
+      vmImage: $(vmImageName)
     timeoutInMinutes: 60
     
     steps:
@@ -109,6 +110,8 @@ stages:
         set -e
         
         echo "=== Installing Homebrew Python ${{ parameters.PythonVersion }} ==="
+        echo "Architecture: $(Architecture)"
+        echo "VM Image: $(vmImageName)"
         brew install python@${{ parameters.PythonVersion }}
         
         # Get Python path
@@ -125,9 +128,11 @@ stages:
         set -e
         
         PYTHON="$(PythonPath)"
+        ARCH="$(Architecture)"
         
         echo "=== Building Azure CLI with Homebrew Python ==="
         echo "Python: $PYTHON"
+        echo "Architecture: $ARCH"
         $PYTHON --version
         
         # Get CLI version
@@ -139,7 +144,7 @@ stages:
         echo ""
         echo "=== Running build_binary_tar_gz_v3.py ==="
         $PYTHON scripts/release/macos/build_binary_tar_gz_v3.py \
-          --platform-tag macos-${{ parameters.Architecture }}
+          --platform-tag macos-$ARCH
         
         # List output
         echo ""
@@ -159,39 +164,44 @@ stages:
       name: BuildStep
     
     - publish: $(Build.ArtifactStagingDirectory)/cli-build
-      artifact: 'cli-build-unsigned-v3'
-      displayName: 'Publish Unsigned CLI Build'
+      artifact: 'cli-build-unsigned-v3-$(Architecture)'
+      displayName: 'Publish Unsigned CLI Build ($(Architecture))'
 
 # ============================================================================
-# STAGE 2: ANALYZE AND VERIFY
+# STAGE 2: ANALYZE AND VERIFY (BOTH ARCHITECTURES IN PARALLEL)
 # ============================================================================
 - stage: AnalyzeAndVerify
   displayName: 'Stage 2: Analyze and Verify'
   dependsOn: BuildAzureCli
-  variables:
-    AzureCliVersion: $[ stageDependencies.BuildAzureCli.BuildCli.outputs['BuildStep.AzureCliVersion'] ]
   jobs:
   - job: AnalyzeTarball
-    displayName: 'Analyze tar.gz package'
+    displayName: 'Verify'
+    strategy:
+      matrix:
+        ARM64:
+          Architecture: 'arm64'
+          vmImageName: 'macos-15-arm64'
+        Intel:
+          Architecture: 'x86_64'
+          vmImageName: 'macos-15'
     pool:
-      ${{ if eq(parameters.Architecture, 'arm64') }}:
-        vmImage: 'macos-15-arm64'
-      ${{ else }}:
-        vmImage: 'macos-14'
+      vmImage: $(vmImageName)
     steps:
     - checkout: none
     
     - download: current
-      artifact: 'cli-build-unsigned-v3'
-      displayName: 'Download CLI Build'
+      artifact: 'cli-build-unsigned-v3-$(Architecture)'
+      displayName: 'Download CLI Build ($(Architecture))'
     
     - bash: |
         set -e
         
-        TARBALL=$(ls $(Pipeline.Workspace)/cli-build-unsigned-v3/*.tar.gz | head -1)
+        ARCH="$(Architecture)"
+        TARBALL=$(ls $(Pipeline.Workspace)/cli-build-unsigned-v3-$ARCH/*.tar.gz | head -1)
         EXTRACT_DIR=$(mktemp -d)
         
         echo "=== Tarball Analysis (v3 - No Bundled Python) ==="
+        echo "Architecture: $ARCH"
         echo "Tarball: $(basename "$TARBALL")"
         echo "Size: $(du -h "$TARBALL" | cut -f1)"
         echo ""
@@ -238,17 +248,18 @@ stages:
         echo "File count: $(find "$EXTRACT_DIR" -type f | wc -l)"
         
         rm -rf "$EXTRACT_DIR"
-      displayName: 'Analyze Tarball'
+      displayName: 'Analyze Tarball ($(Architecture))'
       name: AnalyzeStep
     
-    # Verify Azure CLI works
+    # Verify Azure CLI works on the correct architecture
     - bash: |
         set -e
         
-        TARBALL=$(ls $(Pipeline.Workspace)/cli-build-unsigned-v3/*.tar.gz | head -1)
+        ARCH="$(Architecture)"
+        TARBALL=$(ls $(Pipeline.Workspace)/cli-build-unsigned-v3-$ARCH/*.tar.gz | head -1)
         EXTRACT_DIR=$(mktemp -d)
         
-        echo "=== Verifying Azure CLI ==="
+        echo "=== Verifying Azure CLI on $ARCH ==="
         tar -xzf "$TARBALL" -C "$EXTRACT_DIR"
         
         # Install Homebrew Python if not present
@@ -256,15 +267,19 @@ stages:
           brew install python@3.13
         fi
         
+        # Verify we're running on the correct architecture
+        echo "System architecture: $(uname -m)"
+        echo "Expected: $ARCH"
+        
         # Test CLI
         export AZ_DEBUG=1
         "$EXTRACT_DIR/bin/az" version
         
         echo ""
-        echo "✅ Azure CLI works correctly"
+        echo "✅ Azure CLI works correctly on $ARCH"
         
         rm -rf "$EXTRACT_DIR"
-      displayName: 'Verify CLI Works'
+      displayName: 'Verify CLI Works ($(Architecture))'
 
 # ============================================================================
 # STAGE 3: SUMMARY
@@ -276,8 +291,10 @@ stages:
   - AnalyzeAndVerify
   condition: always()
   variables:
-    AzureCliVersion: $[ stageDependencies.BuildAzureCli.BuildCli.outputs['BuildStep.AzureCliVersion'] ]
-    BinaryCount: $[ stageDependencies.AnalyzeAndVerify.AnalyzeTarball.outputs['AnalyzeStep.BinaryCount'] ]
+    # Get CLI version from ARM64 build (both should have same version)
+    AzureCliVersion: $[ stageDependencies.BuildAzureCli.BuildCli.ARM64.outputs['BuildStep.AzureCliVersion'] ]
+    BinaryCountARM64: $[ stageDependencies.AnalyzeAndVerify.AnalyzeTarball.ARM64.outputs['AnalyzeStep.BinaryCount'] ]
+    BinaryCountIntel: $[ stageDependencies.AnalyzeAndVerify.AnalyzeTarball.Intel.outputs['AnalyzeStep.BinaryCount'] ]
   jobs:
   - job: PrintSummary
     displayName: 'Print Build Summary'
@@ -288,26 +305,30 @@ stages:
     - checkout: none
     
     - bash: |
-        echo "╔══════════════════════════════════════════════════════════════════╗"
-        echo "║          AZURE CLI v3 TARBALL BUILD SUMMARY                      ║"
-        echo "╠══════════════════════════════════════════════════════════════════╣"
+        echo "╔══════════════════════════════════════════════════════════════════════╗"
+        echo "║          AZURE CLI v3 TARBALL BUILD SUMMARY                          ║"
+        echo "╠══════════════════════════════════════════════════════════════════════╣"
         echo "║ Version:        $(AzureCliVersion)"
-        echo "║ Architecture:   ${{ parameters.Architecture }}"
+        echo "║ Architectures:  ARM64 (Apple Silicon) + x86_64 (Intel)"
         echo "║ Python:         Homebrew ${{ parameters.PythonVersion }} (not bundled)"
-        echo "╠══════════════════════════════════════════════════════════════════╣"
-        echo "║ SIGNING METRICS (v3 vs v2)                                       ║"
-        echo "╠══════════════════════════════════════════════════════════════════╣"
-        echo "║ Binaries to sign:  $(BinaryCount) (vs ~91 in v2)"
-        echo "║ Signing reduction: ~89%"
-        echo "╠══════════════════════════════════════════════════════════════════╣"
-        echo "║ ARTIFACTS                                                        ║"
-        echo "╠══════════════════════════════════════════════════════════════════╣"
-        echo "║ • cli-build-unsigned-v3                                          ║"
-        echo "║   └── azure-cli-$(AzureCliVersion)-macos-${{ parameters.Architecture }}-nopython.tar.gz"
-        echo "╠══════════════════════════════════════════════════════════════════╣"
-        echo "║ NEXT STEP                                                        ║"
-        echo "╠══════════════════════════════════════════════════════════════════╣"
-        echo "║ Run macos-tarball-sign-notarize-v3.yml with:                     ║"
-        echo "║   TarballBuildId: $(Build.BuildId)                               ║"
-        echo "╚══════════════════════════════════════════════════════════════════╝"
+        echo "╠══════════════════════════════════════════════════════════════════════╣"
+        echo "║ SIGNING METRICS (v3 vs v2)                                           ║"
+        echo "╠══════════════════════════════════════════════════════════════════════╣"
+        echo "║ ARM64 binaries to sign:  $(BinaryCountARM64) (vs ~91 in v2)"
+        echo "║ Intel binaries to sign:  $(BinaryCountIntel) (vs ~91 in v2)"
+        echo "║ Signing reduction:       ~89%"
+        echo "╠══════════════════════════════════════════════════════════════════════╣"
+        echo "║ ARTIFACTS                                                            ║"
+        echo "╠══════════════════════════════════════════════════════════════════════╣"
+        echo "║ • cli-build-unsigned-v3-arm64                                        ║"
+        echo "║   └── azure-cli-$(AzureCliVersion)-macos-arm64-nopython.tar.gz"
+        echo "║ • cli-build-unsigned-v3-x86_64                                       ║"
+        echo "║   └── azure-cli-$(AzureCliVersion)-macos-x86_64-nopython.tar.gz"
+        echo "╠══════════════════════════════════════════════════════════════════════╣"
+        echo "║ NEXT STEP                                                            ║"
+        echo "╠══════════════════════════════════════════════════════════════════════╣"
+        echo "║ Run macos-tarball-sign-notarize-v3.yml with:                         ║"
+        echo "║   TarballBuildId: $(Build.BuildId)                                   ║"
+        echo "║   Architecture: arm64 OR x86_64                                      ║"
+        echo "╚══════════════════════════════════════════════════════════════════════╝"
       displayName: 'Print Summary'
