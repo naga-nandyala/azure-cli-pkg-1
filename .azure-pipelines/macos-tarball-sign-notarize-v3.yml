@@ -179,7 +179,8 @@ stages:
         echo "   Name: $TARBALL_NAME"
         echo "   Size: $(du -h "$TARBALL" | cut -f1)"
         
-        cp "$TARBALL" $(Build.ArtifactStagingDirectory)/unsigned/unsigned.tar.gz
+        # Keep the original filename to preserve version info
+        cp "$TARBALL" "$(Build.ArtifactStagingDirectory)/unsigned/${TARBALL_NAME}"
         
         # Extract version from tarball name
         VERSION=$(echo "$TARBALL_NAME" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
@@ -203,7 +204,12 @@ stages:
         echo "NOTE: v3 does NOT bundle Python, so only CLI native extensions need signing"
         echo ""
         
-        TARBALL="$(Build.ArtifactStagingDirectory)/unsigned/unsigned.tar.gz"
+        TARBALL=$(find $(Build.ArtifactStagingDirectory)/unsigned -name "azure-cli-*.tar.gz" | head -1)
+        if [ -z "$TARBALL" ]; then
+          echo "❌ ERROR: No azure-cli-*.tar.gz found"
+          ls -la $(Build.ArtifactStagingDirectory)/unsigned/
+          exit 1
+        fi
         EXTRACT_DIR=$(mktemp -d)
         
         tar -xzf "$TARBALL" -C "$EXTRACT_DIR"
@@ -468,7 +474,12 @@ stages:
         echo "=== Merging Signed Binaries (v3 - $(ARCH)) ==="
         
         # Extract original (preserves symlinks and launcher)
-        TARBALL="$(Pipeline.Workspace)/unsigned-tarball-$(ARCH)/unsigned.tar.gz"
+        TARBALL=$(find $(Pipeline.Workspace)/unsigned-tarball-$(ARCH) -name "azure-cli-*.tar.gz" | head -1)
+        if [ -z "$TARBALL" ]; then
+          echo "❌ ERROR: No azure-cli-*.tar.gz found"
+          ls -la $(Pipeline.Workspace)/unsigned-tarball-$(ARCH)/
+          exit 1
+        fi
         MERGED_DIR="$(Build.ArtifactStagingDirectory)/merged"
         
         mkdir -p "$MERGED_DIR"
@@ -539,11 +550,8 @@ stages:
         mkdir -p "$BUNDLE_DIR"
         
         # Get version from original tarball name
-        TARBALL="$(Pipeline.Workspace)/unsigned-tarball-$(ARCH)/unsigned.tar.gz"
-        TARBALL_NAME=$(ls -1 $(Pipeline.Workspace)/unsigned-tarball-$(ARCH)/*.tar.gz 2>/dev/null | head -1 || echo "")
-        if [ -n "$TARBALL_NAME" ]; then
-          VERSION=$(basename "$TARBALL_NAME" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-        fi
+        TARBALL=$(find $(Pipeline.Workspace)/unsigned-tarball-$(ARCH) -name "azure-cli-*.tar.gz" | head -1)
+        VERSION=$(basename "$TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
         if [ -z "$VERSION" ]; then
           VERSION="unknown"
         fi
@@ -697,8 +705,13 @@ stages:
         
         echo "=== Creating Final Signed+Notarized Tarball (v3 - $(ARCH)) ==="
         
-        # Get version from tarball name
-        UNSIGNED_TARBALL=$(find $(Pipeline.Workspace)/unsigned-tarball-$(ARCH) -name "*.tar.gz" | head -1)
+        # Get version from tarball name (now has proper name from Stage 1)
+        UNSIGNED_TARBALL=$(find $(Pipeline.Workspace)/unsigned-tarball-$(ARCH) -name "azure-cli-*.tar.gz" | head -1)
+        if [ -z "$UNSIGNED_TARBALL" ]; then
+          echo "❌ ERROR: No azure-cli-*.tar.gz found"
+          ls -la $(Pipeline.Workspace)/unsigned-tarball-$(ARCH)/
+          exit 1
+        fi
         TARBALL_NAME_ORIG=$(basename "$UNSIGNED_TARBALL")
         VERSION=$(echo "$TARBALL_NAME_ORIG" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
         if [ -z "$VERSION" ]; then
@@ -718,8 +731,7 @@ stages:
         
         # Extract unsigned tarball (preserves symlinks!)
         echo "=== Extracting unsigned tarball (preserves symlinks) ==="
-        TARBALL="$(Pipeline.Workspace)/unsigned-tarball-$(ARCH)/unsigned.tar.gz"
-        tar -xzf "$TARBALL" -C "$FINAL_DIR"
+        tar -xzf "$UNSIGNED_TARBALL" -C "$FINAL_DIR"
         
         # Verify symlink is preserved
         if [ -L "$FINAL_DIR/bin/az" ]; then
