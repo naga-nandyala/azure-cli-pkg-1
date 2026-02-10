@@ -186,7 +186,7 @@ stages:
         set -e
         
         ARCH="$(Architecture)"
-        TARBALL=$(ls $(Pipeline.Workspace)/cli-build-unsigned-v3-$ARCH/*.tar.gz | head -1)
+        TARBALL=$(ls $(Pipeline.Workspace)/cli-build-unsigned-v3-$ARCH/azure-cli-*-macos-$ARCH-nopython.tar.gz | sort | tail -1)
         EXTRACT_DIR=$(mktemp -d)
         
         echo "=== Tarball Analysis (v3 - No Bundled Python) ==="
@@ -245,7 +245,7 @@ stages:
         set -e
         
         ARCH="$(Architecture)"
-        TARBALL=$(ls $(Pipeline.Workspace)/cli-build-unsigned-v3-$ARCH/*.tar.gz | head -1)
+        TARBALL=$(ls $(Pipeline.Workspace)/cli-build-unsigned-v3-$ARCH/azure-cli-*-macos-$ARCH-nopython.tar.gz | sort | tail -1)
         EXTRACT_DIR=$(mktemp -d)
         
         echo "=== Verifying Azure CLI on $ARCH ==="
