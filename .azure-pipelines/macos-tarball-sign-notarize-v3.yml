@@ -75,7 +75,7 @@ resources:
     ref: main
 
 variables:
-  - template: .azure-pipelines/templates/variables.yml
+  - template: /.azure-pipelines/templates/variables.yml
   - group: 'AME ESRP Variable Group'
   
   # GitHub token for publishing releases
