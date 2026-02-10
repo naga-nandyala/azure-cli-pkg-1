@@ -254,7 +254,7 @@ stages:
         "$EXTRACT_DIR/bin/az" version
         
         echo ""
-        echo "✅ Azure CLI works correctly on $ARCH"
+        echo "Azure CLI works correctly on $ARCH"
         
         rm -rf "$EXTRACT_DIR"
       displayName: 'Verify CLI Works ($(Architecture))'

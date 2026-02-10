@@ -1,11 +1,6 @@
-# Azure CLI - macOS Tar.gz Sign and Notarize Pipeline (v3)
-# 
-# Sign and Notarize CLI Package (Homebrew Python Approach)
-# 
-# This v3 pipeline is SIMPLER than v2 because:
-# - Only ~10 binaries to sign (vs ~91 in v2)
-# - No Python runtime binaries (handled by Homebrew)
-# - 89% reduction in signing/notarization time
+# Azure CLI - macOS Tar.gz Sign and Notarize Pipeline
+#
+# Sign and notarize CLI package (Homebrew Python approach)
 #
 # This pipeline takes unsigned CLI tar.gz files from macos-tarball-build-v3 and:
 # 1. Signs all native extension .so files with ESRP (Developer ID Application)
@@ -24,7 +19,7 @@
 # │ tar.gz      │    │ (ESRP)       │    │ notarization    │    │              │
 # └─────────────┘    └──────────────┘    └─────────────────┘    └──────────────┘
 #
-# Binary Categories in v3:
+# Binary Categories:
 # - cryptography: ~3-4 .so files (Rust-based crypto)
 # - cffi: 1 .so file
 # - bcrypt: 1 .so file  
@@ -32,7 +27,7 @@
 # - yaml: 1 .so file
 # - psutil: 1 .so file
 # - pymsalruntime: 1 .dylib (optional, for broker auth)
-# Total: ~10 files vs ~91 in v2
+# Total: ~10 files
 #
 # Output Artifacts (both architectures):
 # - cli-signed-notarized-v3-arm64
@@ -44,7 +39,7 @@ parameters:
   - name: TarballBuildId
     displayName: 'CLI Tarball Build ID (from macos-tarball-build-v3 pipeline)'
     type: string
-    default: '295856'
+    default: '296288'
   
   - name: BundleId
     displayName: 'Bundle ID for notarization'
@@ -153,7 +148,7 @@ stages:
     - bash: |
         set -e
         
-        echo "=== Unsigned Tarball from Pipeline Artifacts (v3) ==="
+        echo "=== Unsigned Tarball from Pipeline Artifacts ==="
         echo "Build ID: ${{ parameters.TarballBuildId }}"
         echo "Artifact: $(ARTIFACT_NAME)"
         echo "Architecture: $(ARCH)"
@@ -166,15 +161,15 @@ stages:
         mkdir -p $(Build.ArtifactStagingDirectory)/unsigned
         
         # Find the tarball in the downloaded artifact
-        TARBALL=$(find $(Pipeline.Workspace)/tarball-download -name "azure-cli-*.tar.gz" | head -1)
+        TARBALL=$(find $(Pipeline.Workspace)/tarball-download -name "azure-cli-*.tar.gz" | sort | tail -1)
         
         if [ -z "$TARBALL" ]; then
-          echo "❌ ERROR: No azure-cli-*.tar.gz found in artifact"
+          echo "ERROR: No azure-cli-*.tar.gz found in artifact"
           find $(Pipeline.Workspace)/tarball-download -type f
           exit 1
         fi
         
-        echo "✅ Found: $TARBALL"
+        echo "Found: $TARBALL"
         TARBALL_NAME=$(basename "$TARBALL")
         echo "   Name: $TARBALL_NAME"
         echo "   Size: $(du -h "$TARBALL" | cut -f1)"
@@ -183,9 +178,10 @@ stages:
         cp "$TARBALL" "$(Build.ArtifactStagingDirectory)/unsigned/${TARBALL_NAME}"
         
         # Extract version from tarball name
-        VERSION=$(echo "$TARBALL_NAME" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        VERSION=$(echo "$TARBALL_NAME" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
         if [ -z "$VERSION" ]; then
           VERSION="unknown"
+          echo "Warning: Unable to parse version from $TARBALL_NAME"
         fi
         
         echo ""
@@ -199,14 +195,14 @@ stages:
     - bash: |
         set -e
         
-        echo "=== Analyzing Binaries to Sign (v3 - CLI Extensions Only) ==="
+        echo "=== Analyzing Binaries to Sign (CLI Extensions Only) ==="
         echo "Architecture: $(ARCH)"
-        echo "NOTE: v3 does NOT bundle Python, so only CLI native extensions need signing"
+        echo "NOTE: This tarball does NOT bundle Python, so only CLI native extensions need signing"
         echo ""
         
-        TARBALL=$(find $(Build.ArtifactStagingDirectory)/unsigned -name "azure-cli-*.tar.gz" | head -1)
+        TARBALL=$(find $(Build.ArtifactStagingDirectory)/unsigned -name "azure-cli-*.tar.gz" | sort | tail -1)
         if [ -z "$TARBALL" ]; then
-          echo "❌ ERROR: No azure-cli-*.tar.gz found"
+          echo "ERROR: No azure-cli-*.tar.gz found"
           ls -la $(Build.ArtifactStagingDirectory)/unsigned/
           exit 1
         fi
@@ -228,7 +224,7 @@ stages:
         
         # Categorize binaries
         echo ""
-        echo "=== Binary Categories (v3) ==="
+        echo "=== Binary Categories ==="
         
         # All binaries should be in site-packages (CLI extensions)
         CLI_EXTENSIONS=$(grep -cE 'site-packages.*\.so$' "$ALL_BINARIES" || echo 0)
@@ -257,7 +253,6 @@ stages:
         echo ""
         echo "=== Summary ===" 
         echo "Total binaries to sign: $BINARY_COUNT"
-        echo "Comparison: v3 has ~10 binaries vs ~91 in v2 (89% reduction)"
         echo "##vso[task.setvariable variable=BinaryCount;isOutput=true]$BINARY_COUNT"
         
         # Keep extracted contents for signing
@@ -313,8 +308,8 @@ stages:
       displayName: 'Download binaries list ($(ARCH))'
     
     - pwsh: |
-        Write-Host "=== Preparing Binaries for ESRP Signing (v3 - $(ARCH)) ==="
-        Write-Host "NOTE: Only ~10 CLI extension binaries (vs ~91 in v2)"
+        Write-Host "=== Preparing Binaries for ESRP Signing ($(ARCH)) ==="
+        Write-Host "NOTE: Only CLI extension binaries are signed"
         Write-Host ""
         
         $extractPath = "$(Pipeline.Workspace)/unsigned-contents-$(ARCH)"
@@ -471,12 +466,12 @@ stages:
     - bash: |
         set -e
         
-        echo "=== Merging Signed Binaries (v3 - $(ARCH)) ==="
+        echo "=== Merging Signed Binaries ($(ARCH)) ==="
         
         # Extract original (preserves symlinks and launcher)
-        TARBALL=$(find $(Pipeline.Workspace)/unsigned-tarball-$(ARCH) -name "azure-cli-*.tar.gz" | head -1)
+        TARBALL=$(find $(Pipeline.Workspace)/unsigned-tarball-$(ARCH) -name "azure-cli-*.tar.gz" | sort | tail -1)
         if [ -z "$TARBALL" ]; then
-          echo "❌ ERROR: No azure-cli-*.tar.gz found"
+          echo "ERROR: No azure-cli-*.tar.gz found"
           ls -la $(Pipeline.Workspace)/unsigned-tarball-$(ARCH)/
           exit 1
         fi
@@ -516,7 +511,7 @@ stages:
         echo ""
         echo "=== Verifying Structure ==="
         if [ -L "$MERGED_DIR/bin/az" ]; then
-          echo "✅ bin/az is symlink: $(readlink "$MERGED_DIR/bin/az")"
+          echo "bin/az is symlink: $(readlink "$MERGED_DIR/bin/az")"
         fi
         
         # Verify signatures on a sample binary
@@ -530,7 +525,7 @@ stages:
         
         # Export version for later stages
         TARBALL_NAME=$(basename "$TARBALL")
-        VERSION=$(echo "$TARBALL_NAME" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        VERSION=$(echo "$TARBALL_NAME" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
         if [ -z "$VERSION" ]; then
           VERSION="unknown"
         fi
@@ -550,8 +545,8 @@ stages:
         mkdir -p "$BUNDLE_DIR"
         
         # Get version from original tarball name
-        TARBALL=$(find $(Pipeline.Workspace)/unsigned-tarball-$(ARCH) -name "azure-cli-*.tar.gz" | head -1)
-        VERSION=$(basename "$TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        TARBALL=$(find $(Pipeline.Workspace)/unsigned-tarball-$(ARCH) -name "azure-cli-*.tar.gz" | sort | tail -1)
+        VERSION=$(basename "$TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
         if [ -z "$VERSION" ]; then
           VERSION="unknown"
         fi
@@ -706,14 +701,14 @@ stages:
         echo "=== Creating Final Signed+Notarized Tarball (v3 - $(ARCH)) ==="
         
         # Get version from tarball name (now has proper name from Stage 1)
-        UNSIGNED_TARBALL=$(find $(Pipeline.Workspace)/unsigned-tarball-$(ARCH) -name "azure-cli-*.tar.gz" | head -1)
+        UNSIGNED_TARBALL=$(find $(Pipeline.Workspace)/unsigned-tarball-$(ARCH) -name "azure-cli-*.tar.gz" | sort | tail -1)
         if [ -z "$UNSIGNED_TARBALL" ]; then
-          echo "❌ ERROR: No azure-cli-*.tar.gz found"
+          echo "ERROR: No azure-cli-*.tar.gz found"
           ls -la $(Pipeline.Workspace)/unsigned-tarball-$(ARCH)/
           exit 1
         fi
         TARBALL_NAME_ORIG=$(basename "$UNSIGNED_TARBALL")
-        VERSION=$(echo "$TARBALL_NAME_ORIG" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        VERSION=$(echo "$TARBALL_NAME_ORIG" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
         if [ -z "$VERSION" ]; then
           VERSION="unknown"
         fi
@@ -735,12 +730,12 @@ stages:
         
         # Verify symlink is preserved
         if [ -L "$FINAL_DIR/bin/az" ]; then
-          echo "✅ bin/az symlink preserved: $(readlink "$FINAL_DIR/bin/az")"
+          echo "bin/az symlink preserved: $(readlink "$FINAL_DIR/bin/az")"
         else
-          echo "⚠️ bin/az is not a symlink, will recreate..."
+          echo "Warning: bin/az is not a symlink, will recreate..."
           rm -f "$FINAL_DIR/bin/az"
           ln -s ../libexec/bin/az "$FINAL_DIR/bin/az"
-          echo "✅ Recreated symlink: bin/az -> ../libexec/bin/az"
+          echo "Recreated symlink: bin/az -> ../libexec/bin/az"
         fi
         
         # Overlay signed binaries
@@ -793,7 +788,7 @@ stages:
         echo "=== Verifying Final Tarball ($(ARCH)) ==="
         
         OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/final"
-        TARBALL=$(ls "$OUTPUT_DIR"/*.tar.gz | head -1)
+        TARBALL=$(ls "$OUTPUT_DIR"/*.tar.gz | sort | tail -1)
         TEST_DIR=$(mktemp -d)
         
         tar -xzf "$TARBALL" -C "$TEST_DIR"
@@ -804,12 +799,12 @@ stages:
         
         # Check symlink
         if [ -L "$TEST_DIR/bin/az" ]; then
-          echo "✅ bin/az symlink exists"
+          echo "bin/az symlink exists"
         fi
         
         # Check launcher
         if [ -x "$TEST_DIR/libexec/bin/az" ]; then
-          echo "✅ libexec/bin/az is executable"
+          echo "libexec/bin/az is executable"
         fi
         
         # Verify a signed binary
@@ -827,9 +822,9 @@ stages:
         if brew list python@3.13 &>/dev/null; then
           export AZ_DEBUG=1
           "$TEST_DIR/bin/az" version 2>&1 | head -10
-          echo "✅ CLI works correctly"
+          echo "CLI works correctly"
         else
-          echo "⚠️ Homebrew Python 3.13 not installed, skipping CLI test"
+          echo "Warning: Homebrew Python 3.13 not installed, skipping CLI test"
         fi
         
         rm -rf "$TEST_DIR"
@@ -888,8 +883,8 @@ stages:
     
     - bash: |
         # Get version from one of the tarballs
-        ARM64_TARBALL=$(find "$(Build.ArtifactStagingDirectory)/release" -name "*arm64*.tar.gz" ! -name "*.sha256" | head -1)
-        VERSION=$(basename "$ARM64_TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        ARM64_TARBALL=$(find "$(Build.ArtifactStagingDirectory)/release" -name "*arm64*.tar.gz" ! -name "*.sha256" | sort | tail -1)
+        VERSION=$(basename "$ARM64_TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
         
         echo "=== GitHub Release ==="
         echo "Version: $VERSION"
@@ -999,10 +994,10 @@ stages:
         GITHUB_REPO="${{ parameters.GitHubRepo }}"
         
         # Get version and SHA256 for both architectures
-        ARM64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-v3-arm64 -name "*.tar.gz" ! -name "*.sha256" | head -1)
-        X86_64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-v3-x86_64 -name "*.tar.gz" ! -name "*.sha256" | head -1)
+        ARM64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-v3-arm64 -name "*.tar.gz" ! -name "*.sha256" | sort | tail -1)
+        X86_64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-v3-x86_64 -name "*.tar.gz" ! -name "*.sha256" | sort | tail -1)
         
-        VERSION=$(basename "$ARM64_TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        VERSION=$(basename "$ARM64_TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
         
         ARM64_SHA256=$(cat ${ARM64_TARBALL}.sha256 | cut -d' ' -f1)
         X86_64_SHA256=$(cat ${X86_64_TARBALL}.sha256 | cut -d' ' -f1)
@@ -1210,7 +1205,7 @@ stages:
         
         echo "=== Testing Offline/Direct Tarball Installation ($(ARCH)) ==="
         
-        TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-v3-$(ARCH) -name "*.tar.gz" ! -name "*.sha256" | head -1)
+        TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-v3-$(ARCH) -name "*.tar.gz" ! -name "*.sha256" | sort | tail -1)
         TEST_DIR="$HOME/azure-cli-test"
         
         mkdir -p "$TEST_DIR"
