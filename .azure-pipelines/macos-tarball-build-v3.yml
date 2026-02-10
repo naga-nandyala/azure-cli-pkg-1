@@ -144,17 +144,18 @@ stages:
         echo ""
         echo "=== Running build_binary_tar_gz_v3.py ==="
         $PYTHON scripts/release/macos/build_binary_tar_gz_v3.py \
-          --platform-tag macos-$ARCH
+          --platform-tag macos-$ARCH \
+          --output-dir dist/binary_tar_gz
         
         # List output
         echo ""
         echo "=== Build Output ==="
-        ls -lh dist/binary_tar_gz_v3/
+        ls -lh dist/binary_tar_gz/
         
         # Copy to staging
         mkdir -p $(Build.ArtifactStagingDirectory)/cli-build
-        cp dist/binary_tar_gz_v3/*.tar.gz $(Build.ArtifactStagingDirectory)/cli-build/
-        cp dist/binary_tar_gz_v3/*.sha256 $(Build.ArtifactStagingDirectory)/cli-build/
+        cp dist/binary_tar_gz/*.tar.gz $(Build.ArtifactStagingDirectory)/cli-build/
+        cp dist/binary_tar_gz/*.sha256 $(Build.ArtifactStagingDirectory)/cli-build/
         
         echo ""
         echo "=== Staged Artifacts ==="
