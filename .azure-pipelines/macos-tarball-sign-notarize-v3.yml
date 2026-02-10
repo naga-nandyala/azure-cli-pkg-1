@@ -75,6 +75,7 @@ resources:
     ref: main
 
 variables:
+  - template: .azure-pipelines/templates/variables.yml
   - group: 'AME ESRP Variable Group'
   
   # GitHub token for publishing releases
@@ -120,11 +121,11 @@ stages:
       matrix:
         ARM64:
           ARCH: 'arm64'
-          VM_IMAGE: 'macos-15-arm64'
+          VM_IMAGE: ${{ variables.macos_arm64_pool }}
           ARTIFACT_NAME: 'cli-build-unsigned-v3-arm64'
         Intel:
           ARCH: 'x86_64'
-          VM_IMAGE: 'macos-15'
+          VM_IMAGE: ${{ variables.macos_intel_pool }}
           ARTIFACT_NAME: 'cli-build-unsigned-v3-x86_64'
     pool:
       vmImage: $(VM_IMAGE)
@@ -445,10 +446,10 @@ stages:
       matrix:
         ARM64:
           ARCH: 'arm64'
-          VM_IMAGE: 'macos-15-arm64'
+          VM_IMAGE: ${{ variables.macos_arm64_pool }}
         Intel:
           ARCH: 'x86_64'
-          VM_IMAGE: 'macos-15'
+          VM_IMAGE: ${{ variables.macos_intel_pool }}
     pool:
       vmImage: $(VM_IMAGE)
     
@@ -675,10 +676,10 @@ stages:
       matrix:
         ARM64:
           ARCH: 'arm64'
-          VM_IMAGE: 'macos-15-arm64'
+          VM_IMAGE: ${{ variables.macos_arm64_pool }}
         Intel:
           ARCH: 'x86_64'
-          VM_IMAGE: 'macos-15'
+          VM_IMAGE: ${{ variables.macos_intel_pool }}
     pool:
       vmImage: $(VM_IMAGE)
     
@@ -788,7 +789,7 @@ stages:
         echo "=== Verifying Final Tarball ($(ARCH)) ==="
         
         OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/final"
-        TARBALL=$(ls "$OUTPUT_DIR"/*.tar.gz | sort | tail -1)
+        TARBALL=$(find "$OUTPUT_DIR" -name "azure-cli-*.tar.gz" | sort | tail -1)
         TEST_DIR=$(mktemp -d)
         
         tar -xzf "$TARBALL" -C "$TEST_DIR"
@@ -883,7 +884,7 @@ stages:
     
     - bash: |
         # Get version from one of the tarballs
-        ARM64_TARBALL=$(find "$(Build.ArtifactStagingDirectory)/release" -name "*arm64*.tar.gz" ! -name "*.sha256" | sort | tail -1)
+        ARM64_TARBALL=$(find "$(Build.ArtifactStagingDirectory)/release" -name "azure-cli-*-macos-arm64-*.tar.gz" | sort | tail -1)
         VERSION=$(basename "$ARM64_TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
         
         echo "=== GitHub Release ==="
@@ -994,8 +995,8 @@ stages:
         GITHUB_REPO="${{ parameters.GitHubRepo }}"
         
         # Get version and SHA256 for both architectures
-        ARM64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-v3-arm64 -name "*.tar.gz" ! -name "*.sha256" | sort | tail -1)
-        X86_64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-v3-x86_64 -name "*.tar.gz" ! -name "*.sha256" | sort | tail -1)
+        ARM64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-v3-arm64 -name "azure-cli-*.tar.gz" | sort | tail -1)
+        X86_64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-v3-x86_64 -name "azure-cli-*.tar.gz" | sort | tail -1)
         
         VERSION=$(basename "$ARM64_TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
         
@@ -1205,7 +1206,7 @@ stages:
         
         echo "=== Testing Offline/Direct Tarball Installation ($(ARCH)) ==="
         
-        TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-v3-$(ARCH) -name "*.tar.gz" ! -name "*.sha256" | sort | tail -1)
+        TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-v3-$(ARCH) -name "azure-cli-*.tar.gz" | sort | tail -1)
         TEST_DIR="$HOME/azure-cli-test"
         
         mkdir -p "$TEST_DIR"
@@ -1215,6 +1216,9 @@ stages:
         if ! brew list python@3.13 &>/dev/null; then
           brew install python@3.13
         fi
+
+        AZ_PYTHON="$(brew --prefix python@3.13)/libexec/bin/python3"
+        export AZ_PYTHON
         
         # Test with debug mode
         export AZ_DEBUG=1

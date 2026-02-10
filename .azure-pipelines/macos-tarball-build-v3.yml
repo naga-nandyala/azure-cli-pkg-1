@@ -38,6 +38,7 @@ resources:
     ref: main
 
 variables:
+  - template: .azure-pipelines/templates/variables.yml
   # Disable auto-injection tasks
   - name: Codeql.Enabled
     value: false
@@ -71,10 +72,10 @@ stages:
       matrix:
         ARM64:
           Architecture: 'arm64'
-          vmImageName: 'macos-15-arm64'
+          vmImageName: ${{ variables.macos_arm64_pool }}
         Intel:
           Architecture: 'x86_64'
-          vmImageName: 'macos-15'
+          vmImageName: ${{ variables.macos_intel_pool }}
     pool:
       vmImage: $(vmImageName)
     timeoutInMinutes: 60
@@ -171,7 +172,7 @@ stages:
         set -e
         
         ARCH="$(Architecture)"
-        TARBALL=$(ls $(Pipeline.Workspace)/cli-build-unsigned-v3-$ARCH/azure-cli-*-macos-$ARCH-nopython.tar.gz | sort | tail -1)
+        TARBALL=$(find $(Pipeline.Workspace)/cli-build-unsigned-v3-$ARCH -name "azure-cli-*-macos-$ARCH-nopython.tar.gz" | sort | tail -1)
         EXTRACT_DIR=$(mktemp -d)
         
         echo "=== Tarball Analysis (No Bundled Python) ==="
@@ -231,7 +232,7 @@ stages:
         set -e
         
         ARCH="$(Architecture)"
-        TARBALL=$(ls $(Pipeline.Workspace)/cli-build-unsigned-v3-$ARCH/azure-cli-*-macos-$ARCH-nopython.tar.gz | sort | tail -1)
+        TARBALL=$(find $(Pipeline.Workspace)/cli-build-unsigned-v3-$ARCH -name "azure-cli-*-macos-$ARCH-nopython.tar.gz" | sort | tail -1)
         EXTRACT_DIR=$(mktemp -d)
         
         echo "=== Verifying Azure CLI on $ARCH ==="
