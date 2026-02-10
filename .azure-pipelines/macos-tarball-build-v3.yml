@@ -177,7 +177,8 @@ stages:
         echo "=== Tarball Analysis (No Bundled Python) ==="
         echo "Architecture: $ARCH"
         echo "Tarball: $(basename "$TARBALL")"
-        echo "Size: $(du -h "$TARBALL" | cut -f1)"
+        TARBALL_SIZE=$(du -h "$TARBALL" | cut -f1)
+        echo "Size: $TARBALL_SIZE"
         echo ""
         
         tar -xzf "$TARBALL" -C "$EXTRACT_DIR"
@@ -210,7 +211,7 @@ stages:
         echo "=== Total Binaries to Sign ==="
         TOTAL=$((SO_COUNT + DYLIB_COUNT))
         echo "Total: $TOTAL"
-        echo "##vso[task.setvariable variable=BinaryCount;isOutput=true]$TOTAL"
+        echo "##vso[task.setvariable variable=TarballSize;isOutput=true]$TARBALL_SIZE"
         
         echo ""
         echo "=== Launcher Script ==="
@@ -268,8 +269,8 @@ stages:
   - AnalyzeAndVerify
   condition: always()
   variables:
-    BinaryCountARM64: $[ stageDependencies.AnalyzeAndVerify.AnalyzeTarball.ARM64.outputs['AnalyzeStep.BinaryCount'] ]
-    BinaryCountIntel: $[ stageDependencies.AnalyzeAndVerify.AnalyzeTarball.Intel.outputs['AnalyzeStep.BinaryCount'] ]
+    TarballSizeARM64: $[ stageDependencies.AnalyzeAndVerify.AnalyzeTarball.ARM64.outputs['AnalyzeStep.TarballSize'] ]
+    TarballSizeIntel: $[ stageDependencies.AnalyzeAndVerify.AnalyzeTarball.Intel.outputs['AnalyzeStep.TarballSize'] ]
   jobs:
   - job: PrintSummary
     displayName: 'Print Build Summary'
@@ -286,10 +287,10 @@ stages:
         echo "║ Architectures:  ARM64 (Apple Silicon) + x86_64 (Intel)"
         echo "║ Python:         Homebrew ${{ parameters.PythonVersion }} (not bundled)"
         echo "╠══════════════════════════════════════════════════════════════════════╣"
-        echo "║ SIGNING METRICS                                                      ║"
+        echo "║ TARBALL SIZES                                                        ║"
         echo "╠══════════════════════════════════════════════════════════════════════╣"
-        echo "║ ARM64 binaries to sign:  $(BinaryCountARM64)"
-        echo "║ Intel binaries to sign:  $(BinaryCountIntel)"
+        echo "║ ARM64 tarball size:    $(TarballSizeARM64)"
+        echo "║ Intel tarball size:    $(TarballSizeIntel)"
         echo "╠══════════════════════════════════════════════════════════════════════╣"
         echo "║ ARTIFACTS                                                            ║"
         echo "╠══════════════════════════════════════════════════════════════════════╣"
