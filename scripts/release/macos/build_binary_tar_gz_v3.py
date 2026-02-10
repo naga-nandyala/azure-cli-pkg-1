@@ -61,6 +61,7 @@ AZURE_CLI_CORE_DIR = SRC_DIR / "azure-cli-core"
 # Package configuration
 APP_NAME = "azure-cli"
 CLI_EXECUTABLE_NAME = "az"
+TARBALL_NAME_TEMPLATE_DEFAULT = "{APP_NAME}-{VERSION}-{PLATFORM_TAG}-nopython.tar.gz"
 
 # Python version we're building for (must match Homebrew python@3.13)
 PYTHON_MAJOR_MINOR = "3.13"
@@ -312,13 +313,23 @@ def _report_sizes(install_dir: Path) -> None:
         print(f"    ... and {len(so_files) - 10} more")
 
 
-def create_tarball(install_dir: Path, output_dir: Path, version: str, platform_tag: str) -> Path:
+def create_tarball(
+    install_dir: Path,
+    output_dir: Path,
+    version: str,
+    platform_tag: str,
+    tarball_name_template: str,
+) -> Path:
     """Create the final tar.gz archive."""
     print("\n=== Creating tarball ===")
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    tarball_name = f"{APP_NAME}-{version}-{platform_tag}-nopython.tar.gz"
+    tarball_name = tarball_name_template.format(
+        APP_NAME=APP_NAME,
+        VERSION=version,
+        PLATFORM_TAG=platform_tag,
+    )
     tarball_path = output_dir / tarball_name
 
     with tarfile.open(tarball_path, "w:gz") as tar:
@@ -355,6 +366,11 @@ def main() -> int:
         type=Path,
         default=PROJECT_ROOT / "dist" / "binary_tar_gz",
         help="Output directory for the tarball",
+    )
+    parser.add_argument(
+        "--tarball-name-template",
+        default=TARBALL_NAME_TEMPLATE_DEFAULT,
+        help="Tarball filename template with {APP_NAME}, {VERSION} (from azure-cli-core), {PLATFORM_TAG}",
     )
     parser.add_argument("--keep-temp", action="store_true", help="Keep temporary build directory for debugging")
 
@@ -393,6 +409,7 @@ def main() -> int:
                 output_dir=args.output_dir,
                 version=version,
                 platform_tag=args.platform_tag,
+                tarball_name_template=args.tarball_name_template,
             )
 
             if args.keep_temp:

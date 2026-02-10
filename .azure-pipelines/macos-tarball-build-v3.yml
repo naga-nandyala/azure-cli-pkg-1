@@ -1,19 +1,13 @@
-# Azure CLI - macOS Tarball Build Pipeline (v3)
-# 
-# Build CLI Tarball Using Homebrew Python (No Bundled Python)
-# 
-# This v3 pipeline creates a LIGHTWEIGHT tar.gz that:
+# Azure CLI - macOS Tarball Build Pipeline
+#
+# Build CLI tarball using Homebrew Python (no bundled Python)
+#
+# This pipeline creates a lightweight tar.gz that:
 # - Does NOT bundle Python runtime (~60 MB savings)
 # - Relies on Homebrew python@3.13 as a runtime dependency
 # - Contains only Azure CLI packages and native extensions (.so files)
 # - Uses portable launcher script supporting multiple Python sources
 # - Builds BOTH ARM64 and x86_64 architectures in parallel
-#
-# Key Differences from v2:
-# - No Python base download (Python comes from Homebrew at runtime)
-# - 49% smaller tarball (~42MB vs ~82MB)
-# - 89% fewer binaries to sign (10 vs 91 .so files)
-# - Faster build and notarization process
 #
 # Stages:
 # 1. Build Azure CLI packages for both ARM64 and x86_64 (parallel)
@@ -44,10 +38,6 @@ resources:
     ref: main
 
 variables:
-  # Parameter variable mappings
-  - name: PythonVersion
-    value: ${{ parameters.PythonVersion }}
-  
   # Disable auto-injection tasks
   - name: Codeql.Enabled
     value: false
@@ -123,11 +113,6 @@ stages:
         echo "Architecture: $ARCH"
         $PYTHON --version
         
-        # Get CLI version
-        CLI_VERSION=$(grep "__version__" src/azure-cli-core/azure/cli/core/__init__.py | cut -d'"' -f2)
-        echo "Azure CLI version: $CLI_VERSION"
-        echo "##vso[task.setvariable variable=AzureCliVersion;isOutput=true]$CLI_VERSION"
-        
         # Run the v3 build script
         echo ""
         echo "=== Running build_binary_tar_gz_v3.py ==="
@@ -189,7 +174,7 @@ stages:
         TARBALL=$(ls $(Pipeline.Workspace)/cli-build-unsigned-v3-$ARCH/azure-cli-*-macos-$ARCH-nopython.tar.gz | sort | tail -1)
         EXTRACT_DIR=$(mktemp -d)
         
-        echo "=== Tarball Analysis (v3 - No Bundled Python) ==="
+        echo "=== Tarball Analysis (No Bundled Python) ==="
         echo "Architecture: $ARCH"
         echo "Tarball: $(basename "$TARBALL")"
         echo "Size: $(du -h "$TARBALL" | cut -f1)"
@@ -224,7 +209,7 @@ stages:
         echo ""
         echo "=== Total Binaries to Sign ==="
         TOTAL=$((SO_COUNT + DYLIB_COUNT))
-        echo "Total: $TOTAL (vs ~91 in v2)"
+        echo "Total: $TOTAL"
         echo "##vso[task.setvariable variable=BinaryCount;isOutput=true]$TOTAL"
         
         echo ""
@@ -283,8 +268,6 @@ stages:
   - AnalyzeAndVerify
   condition: always()
   variables:
-    # Get CLI version from ARM64 build (both should have same version)
-    AzureCliVersion: $[ stageDependencies.BuildAzureCli.BuildCli.ARM64.outputs['BuildStep.AzureCliVersion'] ]
     BinaryCountARM64: $[ stageDependencies.AnalyzeAndVerify.AnalyzeTarball.ARM64.outputs['AnalyzeStep.BinaryCount'] ]
     BinaryCountIntel: $[ stageDependencies.AnalyzeAndVerify.AnalyzeTarball.Intel.outputs['AnalyzeStep.BinaryCount'] ]
   jobs:
@@ -298,24 +281,22 @@ stages:
     
     - bash: |
         echo "╔══════════════════════════════════════════════════════════════════════╗"
-        echo "║          AZURE CLI v3 TARBALL BUILD SUMMARY                          ║"
+        echo "║          AZURE CLI TARBALL BUILD SUMMARY                             ║"
         echo "╠══════════════════════════════════════════════════════════════════════╣"
-        echo "║ Version:        $(AzureCliVersion)"
         echo "║ Architectures:  ARM64 (Apple Silicon) + x86_64 (Intel)"
         echo "║ Python:         Homebrew ${{ parameters.PythonVersion }} (not bundled)"
         echo "╠══════════════════════════════════════════════════════════════════════╣"
-        echo "║ SIGNING METRICS (v3 vs v2)                                           ║"
+        echo "║ SIGNING METRICS                                                      ║"
         echo "╠══════════════════════════════════════════════════════════════════════╣"
-        echo "║ ARM64 binaries to sign:  $(BinaryCountARM64) (vs ~91 in v2)"
-        echo "║ Intel binaries to sign:  $(BinaryCountIntel) (vs ~91 in v2)"
-        echo "║ Signing reduction:       ~89%"
+        echo "║ ARM64 binaries to sign:  $(BinaryCountARM64)"
+        echo "║ Intel binaries to sign:  $(BinaryCountIntel)"
         echo "╠══════════════════════════════════════════════════════════════════════╣"
         echo "║ ARTIFACTS                                                            ║"
         echo "╠══════════════════════════════════════════════════════════════════════╣"
         echo "║ • cli-build-unsigned-v3-arm64                                        ║"
-        echo "║   └── azure-cli-$(AzureCliVersion)-macos-arm64-nopython.tar.gz"
+        echo "║   └── azure-cli-<version>-macos-arm64-nopython.tar.gz"
         echo "║ • cli-build-unsigned-v3-x86_64                                       ║"
-        echo "║   └── azure-cli-$(AzureCliVersion)-macos-x86_64-nopython.tar.gz"
+        echo "║   └── azure-cli-<version>-macos-x86_64-nopython.tar.gz"
         echo "╠══════════════════════════════════════════════════════════════════════╣"
         echo "║ NEXT STEP                                                            ║"
         echo "╠══════════════════════════════════════════════════════════════════════╣"
