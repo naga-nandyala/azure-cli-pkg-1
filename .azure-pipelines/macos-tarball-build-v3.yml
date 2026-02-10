@@ -38,7 +38,7 @@ resources:
     ref: main
 
 variables:
-  - template: /.azure-pipelines/templates/variables.yml
+  - template: templates/variables.yml
   # Disable auto-injection tasks
   - name: Codeql.Enabled
     value: false
