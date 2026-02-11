@@ -78,10 +78,6 @@ variables:
   - template: templates/variables.yml
   - group: 'AME ESRP Variable Group'
   
-  # GitHub token for publishing releases
-  - name: GITHUB_TOKEN
-    value: $[ resources.repositories['homebrewtap'].token ]
-  
   # Parameter variable mappings
   - name: GitHubRepo
     value: ${{ parameters.GitHubRepo }}
@@ -547,6 +543,11 @@ stages:
         
         # Get version from original tarball name
         TARBALL=$(find $(Pipeline.Workspace)/unsigned-tarball-$(ARCH) -name "azure-cli-*.tar.gz" | sort | tail -1)
+        if [ -z "$TARBALL" ]; then
+          echo "ERROR: No azure-cli-*.tar.gz found for notarization bundle"
+          ls -la $(Pipeline.Workspace)/unsigned-tarball-$(ARCH)/
+          exit 1
+        fi
         VERSION=$(basename "$TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
         if [ -z "$VERSION" ]; then
           VERSION="unknown"
@@ -821,6 +822,8 @@ stages:
         echo ""
         echo "=== Testing CLI ==="
         if brew list python@3.13 &>/dev/null; then
+          AZ_PYTHON="$(brew --prefix python@3.13)/libexec/bin/python3"
+          export AZ_PYTHON
           export AZ_DEBUG=1
           "$TEST_DIR/bin/az" version 2>&1 | head -10
           echo "CLI works correctly"
@@ -1281,9 +1284,9 @@ stages:
         echo "║ ARTIFACTS                                                        ║"
         echo "╠══════════════════════════════════════════════════════════════════╣"
         echo "║ • cli-signed-notarized-v3-arm64                                  ║"
-        echo "║   └── azure-cli-<version>-macos-arm64-nopython.tar.gz            ║"
+        echo "║   └── azure-cli-<version>-macos-arm64-nopython-signed-notarized.tar.gz ║"
         echo "║ • cli-signed-notarized-v3-x86_64                                 ║"
-        echo "║   └── azure-cli-<version>-macos-x86_64-nopython.tar.gz           ║"
+        echo "║   └── azure-cli-<version>-macos-x86_64-nopython-signed-notarized.tar.gz ║"
         echo "╠══════════════════════════════════════════════════════════════════╣"
         echo "║ INSTALLATION                                                     ║"
         echo "╠══════════════════════════════════════════════════════════════════╣"
