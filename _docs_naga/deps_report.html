@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dependency Report</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif; margin: 24px; color: #e6e6e6; background: #121212; }
+h1, h2 { margin: 0.6em 0 0.2em; }
+p { margin: 0.4em 0 1em; }
+table { border-collapse: collapse; width: 100%; font-size: 12px; }
+th, td { border: 1px solid #2d2d2d; padding: 6px 8px; vertical-align: top; }
+th { background: #1f1f1f; text-align: left; position: sticky; top: 0; }
+tr:nth-child(even) td { background: #181818; }
+code { background: #1e1e1e; padding: 1px 4px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>Dependency Superset (Full Outer Join)</h1>
+<p>Each table includes all setup.py packages plus any requirements-only packages. Mismatch Summary is only populated when there is a mismatch.</p>
+<table>
+<thead>
+<tr><th>Package</th><th>azure-cli (setup)</th><th>azure-cli-core (setup)</th><th>azure-cli-telemetry (setup)</th><th>req-darwin</th><th>req-windows</th><th>req-linux</th><th>Mismatch Summary</th></tr>
+</thead>
+<tbody>
+<tr><td>PyGithub</td><td>PyGithub~=1.38</td><td>-</td><td>-</td><td>PyGithub==1.55</td><td>PyGithub==1.55</td><td>PyGithub==1.55</td><td>🟡 align version pins</td></tr>
+<tr><td>PyJWT</td><td>-</td><td>PyJWT>=2.1.0</td><td>-</td><td>PyJWT==2.10.1</td><td>PyJWT==2.10.1</td><td>PyJWT==2.10.1</td><td>🟡 align version pins</td></tr>
+<tr><td>PyNaCl</td><td>PyNaCl~=1.6.2</td><td>-</td><td>-</td><td>PyNaCl==1.6.2</td><td>PyNaCl==1.6.2</td><td>PyNaCl==1.6.2</td><td>🟡 align version pins</td></tr>
+<tr><td>PySocks</td><td>-</td><td>-</td><td>-</td><td>PySocks==1.7.1</td><td>PySocks==1.7.1</td><td>PySocks==1.7.1</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>antlr4-python3-runtime</td><td>antlr4-python3-runtime~=4.13.1</td><td>-</td><td>-</td><td>antlr4-python3-runtime==4.13.1</td><td>antlr4-python3-runtime==4.13.1</td><td>antlr4-python3-runtime==4.13.1</td><td>🟡 align version pins</td></tr>
+<tr><td>applicationinsights</td><td>-</td><td>-</td><td>applicationinsights>=0.11.1,<0.12</td><td>applicationinsights==0.11.9</td><td>applicationinsights==0.11.9</td><td>applicationinsights==0.11.9</td><td>🟡 align version pins</td></tr>
+<tr><td>argcomplete</td><td>-</td><td>argcomplete~=3.5.2</td><td>-</td><td>argcomplete==3.5.2</td><td>argcomplete==3.5.2</td><td>argcomplete==3.5.2</td><td>🟡 align version pins</td></tr>
+<tr><td>asn1crypto</td><td>-</td><td>-</td><td>-</td><td>asn1crypto==0.24.0</td><td>asn1crypto==0.24.0</td><td>asn1crypto==0.24.0</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>azure-ai-projects</td><td>azure-ai-projects~=1.0.0</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>🔴 missing requirements</td></tr>
+<tr><td>azure-appconfiguration</td><td>azure-appconfiguration~=1.7.2</td><td>-</td><td>-</td><td>azure-appconfiguration==1.7.2</td><td>azure-appconfiguration==1.7.2</td><td>azure-appconfiguration==1.7.2</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-batch</td><td>azure-batch==15.0.0b1</td><td>-</td><td>-</td><td>azure-batch==15.0.0b1</td><td>azure-batch==15.0.0b1</td><td>azure-batch==15.0.0b1</td><td>✅ no issues</td></tr>
+<tr><td>azure-cli</td><td>-</td><td>-</td><td>-</td><td>azure-cli==2.83.0</td><td>azure-cli==2.83.0</td><td>azure-cli==2.83.0</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>azure-cli-core</td><td>azure-cli-core==2.83.0</td><td>-</td><td>-</td><td>azure-cli-core==2.83.0</td><td>azure-cli-core==2.83.0</td><td>azure-cli-core==2.83.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-cli-telemetry</td><td>-</td><td>azure-cli-telemetry==1.1.0.*</td><td>-</td><td>azure-cli-telemetry==1.1.0</td><td>azure-cli-telemetry==1.1.0</td><td>azure-cli-telemetry==1.1.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-common</td><td>-</td><td>-</td><td>-</td><td>azure-common==1.1.22</td><td>azure-common==1.1.22</td><td>azure-common==1.1.22</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>azure-core</td><td>-</td><td>azure-core~=1.38.0</td><td>-</td><td>azure-core==1.38.0</td><td>azure-core==1.38.0</td><td>azure-core==1.38.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-cosmos</td><td>azure-cosmos~=3.0,>=3.0.2</td><td>-</td><td>-</td><td>azure-cosmos==3.2.0</td><td>azure-cosmos==3.2.0</td><td>azure-cosmos==3.2.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-data-tables</td><td>azure-data-tables==12.4.0</td><td>-</td><td>-</td><td>azure-data-tables==12.4.0</td><td>azure-data-tables==12.4.0</td><td>azure-data-tables==12.4.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-datalake-store</td><td>azure-datalake-store~=1.0.1</td><td>-</td><td>-</td><td>azure-datalake-store==1.0.1</td><td>azure-datalake-store==1.0.1</td><td>azure-datalake-store==1.0.1</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-keyvault-administration</td><td>azure-keyvault-administration==4.4.0</td><td>-</td><td>-</td><td>azure-keyvault-administration==4.4.0</td><td>azure-keyvault-administration==4.4.0</td><td>azure-keyvault-administration==4.4.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-keyvault-certificates</td><td>azure-keyvault-certificates==4.7.0</td><td>-</td><td>-</td><td>azure-keyvault-certificates==4.7.0</td><td>azure-keyvault-certificates==4.7.0</td><td>azure-keyvault-certificates==4.7.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-keyvault-keys</td><td>azure-keyvault-keys==4.11.0</td><td>-</td><td>-</td><td>azure-keyvault-keys==4.11.0</td><td>azure-keyvault-keys==4.11.0</td><td>azure-keyvault-keys==4.11.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-keyvault-secrets</td><td>azure-keyvault-secrets==4.7.0</td><td>-</td><td>-</td><td>azure-keyvault-secrets==4.7.0</td><td>azure-keyvault-secrets==4.7.0</td><td>azure-keyvault-secrets==4.7.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-keyvault-securitydomain</td><td>azure-keyvault-securitydomain==1.0.0b1</td><td>-</td><td>-</td><td>azure-keyvault-securitydomain==1.0.0b1</td><td>azure-keyvault-securitydomain==1.0.0b1</td><td>azure-keyvault-securitydomain==1.0.0b1</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-advisor</td><td>azure-mgmt-advisor==9.0.0</td><td>-</td><td>-</td><td>azure-mgmt-advisor==9.0.0</td><td>azure-mgmt-advisor==9.0.0</td><td>azure-mgmt-advisor==9.0.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-apimanagement</td><td>azure-mgmt-apimanagement==4.0.0</td><td>-</td><td>-</td><td>azure-mgmt-apimanagement==4.0.0</td><td>azure-mgmt-apimanagement==4.0.0</td><td>azure-mgmt-apimanagement==4.0.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-appconfiguration</td><td>azure-mgmt-appconfiguration==5.0.0</td><td>-</td><td>-</td><td>azure-mgmt-appconfiguration==5.0.0</td><td>azure-mgmt-appconfiguration==5.0.0</td><td>azure-mgmt-appconfiguration==5.0.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-appcontainers</td><td>azure-mgmt-appcontainers==2.0.0</td><td>-</td><td>-</td><td>azure-mgmt-appcontainers==2.0.0</td><td>azure-mgmt-appcontainers==2.0.0</td><td>azure-mgmt-appcontainers==2.0.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-applicationinsights</td><td>azure-mgmt-applicationinsights~=1.0.0</td><td>-</td><td>-</td><td>azure-mgmt-applicationinsights==1.0.0</td><td>azure-mgmt-applicationinsights==1.0.0</td><td>azure-mgmt-applicationinsights==1.0.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-authorization</td><td>azure-mgmt-authorization==5.0.0b1</td><td>-</td><td>-</td><td>azure-mgmt-authorization==5.0.0b1</td><td>azure-mgmt-authorization==5.0.0b1</td><td>azure-mgmt-authorization==5.0.0b1</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-batch</td><td>azure-mgmt-batch~=17.3.0</td><td>-</td><td>-</td><td>azure-mgmt-batch==17.3.0</td><td>azure-mgmt-batch==17.3.0</td><td>azure-mgmt-batch==17.3.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-batchai</td><td>azure-mgmt-batchai==7.0.0b1</td><td>-</td><td>-</td><td>azure-mgmt-batchai==7.0.0b1</td><td>azure-mgmt-batchai==7.0.0b1</td><td>azure-mgmt-batchai==7.0.0b1</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-billing</td><td>azure-mgmt-billing==6.0.0</td><td>-</td><td>-</td><td>azure-mgmt-billing==6.0.0</td><td>azure-mgmt-billing==6.0.0</td><td>azure-mgmt-billing==6.0.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-botservice</td><td>azure-mgmt-botservice~=2.0.0b3</td><td>-</td><td>-</td><td>azure-mgmt-botservice==2.0.0b3</td><td>azure-mgmt-botservice==2.0.0b3</td><td>azure-mgmt-botservice==2.0.0b3</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-cdn</td><td>azure-mgmt-cdn==12.0.0</td><td>-</td><td>-</td><td>azure-mgmt-cdn==12.0.0</td><td>azure-mgmt-cdn==12.0.0</td><td>azure-mgmt-cdn==12.0.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-cognitiveservices</td><td>azure-mgmt-cognitiveservices~=14.1.0</td><td>-</td><td>-</td><td>azure-mgmt-cognitiveservices==14.1.0</td><td>azure-mgmt-cognitiveservices==14.1.0</td><td>azure-mgmt-cognitiveservices==14.1.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-compute</td><td>azure-mgmt-compute~=34.1.0</td><td>-</td><td>-</td><td>azure-mgmt-compute==34.1.0</td><td>azure-mgmt-compute==34.1.0</td><td>azure-mgmt-compute==34.1.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-containerinstance</td><td>azure-mgmt-containerinstance==10.2.0b1</td><td>-</td><td>-</td><td>azure-mgmt-containerinstance==10.2.0b1</td><td>azure-mgmt-containerinstance==10.2.0b1</td><td>azure-mgmt-containerinstance==10.2.0b1</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-containerregistry</td><td>azure-mgmt-containerregistry==14.1.0b1</td><td>-</td><td>-</td><td>azure-mgmt-containerregistry==14.1.0b1</td><td>azure-mgmt-containerregistry==14.1.0b1</td><td>azure-mgmt-containerregistry==14.1.0b1</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-containerservice</td><td>azure-mgmt-containerservice~=40.2.0</td><td>-</td><td>-</td><td>azure-mgmt-containerservice==40.2.0</td><td>azure-mgmt-containerservice==40.2.0</td><td>azure-mgmt-containerservice==40.2.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-core</td><td>-</td><td>azure-mgmt-core>=1.2.0,<2</td><td>-</td><td>azure-mgmt-core==1.6.0</td><td>azure-mgmt-core==1.6.0</td><td>azure-mgmt-core==1.6.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-cosmosdb</td><td>azure-mgmt-cosmosdb==9.9.0</td><td>-</td><td>-</td><td>azure-mgmt-cosmosdb==9.9.0</td><td>azure-mgmt-cosmosdb==9.9.0</td><td>azure-mgmt-cosmosdb==9.9.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-datalake-nspkg</td><td>-</td><td>-</td><td>-</td><td>azure-mgmt-datalake-nspkg==3.0.1</td><td>azure-mgmt-datalake-nspkg==3.0.1</td><td>azure-mgmt-datalake-nspkg==3.0.1</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>azure-mgmt-datalake-store</td><td>azure-mgmt-datalake-store~=1.1.0b1</td><td>-</td><td>-</td><td>azure-mgmt-datalake-store==1.1.0b1</td><td>azure-mgmt-datalake-store==1.1.0b1</td><td>azure-mgmt-datalake-store==1.1.0b1</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-datamigration</td><td>azure-mgmt-datamigration~=10.0.0</td><td>-</td><td>-</td><td>azure-mgmt-datamigration==10.0.0</td><td>azure-mgmt-datamigration==10.0.0</td><td>azure-mgmt-datamigration==10.0.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-eventgrid</td><td>azure-mgmt-eventgrid==10.2.0b2</td><td>-</td><td>-</td><td>azure-mgmt-eventgrid==10.2.0b2</td><td>azure-mgmt-eventgrid==10.2.0b2</td><td>azure-mgmt-eventgrid==10.2.0b2</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-eventhub</td><td>azure-mgmt-eventhub~=12.0.0b1</td><td>-</td><td>-</td><td>azure-mgmt-eventhub==12.0.0b1</td><td>azure-mgmt-eventhub==12.0.0b1</td><td>azure-mgmt-eventhub==12.0.0b1</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-extendedlocation</td><td>azure-mgmt-extendedlocation==1.0.0b2</td><td>-</td><td>-</td><td>azure-mgmt-extendedlocation==1.0.0b2</td><td>azure-mgmt-extendedlocation==1.0.0b2</td><td>azure-mgmt-extendedlocation==1.0.0b2</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-hdinsight</td><td>azure-mgmt-hdinsight==9.1.0b2</td><td>-</td><td>-</td><td>azure-mgmt-hdinsight==9.1.0b2</td><td>azure-mgmt-hdinsight==9.1.0b2</td><td>azure-mgmt-hdinsight==9.1.0b2</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-imagebuilder</td><td>azure-mgmt-imagebuilder~=1.3.0</td><td>-</td><td>-</td><td>azure-mgmt-imagebuilder==1.3.0</td><td>azure-mgmt-imagebuilder==1.3.0</td><td>azure-mgmt-imagebuilder==1.3.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-iotcentral</td><td>azure-mgmt-iotcentral~=10.0.0b1</td><td>-</td><td>-</td><td>azure-mgmt-iotcentral==10.0.0b1</td><td>azure-mgmt-iotcentral==10.0.0b1</td><td>azure-mgmt-iotcentral==10.0.0b1</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-iothub</td><td>azure-mgmt-iothub==5.0.0b1</td><td>-</td><td>-</td><td>azure-mgmt-iothub==5.0.0b1</td><td>azure-mgmt-iothub==5.0.0b1</td><td>azure-mgmt-iothub==5.0.0b1</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-iothubprovisioningservices</td><td>azure-mgmt-iothubprovisioningservices==1.1.0</td><td>-</td><td>-</td><td>azure-mgmt-iothubprovisioningservices==1.1.0</td><td>azure-mgmt-iothubprovisioningservices==1.1.0</td><td>azure-mgmt-iothubprovisioningservices==1.1.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-keyvault</td><td>azure-mgmt-keyvault==13.0.0</td><td>-</td><td>-</td><td>azure-mgmt-keyvault==13.0.0</td><td>azure-mgmt-keyvault==13.0.0</td><td>azure-mgmt-keyvault==13.0.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-loganalytics</td><td>azure-mgmt-loganalytics==13.0.0b4</td><td>-</td><td>-</td><td>azure-mgmt-loganalytics==13.0.0b4</td><td>azure-mgmt-loganalytics==13.0.0b4</td><td>azure-mgmt-loganalytics==13.0.0b4</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-managementgroups</td><td>azure-mgmt-managementgroups~=1.0.0</td><td>-</td><td>-</td><td>azure-mgmt-managementgroups==1.0.0</td><td>azure-mgmt-managementgroups==1.0.0</td><td>azure-mgmt-managementgroups==1.0.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-maps</td><td>azure-mgmt-maps~=2.0.0</td><td>-</td><td>-</td><td>azure-mgmt-maps==2.0.0</td><td>azure-mgmt-maps==2.0.0</td><td>azure-mgmt-maps==2.0.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-marketplaceordering</td><td>azure-mgmt-marketplaceordering==1.1.0</td><td>-</td><td>-</td><td>azure-mgmt-marketplaceordering==1.1.0</td><td>azure-mgmt-marketplaceordering==1.1.0</td><td>azure-mgmt-marketplaceordering==1.1.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-media</td><td>azure-mgmt-media~=9.0</td><td>-</td><td>-</td><td>azure-mgmt-media==9.0.0</td><td>azure-mgmt-media==9.0.0</td><td>azure-mgmt-media==9.0.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-monitor</td><td>azure-mgmt-monitor~=7.0.0b1</td><td>-</td><td>-</td><td>azure-mgmt-monitor==7.0.0b1</td><td>azure-mgmt-monitor==7.0.0b1</td><td>azure-mgmt-monitor==7.0.0b1</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-msi</td><td>azure-mgmt-msi~=7.1.0</td><td>-</td><td>-</td><td>azure-mgmt-msi==7.1.0</td><td>azure-mgmt-msi==7.1.0</td><td>azure-mgmt-msi==7.1.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-mysqlflexibleservers</td><td>azure-mgmt-mysqlflexibleservers==1.1.0b2</td><td>-</td><td>-</td><td>azure-mgmt-mysqlflexibleservers==1.1.0b2</td><td>azure-mgmt-mysqlflexibleservers==1.1.0b2</td><td>azure-mgmt-mysqlflexibleservers==1.1.0b2</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-netapp</td><td>azure-mgmt-netapp~=10.1.0</td><td>-</td><td>-</td><td>azure-mgmt-netapp==10.1.0</td><td>azure-mgmt-netapp==10.1.0</td><td>azure-mgmt-netapp==10.1.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-policyinsights</td><td>azure-mgmt-policyinsights==1.1.0b4</td><td>-</td><td>-</td><td>azure-mgmt-policyinsights==1.1.0b4</td><td>azure-mgmt-policyinsights==1.1.0b4</td><td>azure-mgmt-policyinsights==1.1.0b4</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-postgresqlflexibleservers</td><td>azure-mgmt-postgresqlflexibleservers==2.0.0</td><td>-</td><td>-</td><td>azure-mgmt-postgresqlflexibleservers==2.0.0</td><td>azure-mgmt-postgresqlflexibleservers==2.0.0</td><td>azure-mgmt-postgresqlflexibleservers==2.0.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-privatedns</td><td>azure-mgmt-privatedns~=1.0.0</td><td>-</td><td>-</td><td>azure-mgmt-privatedns==1.0.0</td><td>azure-mgmt-privatedns==1.0.0</td><td>azure-mgmt-privatedns==1.0.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-rdbms</td><td>azure-mgmt-rdbms==10.2.0b17</td><td>-</td><td>-</td><td>azure-mgmt-rdbms==10.2.0b17</td><td>azure-mgmt-rdbms==10.2.0b17</td><td>azure-mgmt-rdbms==10.2.0b17</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-recoveryservices</td><td>azure-mgmt-recoveryservices~=4.0.0</td><td>-</td><td>-</td><td>azure-mgmt-recoveryservices==4.0.0</td><td>azure-mgmt-recoveryservices==4.0.0</td><td>azure-mgmt-recoveryservices==4.0.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-recoveryservicesbackup</td><td>azure-mgmt-recoveryservicesbackup~=9.2.0</td><td>-</td><td>-</td><td>azure-mgmt-recoveryservicesbackup==9.2.0</td><td>azure-mgmt-recoveryservicesbackup==9.2.0</td><td>azure-mgmt-recoveryservicesbackup==9.2.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-redhatopenshift</td><td>azure-mgmt-redhatopenshift~=1.5.0</td><td>-</td><td>-</td><td>azure-mgmt-redhatopenshift==1.5.0</td><td>azure-mgmt-redhatopenshift==1.5.0</td><td>azure-mgmt-redhatopenshift==1.5.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-redis</td><td>azure-mgmt-redis~=14.5.0</td><td>-</td><td>-</td><td>azure-mgmt-redis==14.5.0</td><td>azure-mgmt-redis==14.5.0</td><td>azure-mgmt-redis==14.5.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-resource</td><td>azure-mgmt-resource==23.3.0</td><td>-</td><td>-</td><td>azure-mgmt-resource==23.3.0</td><td>azure-mgmt-resource==23.3.0</td><td>azure-mgmt-resource==23.3.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-resource-deployments</td><td>azure-mgmt-resource-deployments==1.0.0b1</td><td>-</td><td>-</td><td>azure-mgmt-resource-deployments==1.0.0b1</td><td>azure-mgmt-resource-deployments==1.0.0b1</td><td>azure-mgmt-resource-deployments==1.0.0b1</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-resource-deploymentscripts</td><td>azure-mgmt-resource-deploymentscripts==1.0.0b1</td><td>-</td><td>-</td><td>azure-mgmt-resource-deploymentscripts==1.0.0b1</td><td>azure-mgmt-resource-deploymentscripts==1.0.0b1</td><td>azure-mgmt-resource-deploymentscripts==1.0.0b1</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-resource-deploymentstacks</td><td>azure-mgmt-resource-deploymentstacks==1.0.0b1</td><td>-</td><td>-</td><td>azure-mgmt-resource-deploymentstacks==1.0.0b1</td><td>azure-mgmt-resource-deploymentstacks==1.0.0b1</td><td>azure-mgmt-resource-deploymentstacks==1.0.0b1</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-resource-templatespecs</td><td>azure-mgmt-resource-templatespecs==1.0.0b1</td><td>-</td><td>-</td><td>azure-mgmt-resource-templatespecs==1.0.0b1</td><td>azure-mgmt-resource-templatespecs==1.0.0b1</td><td>azure-mgmt-resource-templatespecs==1.0.0b1</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-search</td><td>azure-mgmt-search~=9.0</td><td>-</td><td>-</td><td>azure-mgmt-search==9.0.0</td><td>azure-mgmt-search==9.0.0</td><td>azure-mgmt-search==9.0.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-security</td><td>azure-mgmt-security==6.0.0</td><td>-</td><td>-</td><td>azure-mgmt-security==6.0.0</td><td>azure-mgmt-security==6.0.0</td><td>azure-mgmt-security==6.0.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-servicebus</td><td>azure-mgmt-servicebus~=10.0.0b1</td><td>-</td><td>-</td><td>azure-mgmt-servicebus==10.0.0b1</td><td>azure-mgmt-servicebus==10.0.0b1</td><td>azure-mgmt-servicebus==10.0.0b1</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-servicefabric</td><td>azure-mgmt-servicefabric~=2.1.0</td><td>-</td><td>-</td><td>azure-mgmt-servicefabric==2.1.0</td><td>azure-mgmt-servicefabric==2.1.0</td><td>azure-mgmt-servicefabric==2.1.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-servicefabricmanagedclusters</td><td>azure-mgmt-servicefabricmanagedclusters==2.1.0b1</td><td>-</td><td>-</td><td>azure-mgmt-servicefabricmanagedclusters==2.1.0b1</td><td>azure-mgmt-servicefabricmanagedclusters==2.1.0b1</td><td>azure-mgmt-servicefabricmanagedclusters==2.1.0b1</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-servicelinker</td><td>azure-mgmt-servicelinker==1.2.0b3</td><td>-</td><td>-</td><td>azure-mgmt-servicelinker==1.2.0b3</td><td>azure-mgmt-servicelinker==1.2.0b3</td><td>azure-mgmt-servicelinker==1.2.0b3</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-signalr</td><td>azure-mgmt-signalr==2.0.0b2</td><td>-</td><td>-</td><td>azure-mgmt-signalr==2.0.0b2</td><td>azure-mgmt-signalr==2.0.0b2</td><td>azure-mgmt-signalr==2.0.0b2</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-sql</td><td>azure-mgmt-sql==4.0.0b22</td><td>-</td><td>-</td><td>azure-mgmt-sql==4.0.0b22</td><td>azure-mgmt-sql==4.0.0b22</td><td>azure-mgmt-sql==4.0.0b22</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-sqlvirtualmachine</td><td>azure-mgmt-sqlvirtualmachine==1.0.0b5</td><td>-</td><td>-</td><td>azure-mgmt-sqlvirtualmachine==1.0.0b5</td><td>azure-mgmt-sqlvirtualmachine==1.0.0b5</td><td>azure-mgmt-sqlvirtualmachine==1.0.0b5</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-storage</td><td>azure-mgmt-storage==24.0.0</td><td>-</td><td>-</td><td>azure-mgmt-storage==24.0.0</td><td>azure-mgmt-storage==24.0.0</td><td>azure-mgmt-storage==24.0.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-synapse</td><td>azure-mgmt-synapse==2.1.0b5</td><td>-</td><td>-</td><td>azure-mgmt-synapse==2.1.0b5</td><td>azure-mgmt-synapse==2.1.0b5</td><td>azure-mgmt-synapse==2.1.0b5</td><td>✅ no issues</td></tr>
+<tr><td>azure-mgmt-trafficmanager</td><td>azure-mgmt-trafficmanager~=1.0.0</td><td>-</td><td>-</td><td>azure-mgmt-trafficmanager==1.0.0</td><td>azure-mgmt-trafficmanager==1.0.0</td><td>azure-mgmt-trafficmanager==1.0.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-mgmt-web</td><td>azure-mgmt-web==9.0.0</td><td>-</td><td>-</td><td>azure-mgmt-web==9.0.0</td><td>azure-mgmt-web==9.0.0</td><td>azure-mgmt-web==9.0.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-monitor-query</td><td>azure-monitor-query==1.2.0</td><td>-</td><td>-</td><td>azure-monitor-query==1.2.0</td><td>azure-monitor-query==1.2.0</td><td>azure-monitor-query==1.2.0</td><td>✅ no issues</td></tr>
+<tr><td>azure-nspkg</td><td>-</td><td>-</td><td>-</td><td>azure-nspkg==3.0.2</td><td>azure-nspkg==3.0.2</td><td>azure-nspkg==3.0.2</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>azure-storage-blob</td><td>azure-storage-blob==12.28.0b1</td><td>-</td><td>-</td><td>azure-storage-blob==12.28.0b1</td><td>azure-storage-blob==12.28.0b1</td><td>azure-storage-blob==12.28.0b1</td><td>✅ no issues</td></tr>
+<tr><td>azure-storage-common</td><td>azure-storage-common~=1.4</td><td>-</td><td>-</td><td>azure-storage-common==1.4.2</td><td>azure-storage-common==1.4.2</td><td>azure-storage-common==1.4.2</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-storage-file-datalake</td><td>azure-storage-file-datalake==12.23.0b1</td><td>-</td><td>-</td><td>azure-storage-file-datalake==12.23.0b1</td><td>azure-storage-file-datalake==12.23.0b1</td><td>azure-storage-file-datalake==12.23.0b1</td><td>✅ no issues</td></tr>
+<tr><td>azure-storage-file-share</td><td>azure-storage-file-share==12.24.0b1</td><td>-</td><td>-</td><td>azure-storage-file-share==12.24.0b1</td><td>azure-storage-file-share==12.24.0b1</td><td>azure-storage-file-share==12.24.0b1</td><td>✅ no issues</td></tr>
+<tr><td>azure-storage-queue</td><td>azure-storage-queue==12.15.0b1</td><td>-</td><td>-</td><td>azure-storage-queue==12.15.0b1</td><td>azure-storage-queue==12.15.0b1</td><td>azure-storage-queue==12.15.0b1</td><td>✅ no issues</td></tr>
+<tr><td>azure-synapse-accesscontrol</td><td>azure-synapse-accesscontrol~=0.5.0</td><td>-</td><td>-</td><td>azure-synapse-accesscontrol==0.5.0</td><td>azure-synapse-accesscontrol==0.5.0</td><td>azure-synapse-accesscontrol==0.5.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-synapse-artifacts</td><td>azure-synapse-artifacts~=0.21.0</td><td>-</td><td>-</td><td>azure-synapse-artifacts==0.21.0</td><td>azure-synapse-artifacts==0.21.0</td><td>azure-synapse-artifacts==0.21.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-synapse-managedprivateendpoints</td><td>azure-synapse-managedprivateendpoints~=0.4.0</td><td>-</td><td>-</td><td>azure-synapse-managedprivateendpoints==0.4.0</td><td>azure-synapse-managedprivateendpoints==0.4.0</td><td>azure-synapse-managedprivateendpoints==0.4.0</td><td>🟡 align version pins</td></tr>
+<tr><td>azure-synapse-spark</td><td>azure-synapse-spark~=0.7.0</td><td>-</td><td>-</td><td>azure-synapse-spark==0.7.0</td><td>azure-synapse-spark==0.7.0</td><td>azure-synapse-spark==0.7.0</td><td>🟡 align version pins</td></tr>
+<tr><td>bcrypt</td><td>-</td><td>-</td><td>-</td><td>bcrypt==3.2.0</td><td>bcrypt==3.2.0</td><td>bcrypt==3.2.0</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>certifi</td><td>-</td><td>-</td><td>-</td><td>certifi==2024.7.4</td><td>certifi==2024.7.4</td><td>certifi==2024.7.4</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>cffi</td><td>-</td><td>-</td><td>-</td><td>cffi==2.0.0</td><td>cffi==2.0.0</td><td>cffi==2.0.0</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>chardet</td><td>chardet~=5.2.0</td><td>-</td><td>-</td><td>chardet==5.2.0</td><td>chardet==5.2.0</td><td>chardet==5.2.0</td><td>🟡 align version pins</td></tr>
+<tr><td>colorama</td><td>colorama~=0.4.4</td><td>-</td><td>-</td><td>colorama==0.4.6</td><td>colorama==0.4.6</td><td>colorama==0.4.6</td><td>🟡 align version pins</td></tr>
+<tr><td>cryptography</td><td>-</td><td>cryptography</td><td>-</td><td>cryptography==44.0.1</td><td>cryptography==44.0.1</td><td>cryptography==44.0.1</td><td>🟡 align version pins</td></tr>
+<tr><td>distro</td><td>distro; sys_platform == "linux"</td><td>distro; sys_platform == "linux"</td><td>-</td><td>-</td><td>-</td><td>distro==1.6.0</td><td>🟡 align version pins; 🔴 missing requirements</td></tr>
+<tr><td>fabric</td><td>fabric~=3.2.2</td><td>-</td><td>-</td><td>fabric==3.2.2</td><td>fabric==3.2.2</td><td>fabric==3.2.2</td><td>🟡 align version pins</td></tr>
+<tr><td>humanfriendly</td><td>-</td><td>humanfriendly~=10.0</td><td>-</td><td>humanfriendly==10.0</td><td>humanfriendly==10.0</td><td>humanfriendly==10.0</td><td>🟡 align version pins</td></tr>
+<tr><td>idna</td><td>-</td><td>-</td><td>-</td><td>idna==3.7</td><td>idna==3.7</td><td>idna==3.7</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>invoke</td><td>-</td><td>-</td><td>-</td><td>invoke==2.2.0</td><td>invoke==2.2.0</td><td>invoke==2.2.0</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>isodate</td><td>-</td><td>-</td><td>-</td><td>isodate==0.6.1</td><td>isodate==0.6.1</td><td>isodate==0.6.1</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>javaproperties</td><td>javaproperties~=0.5.1</td><td>-</td><td>-</td><td>javaproperties==0.5.1</td><td>javaproperties==0.5.1</td><td>javaproperties==0.5.1</td><td>🟡 align version pins</td></tr>
+<tr><td>jmespath</td><td>-</td><td>jmespath</td><td>-</td><td>jmespath==0.9.5</td><td>jmespath==0.9.5</td><td>jmespath==0.9.5</td><td>🟡 align version pins</td></tr>
+<tr><td>jsondiff</td><td>jsondiff~=2.0.0</td><td>-</td><td>-</td><td>jsondiff==2.0.0</td><td>jsondiff==2.0.0</td><td>jsondiff==2.0.0</td><td>🟡 align version pins</td></tr>
+<tr><td>knack</td><td>-</td><td>knack~=0.11.0</td><td>-</td><td>knack==0.11.0</td><td>knack==0.11.0</td><td>knack==0.11.0</td><td>🟡 align version pins</td></tr>
+<tr><td>microsoft-security-utilities-secret-masker</td><td>-</td><td>microsoft-security-utilities-secret-masker~=1.0.0b4</td><td>-</td><td>-</td><td>-</td><td>-</td><td>🔴 missing requirements</td></tr>
+<tr><td>msal</td><td>-</td><td>msal==1.35.0b1; sys_platform != "win32"</td><td>-</td><td>msal==1.35.0b1</td><td>-</td><td>msal==1.35.0b1</td><td>🟡 align version pins; 🔴 missing requirements</td></tr>
+<tr><td>msal-extensions</td><td>-</td><td>msal-extensions==1.2.0</td><td>-</td><td>msal-extensions==1.2.0</td><td>msal-extensions==1.2.0</td><td>msal-extensions==1.2.0</td><td>✅ no issues</td></tr>
+<tr><td>msal[broker]</td><td>-</td><td>msal[broker]==1.35.0b1; sys_platform == "win32"</td><td>-</td><td>-</td><td>msal[broker]==1.35.0b1</td><td>-</td><td>🟡 align version pins; 🔴 missing requirements</td></tr>
+<tr><td>msrest</td><td>-</td><td>-</td><td>-</td><td>msrest==0.7.1</td><td>msrest==0.7.1</td><td>msrest==0.7.1</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>oauthlib</td><td>-</td><td>-</td><td>-</td><td>oauthlib==3.2.2</td><td>oauthlib==3.2.2</td><td>oauthlib==3.2.2</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>packaging</td><td>packaging>=20.9</td><td>packaging>=20.9</td><td>-</td><td>packaging==25.0</td><td>packaging==25.0</td><td>packaging==25.0</td><td>🟡 align version pins</td></tr>
+<tr><td>paramiko</td><td>paramiko>=2.0.8,<4.0.0</td><td>-</td><td>-</td><td>paramiko==3.5.0</td><td>paramiko==3.5.0</td><td>paramiko==3.5.0</td><td>🟡 align version pins</td></tr>
+<tr><td>pbr</td><td>-</td><td>-</td><td>-</td><td>pbr==5.3.1</td><td>pbr==5.3.1</td><td>pbr==5.3.1</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>pkginfo</td><td>-</td><td>pkginfo>=1.5.0.1</td><td>-</td><td>pkginfo==1.8.2</td><td>pkginfo==1.8.2</td><td>pkginfo==1.8.2</td><td>🟡 align version pins</td></tr>
+<tr><td>portalocker</td><td>-</td><td>-</td><td>portalocker>=1.6,<3</td><td>portalocker==2.3.2</td><td>portalocker==2.3.2</td><td>portalocker==2.3.2</td><td>🟡 align version pins</td></tr>
+<tr><td>psutil</td><td>-</td><td>psutil>=5.9; sys_platform != "cygwin"</td><td>-</td><td>psutil==6.1.0</td><td>psutil==6.1.0</td><td>psutil==6.1.0</td><td>🟡 align version pins</td></tr>
+<tr><td>py-deviceid</td><td>-</td><td>py-deviceid</td><td>-</td><td>-</td><td>-</td><td>-</td><td>🔴 missing requirements</td></tr>
+<tr><td>pyOpenSSL</td><td>-</td><td>-</td><td>-</td><td>pyOpenSSL==25.0.0</td><td>pyOpenSSL==25.0.0</td><td>pyOpenSSL==25.0.0</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>pycomposefile</td><td>pycomposefile>=0.0.34</td><td>-</td><td>-</td><td>pycomposefile==0.0.34</td><td>pycomposefile==0.0.34</td><td>pycomposefile==0.0.34</td><td>🟡 align version pins</td></tr>
+<tr><td>pymsalruntime</td><td>-</td><td>-</td><td>-</td><td>-</td><td>pymsalruntime==0.20.2</td><td>-</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>pyopenssl</td><td>-</td><td>pyopenssl>=17.1.0</td><td>-</td><td>-</td><td>-</td><td>-</td><td>🔴 missing requirements</td></tr>
+<tr><td>python-dateutil</td><td>-</td><td>-</td><td>-</td><td>python-dateutil==2.8.0</td><td>python-dateutil==2.8.0</td><td>python-dateutil==2.8.0</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>pywin32</td><td>-</td><td>-</td><td>-</td><td>-</td><td>pywin32==310</td><td>-</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>requests</td><td>-</td><td>-</td><td>-</td><td>requests==2.32.4</td><td>requests==2.32.4</td><td>requests==2.32.4</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>requests-oauthlib</td><td>-</td><td>-</td><td>-</td><td>requests-oauthlib==1.2.0</td><td>requests-oauthlib==1.2.0</td><td>requests-oauthlib==1.2.0</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>requests[socks]</td><td>-</td><td>requests[socks]</td><td>-</td><td>-</td><td>-</td><td>-</td><td>🔴 missing requirements</td></tr>
+<tr><td>scp</td><td>scp~=0.13.2</td><td>-</td><td>-</td><td>scp==0.13.2</td><td>scp==0.13.2</td><td>scp==0.13.2</td><td>🟡 align version pins</td></tr>
+<tr><td>semver</td><td>semver~=3.0</td><td>-</td><td>-</td><td>semver==3.0.4</td><td>semver==3.0.4</td><td>semver==3.0.4</td><td>🟡 align version pins</td></tr>
+<tr><td>setuptools</td><td>setuptools</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>🔴 missing requirements</td></tr>
+<tr><td>six</td><td>six>=1.10.0</td><td>-</td><td>-</td><td>six==1.16.0</td><td>six==1.16.0</td><td>six==1.16.0</td><td>🟡 align version pins</td></tr>
+<tr><td>sshtunnel</td><td>sshtunnel~=0.1.4</td><td>-</td><td>-</td><td>sshtunnel==0.1.5</td><td>sshtunnel==0.1.5</td><td>sshtunnel==0.1.5</td><td>🟡 align version pins</td></tr>
+<tr><td>tabulate</td><td>tabulate</td><td>-</td><td>-</td><td>tabulate==0.8.9</td><td>tabulate==0.8.9</td><td>tabulate==0.8.9</td><td>🟡 align version pins</td></tr>
+<tr><td>urllib3</td><td>urllib3</td><td>-</td><td>-</td><td>urllib3==2.6.3</td><td>urllib3==2.6.3</td><td>urllib3==2.6.3</td><td>🟡 align version pins</td></tr>
+<tr><td>wcwidth</td><td>-</td><td>-</td><td>-</td><td>wcwidth==0.1.7</td><td>wcwidth==0.1.7</td><td>wcwidth==0.1.7</td><td>🟡 not in any setup.py</td></tr>
+<tr><td>websocket-client</td><td>websocket-client~=1.3.1</td><td>-</td><td>-</td><td>websocket-client==1.3.1</td><td>websocket-client==1.3.1</td><td>websocket-client==1.3.1</td><td>🟡 align version pins</td></tr>
+<tr><td>xmltodict</td><td>xmltodict~=0.12</td><td>-</td><td>-</td><td>xmltodict==0.12.0</td><td>xmltodict==0.12.0</td><td>xmltodict==0.12.0</td><td>🟡 align version pins</td></tr>
+</tbody></table>
+</body></html>
