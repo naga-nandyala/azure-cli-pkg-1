@@ -39,7 +39,7 @@ parameters:
   - name: TarballBuildId
     displayName: 'CLI Tarball Build ID (from macos-tarball-build-v3 pipeline)'
     type: string
-    default: '296619'
+    default: '296623'
   
   - name: BundleId
     displayName: 'Bundle ID for notarization'
