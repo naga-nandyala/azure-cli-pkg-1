@@ -270,8 +270,8 @@ stages:
   - AnalyzeAndVerify
   condition: always()
   variables:
-    TarballSizeARM64: $[ stageDependencies.AnalyzeAndVerify.AnalyzeTarball.ARM64.outputs['AnalyzeStep.TarballSize'] ]
-    TarballSizeIntel: $[ stageDependencies.AnalyzeAndVerify.AnalyzeTarball.Intel.outputs['AnalyzeStep.TarballSize'] ]
+    TarballSizeARM64: $[ stageDependencies.AnalyzeAndVerify.AnalyzeTarball.outputs['ARM64.AnalyzeStep.TarballSize'] ]
+    TarballSizeIntel: $[ stageDependencies.AnalyzeAndVerify.AnalyzeTarball.outputs['Intel.AnalyzeStep.TarballSize'] ]
   jobs:
   - job: PrintSummary
     displayName: 'Print Build Summary'
