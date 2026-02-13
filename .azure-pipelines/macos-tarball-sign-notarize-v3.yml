@@ -1,37 +1,9 @@
 # Azure CLI - macOS Tar.gz Sign and Notarize Pipeline
 #
-# Sign and notarize CLI package (Homebrew Python approach)
-#
-# This pipeline takes unsigned CLI tar.gz files from macos-tarball-build-v3 and:
-# 1. Signs all native extension .so files with ESRP (Developer ID Application)
-# 2. Creates a ZIP bundle of signed binaries
-# 3. Submits to Apple for notarization via ESRP
-# 4. Repackages as final signed+notarized tar.gz
-#
-# Input: Unsigned CLI tarball artifacts from Build ID
-#   - cli-build-unsigned-v3-arm64 artifact (ARM64/Apple Silicon)
-#   - cli-build-unsigned-v3-x86_64 artifact (Intel)
-#
-# Workflow (for each architecture in parallel):
-# ┌─────────────┐    ┌──────────────┐    ┌─────────────────┐    ┌──────────────┐
-# │ Download    │───▶│ Sign ~10     │───▶│ Submit ZIP to   │───▶│ Create final │
-# │ unsigned    │    │ .so files    │    │ Apple for       │    │ tar.gz       │
-# │ tar.gz      │    │ (ESRP)       │    │ notarization    │    │              │
-# └─────────────┘    └──────────────┘    └─────────────────┘    └──────────────┘
-#
-# Binary Categories:
-# - cryptography: ~3-4 .so files (Rust-based crypto)
-# - cffi: 1 .so file
-# - bcrypt: 1 .so file  
-# - pynacl: 1 .so file
-# - yaml: 1 .so file
-# - psutil: 1 .so file
-# - pymsalruntime: 1 .dylib (optional, for broker auth)
-# Total: ~10 files
-#
-# Output Artifacts (both architectures):
-# - cli-signed-notarized-v3-arm64
-# - cli-signed-notarized-v3-x86_64
+# Purpose: sign and notarize v3 tar.gz artifacts (Homebrew Python).
+# Input: unsigned tarballs from macos-tarball-build-v3 (arm64, x86_64).
+# Steps: download -> sign -> notarize -> repackage -> publish.
+# Output: cli-signed-notarized-v3-arm64, cli-signed-notarized-v3-x86_64.
 
 trigger: none
 
@@ -291,7 +263,7 @@ stages:
           ARCH: 'x86_64'
     pool:
       vmImage: 'windows-latest'
-    timeoutInMinutes: 30  # Faster than v2 since fewer binaries
+    timeoutInMinutes: 30
     
     steps:
     - checkout: none
@@ -928,7 +900,7 @@ stages:
           ## Azure CLI $(AzureCliVersion) - macOS (v3 - Homebrew Python)
           
           This release uses Homebrew Python instead of bundling Python runtime.
-          Smaller download (~42MB vs ~83MB) and shares Python with other tools.
+          Shares Python with other tools.
           
           ### Available Architectures
           - **Apple Silicon (arm64)**: azure-cli-$(AzureCliVersion)-macos-arm64-nopython-signed-notarized.tar.gz
@@ -980,6 +952,9 @@ stages:
       vmImage: 'ubuntu-latest'
     
     steps:
+    - checkout: self
+      fetchDepth: 1
+
     - checkout: homebrewtap
       persistCredentials: true
       path: homebrew-tap
@@ -1017,32 +992,16 @@ stages:
         mkdir -p Casks
         CASK_FILE="Casks/azure-cli-v3.rb"
         
-        # Build cask file using echo to avoid YAML parsing issues with Ruby syntax
-        {
-          echo 'cask "azure-cli-v3" do'
-          echo "  version \"${VERSION}\""
-          echo ''
-          echo '  on_arm do'
-          echo "    sha256 \"${ARM64_SHA256}\""
-          echo "    url \"https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}-v3/azure-cli-${VERSION}-macos-arm64-nopython-signed-notarized.tar.gz\""
-          echo '  end'
-          echo ''
-          echo '  on_intel do'
-          echo "    sha256 \"${X86_64_SHA256}\""
-          echo "    url \"https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}-v3/azure-cli-${VERSION}-macos-x86_64-nopython-signed-notarized.tar.gz\""
-          echo '  end'
-          echo ''
-          echo '  name "Azure CLI"'
-          echo '  desc "Microsoft Azure CLI (Lightweight - uses Homebrew Python)"'
-          echo '  homepage "https://docs.microsoft.com/cli/azure/"'
-          echo ''
-          echo '  depends_on formula: "python@3.13"'
-          echo ''
-          echo '  binary "bin/az"'
-          echo ''
-          echo '  zap trash: "~/.azure"'
-          echo 'end'
-        } > "$CASK_FILE"
+        TEMPLATE_PATH="$(Build.SourcesDirectory)/scripts/release/macos/templates/azure-cli-v3.rb.in"
+        OUTPUT_PATH="$CASK_FILE"
+
+        python3 "$(Build.SourcesDirectory)/scripts/release/macos/cask_generate.py" \
+          --version "$VERSION" \
+          --arm64-sha "$ARM64_SHA256" \
+          --x86-64-sha "$X86_64_SHA256" \
+          --github-repo "$GITHUB_REPO" \
+          --template "$TEMPLATE_PATH" \
+          --output "$OUTPUT_PATH"
         
         echo "=== Updated Cask ==="
         cat "$CASK_FILE"
@@ -1269,13 +1228,10 @@ stages:
         echo "║ SIGNING METRICS                                                  ║"
         echo "╠══════════════════════════════════════════════════════════════════╣"
         echo "║ Binaries signed:  ~10 per architecture                           ║"
-        echo "║ Comparison:       ~10 in v3 vs ~91 in v2 (89% reduction)         ║"
         echo "║ Notarized:        Yes (Apple approved) - Both architectures      ║"
         echo "╠══════════════════════════════════════════════════════════════════╣"
-        echo "║ v3 ADVANTAGES                                                    ║"
+        echo "║ NOTES                                                            ║"
         echo "╠══════════════════════════════════════════════════════════════════╣"
-        echo "║ • 49% smaller tarball (~42MB vs ~82MB)                           ║"
-        echo "║ • 89% fewer binaries to sign                                     ║"
         echo "║ • Faster signing and notarization                                ║"
         echo "║ • Python updates handled by Homebrew                             ║"
         echo "║ • Portable launcher supports multiple Python sources             ║"

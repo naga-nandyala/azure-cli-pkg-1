@@ -1,25 +1,10 @@
 # Azure CLI - macOS Tarball Build Pipeline
 #
-# Build CLI tarball using Homebrew Python (no bundled Python)
-#
-# This pipeline creates a lightweight tar.gz that:
-# - Does NOT bundle Python runtime (~60 MB savings)
-# - Relies on Homebrew python@3.13 as a runtime dependency
-# - Contains only Azure CLI packages and native extensions (.so files)
-# - Uses portable launcher script supporting multiple Python sources
-# - Builds BOTH ARM64 and x86_64 architectures in parallel
-#
-# Stages:
-# 1. Build Azure CLI packages for both ARM64 and x86_64 (parallel)
-# 2. Analyze and Verify on corresponding architecture runners
-# 3. Summary
-#
-# Output Artifacts:
-# - cli-build-unsigned-v3-arm64
-# - cli-build-unsigned-v3-x86_64
-#
-# The output is an UNSIGNED tar.gz that needs to be signed and notarized
-# in a separate pipeline (macos-tarball-sign-notarize-v3.yml)
+# Purpose: build lightweight tar.gz artifacts without bundled Python.
+# Input: Azure CLI source; runtime uses Homebrew python@3.13.
+# Steps: build -> analyze/verify -> summarize (arm64, x86_64).
+# Output: cli-build-unsigned-arm64, cli-build-unsigned-x86_64.
+# Next: sign/notarize via macos-tarball-sign-notarize.yml.
 
 trigger: none
 
