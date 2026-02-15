@@ -33,6 +33,24 @@ resources:
 variables:
   - template: templates/variables.yml
 
+  # Disable auto-injection tasks
+  - name: Codeql.Enabled
+    value: false
+  - name: Codeql.SkipTaskAutoInjection
+    value: true
+  - name: CodeQL.enabled
+    value: false
+  - name: runCodesignValidationInjection
+    value: false
+  - name: DOTNET_CLI_TELEMETRY_OPTOUT
+    value: 1
+  - name: DOTNET_NOLOGO
+    value: 1
+  - name: NugetSecurityAnalysisWarningLevel
+    value: none
+  - name: skipNugetSecurityAnalysis
+    value: true
+
   - name: GitHubRepo
     value: ${{ parameters.GitHubRepo }}
   - name: HomebrewTapRepo
@@ -53,6 +71,28 @@ stages:
     steps:
     - checkout: self
       fetchDepth: 1
+
+    - bash: |
+        set -e
+
+        echo "=== Diagnostics: Checkout Paths ==="
+        echo "Build.SourcesDirectory: $(Build.SourcesDirectory)"
+        echo "Pipeline.Workspace:    $(Pipeline.Workspace)"
+        echo "PWD:                   $(pwd)"
+        echo ""
+
+        echo "=== Diagnostics: Sources Directory ==="
+        ls -la "$(Build.SourcesDirectory)"
+        echo ""
+
+        echo "=== Diagnostics: scripts/release/macos ==="
+        ls -la "$(Build.SourcesDirectory)/scripts/release/macos" || true
+        echo ""
+
+        echo "=== Diagnostics: cask generator ==="
+        find "$(Build.SourcesDirectory)" -maxdepth 5 -type f -name "cask_generate.py" || true
+
+      displayName: 'Diagnostics: checkout paths'
 
     - checkout: homebrewtap
       persistCredentials: true
