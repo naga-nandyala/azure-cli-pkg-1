@@ -86,7 +86,7 @@ stages:
         echo ""
 
         echo "=== Diagnostics: scripts/release/macos ==="
-        ls -la "$(Build.SourcesDirectory)/scripts/release/macos" || true
+        ls -la "$(Build.SourcesDirectory)/azure-cli-pkg-1/scripts/release/macos" || true
         echo ""
 
         echo "=== Diagnostics: cask generator ==="
@@ -143,10 +143,10 @@ stages:
         mkdir -p Casks
         CASK_FILE="Casks/azure-cli-v3.rb"
 
-        TEMPLATE_PATH="$(Build.SourcesDirectory)/scripts/release/macos/templates/azure-cli-v3.rb.in"
+        TEMPLATE_PATH="$(Build.SourcesDirectory)/azure-cli-pkg-1/scripts/release/macos/templates/azure-cli-v3.rb.in"
         OUTPUT_PATH="$CASK_FILE"
 
-        python3 "$(Build.SourcesDirectory)/scripts/release/macos/cask_generate.py" \
+        python3 "$(Build.SourcesDirectory)/azure-cli-pkg-1/scripts/release/macos/cask_generate.py" \
           --version "$VERSION" \
           --arm64-sha "$ARM64_SHA256" \
           --x86-64-sha "$X86_64_SHA256" \
