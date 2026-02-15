@@ -122,9 +122,24 @@ stages:
         mkdir -p Casks
         CASK_FILE="Casks/azure-cli-v3.rb"
 
-        REPO_ROOT="$(Build.SourcesDirectory)/$(Build.Repository.Name)"
-        if [ ! -d "$REPO_ROOT" ]; then
-          REPO_ROOT="$(Build.SourcesDirectory)"
+        REPO_NAME="$(Build.Repository.Name)"
+        REPO_DIR="${REPO_NAME##*/}"
+        REPO_ROOT=""
+        for candidate in \
+          "$(Build.SourcesDirectory)/$REPO_DIR" \
+          "$(Build.SourcesDirectory)/$REPO_NAME" \
+          "$(Build.SourcesDirectory)"; do
+          if [ -d "$candidate" ]; then
+            REPO_ROOT="$candidate"
+            break
+          fi
+        done
+
+        if [ -z "$REPO_ROOT" ]; then
+          echo "ERROR: Unable to resolve repo root"
+          echo "Build.SourcesDirectory: $(Build.SourcesDirectory)"
+          echo "Build.Repository.Name: $(Build.Repository.Name)"
+          exit 1
         fi
 
         TEMPLATE_PATH="$REPO_ROOT/scripts/release/macos/templates/azure-cli-v3.rb.in"
