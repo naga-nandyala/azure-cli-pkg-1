@@ -329,7 +329,7 @@ stages:
         
       displayName: 'Create ZIP for each binary ($(ARCH))'
     
-    - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
+    - task: EsrpCodeSigning@5
       displayName: 'ESRP - Sign all binaries (Developer ID Application)'
       inputs:
         ConnectedServiceName: 'ame_esrp_connection'
@@ -595,7 +595,7 @@ stages:
         
       displayName: 'Prepare for notarization ($(ARCH))'
     
-    - task: SFP.build-tasks.custom-build-task-1.EsrpCodeSigning@5
+    - task: EsrpCodeSigning@5
       displayName: 'ESRP - Notarize with Apple ($(ARCH))'
       inputs:
         ConnectedServiceName: 'ame_esrp_connection'
