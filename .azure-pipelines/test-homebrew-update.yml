@@ -288,5 +288,47 @@ jobs:
       echo "Installed version: $INSTALLED_VERSION"
       echo "Offline installation successful ($(ARCH))"
       
-      rm -rf "$TEST_DIR"
+      # Keep TEST_DIR for login test
+      echo "##vso[task.setvariable variable=TEST_DIR]$TEST_DIR"
     displayName: 'Test offline install'
+
+  - bash: |
+      set -e
+      
+      echo "=== Testing az login with --debug ($(ARCH)) ==="
+      
+      TEST_DIR="$(TEST_DIR)"
+      AZ_PYTHON="$(brew --prefix python@${{ parameters.PythonVersion }})/libexec/bin/python3"
+      export AZ_PYTHON
+      
+      AZ_CMD="$TEST_DIR/bin/az"
+      
+      # Test 1: Verify login help works (validates auth module loads)
+      echo "--- Testing 'az login --help' ---"
+      "$AZ_CMD" login --help | head -20
+      
+      # Test 2: Run az login --debug to see broker flow activation
+      # This will timeout after 10 seconds but show debug output
+      echo ""
+      echo "--- Running 'az login --debug' (10 sec timeout) ---"
+      echo "Looking for broker activation in debug output..."
+      echo ""
+      
+      # Run with timeout, capture both stdout and stderr
+      timeout 10 "$AZ_CMD" login --debug 2>&1 || true
+      
+      echo ""
+      echo "--- End of debug output ---"
+      
+      # Test 3: Verify account commands work (should show not logged in)
+      echo ""
+      echo "--- Testing 'az account show' (expected: not logged in) ---"
+      "$AZ_CMD" account show 2>&1 || echo "Not logged in (expected in CI)"
+      
+      echo ""
+      echo "=== Login test completed ($(ARCH)) ==="
+      
+      # Cleanup
+      rm -rf "$TEST_DIR"
+    displayName: 'Test az login'
+    continueOnError: true
