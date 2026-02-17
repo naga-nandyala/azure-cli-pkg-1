@@ -1,12 +1,13 @@
-# Azure CLI - macOS Release Pipeline (Build → Sign → Publish)
+# Azure CLI - macOS Release Pipeline (Build → Sign → Test → Publish)
 #
 # Purpose: Complete end-to-end macOS release pipeline
-# Architecture: Chains 3 job templates in sequence
+# Architecture: Chains 4 job templates in sequence
 #
 # Pipeline Flow:
-#   1. macos-build-jobs.yml      → Build unsigned tarballs (ARM64 + Intel)
+#   1. macos-build-jobs.yml        → Build unsigned tarballs (ARM64 + Intel)
 #   2. macos-sign-notarize-jobs.yml → Sign and notarize via ESRP
-#   3. macos-publish-jobs.yml    → GitHub release + Homebrew cask update + test
+#   3. macos-test-jobs.yml         → Test cask (local file://) + offline install
+#   4. macos-publish-jobs.yml      → GitHub release + Homebrew cask update
 #
 # Output Artifacts:
 #   - cli-build-unsigned-arm64, cli-build-unsigned-x86_64 (intermediate)
@@ -47,11 +48,6 @@ parameters:
     displayName: 'Homebrew Tap Repository'
     type: string
     default: 'naga-nandyala/homebrew-mycli-app'
-  
-  - name: TestInstall
-    displayName: 'Test Homebrew cask and offline installation'
-    type: boolean
-    default: true
   
   - name: Debug
     displayName: 'Enable debug diagnostics'
@@ -141,13 +137,30 @@ jobs:
 # Artifacts: cli-signed-notarized-arm64, cli-signed-notarized-x86_64
 
 # ============================================================================
-# PHASE 3: PUBLISH (GitHub + Homebrew + Test)
+# PHASE 3a: TEST (local file:// cask + offline install)
+# ============================================================================
+- template: templates/macos-cask-generation-and-tests.yml
+  parameters:
+    MacosArm64Image: ${{ variables.macos_arm64_pool }}
+    MacosIntelImage: ${{ variables.macos_intel_pool }}
+    PythonVersion: ${{ parameters.PythonVersion }}
+    GitHubRepo: ${{ parameters.GitHubRepo }}
+    Debug: ${{ parameters.Debug }}
+    dependsOn:
+    - CreateFinalTarball
+
+# Jobs included:
+# - TestTempTapCask (matrix: ARM64 + Intel) - tests cask with local file:// URLs
+# - TestOfflineInstall (matrix: ARM64 + Intel) - tests direct tarball install
+
+# ============================================================================
+# PHASE 3b: PUBLISH (GitHub + Homebrew tap)
 # ============================================================================
 - template: templates/macos-publish-jobs.yml
   parameters:
     PublishToGitHub: ${{ parameters.PublishToGitHub }}
     UpdateHomebrew: ${{ parameters.UpdateHomebrew }}
-    TestInstall: ${{ parameters.TestInstall }}
+    TestAfterPublish: false
     GitHubRepo: ${{ parameters.GitHubRepo }}
     HomebrewTapRepo: ${{ parameters.HomebrewTapRepo }}
     MacosArm64Image: ${{ variables.macos_arm64_pool }}
@@ -155,11 +168,11 @@ jobs:
     PythonVersion: ${{ parameters.PythonVersion }}
     Debug: ${{ parameters.Debug }}
     dependsOn:
-    - CreateFinalTarball
+    - TestTempTapCask
+    - TestOfflineInstall
 
 # Jobs included:
 # - CreateGitHubRelease (conditional)
 # - UpdateHomebrewCask (conditional)
-# - TestCaskInstall (conditional, matrix ARM64 + Intel)
-# - TestOfflineInstall (conditional, matrix ARM64 + Intel)
 # - PrintSummary
+
