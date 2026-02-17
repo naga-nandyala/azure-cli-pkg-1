@@ -1,7 +1,7 @@
-# Test Pipeline: Homebrew Cask + Offline Install + az login Test
+# Test Pipeline: Homebrew Cask with Temporary Tap
 #
-# Purpose: Test cask update, cask installation, tarball installation, and az login broker activation
-# Usage: Downloads artifacts from a previous pipeline run
+# Purpose: Test cask generation and installation using a local temporary tap
+# Usage: Downloads artifacts from a previous pipeline run and tests locally
 
 trigger: none
 
@@ -20,24 +20,6 @@ parameters:
     displayName: 'Python Version (Homebrew)'
     type: string
     default: '3.13'
-  
-  - name: GitHubRepo
-    displayName: 'GitHub Repository (owner/repo)'
-    type: string
-    default: 'naga-nandyala/azure-cli-pkg-1'
-  
-  - name: HomebrewTapRepo
-    displayName: 'Homebrew Tap Repository'
-    type: string
-    default: 'naga-nandyala/homebrew-mycli-app'
-
-resources:
-  repositories:
-  - repository: homebrewtap
-    type: github
-    endpoint: 'github.com_naga-nandyala'
-    name: naga-nandyala/homebrew-mycli-app
-    ref: main
 
 variables:
   # Disable auto-injection tasks
@@ -60,113 +42,10 @@ variables:
 
 jobs:
 # ============================================================================
-# JOB: UPDATE HOMEBREW CASK
-# ============================================================================
-- job: UpdateHomebrewCask
-  displayName: 'Update Homebrew Cask'
-  pool:
-    vmImage: 'ubuntu-latest'
-  
-  steps:
-  - checkout: self
-    fetchDepth: 1
-  
-  - checkout: homebrewtap
-    persistCredentials: true
-    path: homebrew-tap
-  
-  # Download from specific build
-  - task: DownloadPipelineArtifact@2
-    displayName: 'Download ARM64 tarball'
-    inputs:
-      buildType: 'specific'
-      project: '$(System.TeamProjectId)'
-      pipeline: '${{ parameters.SourcePipelineId }}'
-      buildVersionToDownload: 'specific'
-      buildId: ${{ parameters.SourceBuildId }}
-      artifactName: 'cli-signed-notarized-arm64'
-      targetPath: '$(Pipeline.Workspace)/cli-signed-notarized-arm64'
-  
-  - task: DownloadPipelineArtifact@2
-    displayName: 'Download Intel tarball'
-    inputs:
-      buildType: 'specific'
-      project: '$(System.TeamProjectId)'
-      pipeline: '${{ parameters.SourcePipelineId }}'
-      buildVersionToDownload: 'specific'
-      buildId: ${{ parameters.SourceBuildId }}
-      artifactName: 'cli-signed-notarized-x86_64'
-      targetPath: '$(Pipeline.Workspace)/cli-signed-notarized-x86_64'
-  
-  - bash: |
-      set -e
-      
-      GITHUB_REPO="${{ parameters.GitHubRepo }}"
-      
-      ARM64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-arm64 -name "azure-cli-*-macos-arm64.tar.gz" | head -1)
-      X86_64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-x86_64 -name "azure-cli-*-macos-x86_64.tar.gz" | head -1)
-      
-      VERSION=$(basename "$ARM64_TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
-      
-      ARM64_SHA256=$(cat ${ARM64_TARBALL}.sha256 | cut -d' ' -f1)
-      X86_64_SHA256=$(cat ${X86_64_TARBALL}.sha256 | cut -d' ' -f1)
-      
-      echo "=== Updating Homebrew Cask ==="
-      echo "Version: $VERSION"
-      echo "ARM64 SHA256: $ARM64_SHA256"
-      echo "x86_64 SHA256: $X86_64_SHA256"
-      
-      cd $(Pipeline.Workspace)/homebrew-tap
-      
-      REPO_NAME="$(Build.Repository.Name)"
-      REPO_DIR="${REPO_NAME##*/}"
-      REPO_ROOT=""
-      for candidate in \
-        "$(Build.SourcesDirectory)/$REPO_DIR" \
-        "$(Build.SourcesDirectory)/$REPO_NAME" \
-        "$(Build.SourcesDirectory)"; do
-        if [ -d "$candidate" ]; then
-          REPO_ROOT="$candidate"
-          break
-        fi
-      done
-      
-      if [ -z "$REPO_ROOT" ]; then
-        echo "ERROR: Unable to resolve repo root"
-        exit 1
-      fi
-      
-      mkdir -p Casks
-      
-      python3 "$REPO_ROOT/scripts/release/macos/cask_generate.py" \
-        --version "$VERSION" \
-        --arm64-sha "$ARM64_SHA256" \
-        --x86-64-sha "$X86_64_SHA256" \
-        --github-repo "$GITHUB_REPO" \
-        --template "$REPO_ROOT/scripts/release/macos/templates/azure-cli.rb.in" \
-        --output "Casks/azure-cli.rb"
-      
-      echo "=== Generated Cask ==="
-      cat Casks/azure-cli.rb
-      
-      git config user.name "Azure Pipeline"
-      git config user.email "azure-pipeline@microsoft.com"
-      git add Casks/azure-cli.rb
-      git commit -m "Update azure-cli to $VERSION" || echo "No changes"
-      git pull --rebase origin main
-      git push origin HEAD:main
-      
-      echo "Homebrew cask updated successfully"
-      
-    displayName: 'Update cask definition'
-
-# ============================================================================
 # JOB: TEST CASK WITH TEMPORARY TAP (Both Architectures)
 # ============================================================================
 - job: TestTempTapCask
   displayName: 'Test Cask via Temporary Tap'
-  dependsOn: UpdateHomebrewCask
-  condition: succeeded()
   strategy:
     matrix:
       ARM64:
@@ -231,9 +110,7 @@ jobs:
   - bash: |
       set -ev
       
-      GITHUB_REPO="${{ parameters.GitHubRepo }}"
-      
-      # Get tarballs and compute SHA256
+      # Get tarballs
       ARM64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-arm64 -name "azure-cli-*-macos-arm64.tar.gz" | head -1)
       X86_64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-x86_64 -name "azure-cli-*-macos-x86_64.tar.gz" | head -1)
       
@@ -242,9 +119,11 @@ jobs:
       ARM64_SHA256=$(cat ${ARM64_TARBALL}.sha256 | cut -d' ' -f1)
       X86_64_SHA256=$(cat ${X86_64_TARBALL}.sha256 | cut -d' ' -f1)
       
-      echo "=== Generating Cask for Temporary Tap ==="
+      echo "=== Generating Cask using template ==="
       echo "Version: $VERSION"
+      echo "ARM64 tarball: $ARM64_TARBALL"
       echo "ARM64 SHA256: $ARM64_SHA256"
+      echo "x86_64 tarball: $X86_64_TARBALL"
       echo "x86_64 SHA256: $X86_64_SHA256"
       
       # Resolve repo root
@@ -266,20 +145,33 @@ jobs:
         exit 1
       fi
       
-      # Generate cask to staging directory
+      # Generate cask using template
       mkdir -p $(Pipeline.Workspace)/cask-staging
       python3 "$REPO_ROOT/scripts/release/macos/cask_generate.py" \
         --version "$VERSION" \
         --arm64-sha "$ARM64_SHA256" \
         --x86-64-sha "$X86_64_SHA256" \
-        --github-repo "$GITHUB_REPO" \
+        --github-repo "placeholder/repo" \
         --template "$REPO_ROOT/scripts/release/macos/templates/azure-cli.rb.in" \
         --output "$(Pipeline.Workspace)/cask-staging/azure-cli.rb"
       
-      echo "=== Generated Cask ==="
+      echo "=== Generated Cask (before URL replacement) ==="
       cat $(Pipeline.Workspace)/cask-staging/azure-cli.rb
       
-    displayName: 'Generate cask definition'
+      # Replace GitHub URL with file:// URL for local testing
+      # The template generates: url "https://github.com/.../azure-cli-VERSION-macos-ARCH.tar.gz"
+      # We need to replace with file:// pointing to local tarballs
+      sed -i.bak "s|url \"https://github.com/[^\"]*\"|url \"file://$(Pipeline.Workspace)/cli-signed-notarized-#{arch}/azure-cli-#{version}-macos-#{arch}.tar.gz\"|" \
+        $(Pipeline.Workspace)/cask-staging/azure-cli.rb
+      
+      echo "=== Generated Cask (after URL replacement for local testing) ==="
+      cat $(Pipeline.Workspace)/cask-staging/azure-cli.rb
+      
+      # Export tarball paths for verification
+      echo "##vso[task.setvariable variable=ARM64_TARBALL]$ARM64_TARBALL"
+      echo "##vso[task.setvariable variable=X86_64_TARBALL]$X86_64_TARBALL"
+      
+    displayName: 'Generate cask definition (local file URLs)'
 
   - bash: |
       set -ev
