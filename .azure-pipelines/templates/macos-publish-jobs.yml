@@ -94,7 +94,7 @@ jobs:
         flattenFolders: true
     
     - bash: |
-        ARM64_TARBALL=$(find "$(Build.ArtifactStagingDirectory)/release" -name "azure-cli-*-macos-arm64.tar.gz" | sort | tail -1)
+        ARM64_TARBALL=$(find "$(Build.ArtifactStagingDirectory)/release" -name "azure-cli-*-macos-arm64.tar.gz" | head -1)
         VERSION=$(basename "$ARM64_TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
         
         echo "=== GitHub Release ==="
@@ -180,8 +180,8 @@ jobs:
         
         GITHUB_REPO="${{ parameters.GitHubRepo }}"
         
-        ARM64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-arm64 -name "azure-cli-*.tar.gz" | sort | tail -1)
-        X86_64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-x86_64 -name "azure-cli-*.tar.gz" | sort | tail -1)
+        ARM64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-arm64 -name "azure-cli-*-macos-arm64.tar.gz" | head -1)
+        X86_64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-x86_64 -name "azure-cli-*-macos-x86_64.tar.gz" | head -1)
         
         VERSION=$(basename "$ARM64_TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
         
@@ -392,7 +392,7 @@ jobs:
         
         echo "=== Testing Offline/Direct Tarball Installation ($(Architecture)) ==="
         
-        TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-$(Architecture) -name "azure-cli-*.tar.gz" | sort | tail -1)
+        TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-$(Architecture) -name "azure-cli-*-macos-$(Architecture).tar.gz" | head -1)
         TEST_DIR="$HOME/azure-cli-test"
         
         mkdir -p "$TEST_DIR"

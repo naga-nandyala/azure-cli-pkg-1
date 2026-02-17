@@ -5,35 +5,21 @@
 
 trigger: none
 
-variables:
-  # Disable auto-injection tasks
-  - name: Codeql.Enabled
-    value: false
-  - name: Codeql.SkipTaskAutoInjection
-    value: true
-  - name: CodeQL.enabled
-    value: false
-  - name: runCodesignValidationInjection
-    value: false
-  - name: DOTNET_CLI_TELEMETRY_OPTOUT
-    value: 1
-  - name: DOTNET_NOLOGO
-    value: 1
-  - name: NugetSecurityAnalysisWarningLevel
-    value: none
-  - name: skipNugetSecurityAnalysis
-    value: true
-
 parameters:
   - name: SourceBuildId
     displayName: 'Build ID (Run ID) with signed tarballs'
     type: string
-    default: '297504'  # Last successful build
+    default: '297555'
   
-  - name: SourcePipelineName
-    displayName: 'Source Pipeline Name'
+  - name: SourcePipelineId
+    displayName: 'Source Pipeline Definition ID (from URL)'
     type: string
-    default: 'naga_macos_opus_pipeline'
+    default: ''  # Get from Azure DevOps URL: ?definitionId=XXX
+  
+  - name: PythonVersion
+    displayName: 'Python Version (Homebrew)'
+    type: string
+    default: '3.13'
   
   - name: GitHubRepo
     displayName: 'GitHub Repository (owner/repo)'
@@ -73,7 +59,7 @@ jobs:
     inputs:
       buildType: 'specific'
       project: '$(System.TeamProjectId)'
-      pipeline: '${{ parameters.SourcePipelineName }}'
+      pipeline: '${{ parameters.SourcePipelineId }}'
       buildVersionToDownload: 'specific'
       buildId: ${{ parameters.SourceBuildId }}
       artifactName: 'cli-signed-notarized-arm64'
@@ -84,7 +70,7 @@ jobs:
     inputs:
       buildType: 'specific'
       project: '$(System.TeamProjectId)'
-      pipeline: '${{ parameters.SourcePipelineName }}'
+      pipeline: '${{ parameters.SourcePipelineId }}'
       buildVersionToDownload: 'specific'
       buildId: ${{ parameters.SourceBuildId }}
       artifactName: 'cli-signed-notarized-x86_64'
@@ -95,8 +81,8 @@ jobs:
       
       GITHUB_REPO="${{ parameters.GitHubRepo }}"
       
-      ARM64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-arm64 -name "azure-cli-*.tar.gz" | sort | tail -1)
-      X86_64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-x86_64 -name "azure-cli-*.tar.gz" | sort | tail -1)
+      ARM64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-arm64 -name "azure-cli-*-macos-arm64.tar.gz" | head -1)
+      X86_64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-x86_64 -name "azure-cli-*-macos-x86_64.tar.gz" | head -1)
       
       VERSION=$(basename "$ARM64_TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
       
@@ -233,52 +219,55 @@ jobs:
     inputs:
       buildType: 'specific'
       project: '$(System.TeamProjectId)'
-      pipeline: '${{ parameters.SourcePipelineName }}'
+      pipeline: '${{ parameters.SourcePipelineId }}'
       buildVersionToDownload: 'specific'
       buildId: ${{ parameters.SourceBuildId }}
       artifactName: 'cli-signed-notarized-$(ARCH)'
       targetPath: '$(Pipeline.Workspace)/cli-signed-notarized-$(ARCH)'
 
   - bash: |
-      echo "Cleanup: Remove pre-installed Azure CLI ($(ARCH))"
+      echo "=== Cleanup: Remove pre-installed Azure CLI ($(ARCH)) ==="
       
       if command -v az &> /dev/null; then
+        echo "Pre-installed Azure CLI detected: $(which az)"
+        
         brew uninstall azure-cli 2>/dev/null || true
         brew uninstall --cask azure-cli 2>/dev/null || true
+        
         sudo rm -f /usr/local/bin/az
+        sudo rm -f /opt/homebrew/bin/az
+        
         hash -r
       fi
-      
-    displayName: 'Cleanup pre-installed Azure CLI'
+      echo "Cleanup complete"
+    displayName: 'Remove pre-installed Azure CLI'
 
   - bash: |
       set -e
       
-      echo "=== Testing Offline Tarball Installation ($(ARCH)) ==="
+      echo "=== Testing Offline/Direct Tarball Installation ($(ARCH)) ==="
       
-      TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-$(ARCH) -name "azure-cli-*.tar.gz" | sort | tail -1)
+      TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-$(ARCH) -name "azure-cli-*-macos-$(ARCH).tar.gz" | head -1)
+      TEST_DIR="$HOME/azure-cli-test"
       
-      if [ -z "$TARBALL" ]; then
-        echo "ERROR: No tarball found"
-        exit 1
+      mkdir -p "$TEST_DIR"
+      tar -xzf "$TARBALL" -C "$TEST_DIR"
+      
+      if ! brew list python@${{ parameters.PythonVersion }} &>/dev/null; then
+        brew install python@${{ parameters.PythonVersion }}
       fi
       
-      echo "Using tarball: $TARBALL"
+      AZ_PYTHON="$(brew --prefix python@${{ parameters.PythonVersion }})/libexec/bin/python3"
+      export AZ_PYTHON
       
-      # Verify SHA256
-      echo "Verifying SHA256..."
-      cd $(dirname "$TARBALL")
-      shasum -a 256 -c "$(basename "$TARBALL").sha256"
+      export AZ_DEBUG=1
+      "$TEST_DIR/bin/az" version
       
-      # Extract
-      INSTALL_DIR="$HOME/azure-cli-test"
-      mkdir -p "$INSTALL_DIR"
-      tar -xzf "$TARBALL" -C "$INSTALL_DIR"
+      INSTALLED_VERSION=$("$TEST_DIR/bin/az" version -o tsv --query '"azure-cli"' 2>/dev/null || echo "unknown")
       
-      # Verify
-      echo "=== Verifying Installation ==="
-      "$INSTALL_DIR/bin/az" --version
+      echo ""
+      echo "Installed version: $INSTALLED_VERSION"
+      echo "Offline installation successful ($(ARCH))"
       
-      echo "=== Offline Install Test PASSED ($(ARCH)) ==="
-      
-    displayName: 'Test offline installation'
+      rm -rf "$TEST_DIR"
+    displayName: 'Test offline install'

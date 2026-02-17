@@ -95,9 +95,9 @@ jobs:
       echo "=== Analyzing Unsigned Tarball ($ARCH) ==="
       ls -lh "$ARTIFACT_DIR/"
       
-      TARBALL=$(find "$ARTIFACT_DIR" -name "azure-cli-*.tar.gz" | sort | tail -1)
+      TARBALL=$(find "$ARTIFACT_DIR" -name "azure-cli-*-macos-$ARCH-nopython.tar.gz" | head -1)
       if [ -z "$TARBALL" ]; then
-        echo "ERROR: No azure-cli-*.tar.gz found"
+        echo "ERROR: No azure-cli-*-macos-$ARCH-nopython.tar.gz found"
         exit 1
       fi
       
@@ -324,7 +324,7 @@ jobs:
       
       echo "=== Merging Signed Binaries ($ARCH) ==="
       
-      TARBALL=$(find $(Pipeline.Workspace)/unsigned-tarball-$ARCH -name "azure-cli-*.tar.gz" | sort | tail -1)
+      TARBALL=$(find $(Pipeline.Workspace)/unsigned-tarball-$ARCH -name "azure-cli-*-macos-$ARCH-nopython.tar.gz" | head -1)
       MERGED_DIR="$(Build.ArtifactStagingDirectory)/merged"
       
       mkdir -p "$MERGED_DIR"
@@ -376,7 +376,7 @@ jobs:
       
       mkdir -p "$BUNDLE_DIR"
       
-      TARBALL=$(find $(Pipeline.Workspace)/unsigned-tarball-$ARCH -name "azure-cli-*.tar.gz" | sort | tail -1)
+      TARBALL=$(find $(Pipeline.Workspace)/unsigned-tarball-$ARCH -name "azure-cli-*-macos-$ARCH-nopython.tar.gz" | head -1)
       VERSION=$(basename "$TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
       
       ZIP_NAME="azure-cli-${VERSION}-macos-${ARCH}-nopython-signed.zip"
@@ -506,7 +506,7 @@ jobs:
       
       echo "=== Creating Final Signed+Notarized Tarball ($ARCH) ==="
       
-      UNSIGNED_TARBALL=$(find $(Pipeline.Workspace)/unsigned-tarball-$ARCH -name "azure-cli-*.tar.gz" | sort | tail -1)
+      UNSIGNED_TARBALL=$(find $(Pipeline.Workspace)/unsigned-tarball-$ARCH -name "azure-cli-*-macos-$ARCH-nopython.tar.gz" | head -1)
       TARBALL_NAME_ORIG=$(basename "$UNSIGNED_TARBALL")
       VERSION=$(echo "$TARBALL_NAME_ORIG" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
       
@@ -568,7 +568,7 @@ jobs:
       
       ARCH="$(Architecture)"
       OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/final"
-      TARBALL=$(find "$OUTPUT_DIR" -name "azure-cli-*.tar.gz" | sort | tail -1)
+      TARBALL=$(find "$OUTPUT_DIR" -name "azure-cli-*-macos-$ARCH.tar.gz" | head -1)
       TEST_DIR=$(mktemp -d)
       
       tar -xzf "$TARBALL" -C "$TEST_DIR"

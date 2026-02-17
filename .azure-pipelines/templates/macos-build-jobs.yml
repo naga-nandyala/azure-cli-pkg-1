@@ -127,7 +127,7 @@ jobs:
       set -e
       
       ARCH="$(Architecture)"
-      TARBALL=$(find $(Pipeline.Workspace)/cli-build-unsigned-$ARCH -name "azure-cli-*-macos-$ARCH-nopython.tar.gz" | sort | tail -1)
+      TARBALL=$(find $(Pipeline.Workspace)/cli-build-unsigned-$ARCH -name "azure-cli-*-macos-$ARCH-nopython.tar.gz" | head -1)
       EXTRACT_DIR=$(mktemp -d)
       
       echo "=== Tarball Analysis ==="
@@ -154,7 +154,7 @@ jobs:
       set -e
       
       ARCH="$(Architecture)"
-      TARBALL=$(find $(Pipeline.Workspace)/cli-build-unsigned-$ARCH -name "azure-cli-*-macos-$ARCH-nopython.tar.gz" | sort | tail -1)
+      TARBALL=$(find $(Pipeline.Workspace)/cli-build-unsigned-$ARCH -name "azure-cli-*-macos-$ARCH-nopython.tar.gz" | head -1)
       EXTRACT_DIR=$(mktemp -d)
       
       echo "=== Verifying Azure CLI on $ARCH ==="
