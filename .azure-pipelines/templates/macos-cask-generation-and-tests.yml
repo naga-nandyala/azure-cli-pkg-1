@@ -46,7 +46,7 @@ jobs:
 # JOB: GENERATE CASK AND TEST VIA TEMP HOMEBREW TAP (Both Architectures)
 # ============================================================================
 - job: TestTempTapCask
-  displayName: 'Generate Cask and Test Via Temp HomebrewTap'
+  displayName: 'macOS | Generate Cask and Test'
   dependsOn: ${{ parameters.dependsOn }}
   condition: ${{ parameters.condition }}
   strategy:
@@ -248,7 +248,7 @@ jobs:
 # JOB: TEST OFFLINE/TARBALL INSTALLATION (Both Architectures)
 # ============================================================================
 - job: TestOfflineInstall
-  displayName: 'Test Offline/Tarball Installation'
+  displayName: 'macOS | Test Offline Installation'
   dependsOn: ${{ parameters.dependsOn }}
   condition: ${{ parameters.condition }}
   strategy:

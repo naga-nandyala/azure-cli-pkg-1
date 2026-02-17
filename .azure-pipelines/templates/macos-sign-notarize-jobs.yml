@@ -46,7 +46,7 @@ jobs:
 # JOB: DOWNLOAD AND ANALYZE (Both Architectures via Matrix)
 # ============================================================================
 - job: DownloadAnalyze
-  displayName: 'Download and Analyze'
+  displayName: 'macOS | Download and Analyze'
   condition: ${{ parameters.condition }}
   dependsOn: ${{ parameters.dependsOn }}
   strategy:
@@ -152,7 +152,7 @@ jobs:
 # JOB: SIGN BINARIES (Both Architectures via Matrix) - Windows Agent for ESRP
 # ============================================================================
 - job: SignBinaries
-  displayName: 'Sign Binaries'
+  displayName: 'macOS | ESRP Sign Binaries'
   dependsOn: DownloadAnalyze
   condition: succeeded()
   strategy:
@@ -290,7 +290,7 @@ jobs:
 # JOB: CREATE NOTARIZATION BUNDLE (Both Architectures via Matrix)
 # ============================================================================
 - job: CreateNotarizeBundle
-  displayName: 'Create Notarization Bundle'
+  displayName: 'macOS | Create Notarization Bundle'
   dependsOn:
   - DownloadAnalyze
   - SignBinaries
@@ -397,7 +397,7 @@ jobs:
 # JOB: NOTARIZE WITH APPLE (Both Architectures via Matrix) - Windows Agent for ESRP
 # ============================================================================
 - job: Notarize
-  displayName: 'Notarize with Apple'
+  displayName: 'macOS | ESRP Notarize with Apple'
   dependsOn:
   - DownloadAnalyze
   - CreateNotarizeBundle
@@ -471,7 +471,7 @@ jobs:
 # JOB: CREATE FINAL TARBALL (Both Architectures via Matrix)
 # ============================================================================
 - job: CreateFinalTarball
-  displayName: 'Create Final Tarball'
+  displayName: 'macOS | Create Final Tarball'
   dependsOn:
   - DownloadAnalyze
   - Notarize

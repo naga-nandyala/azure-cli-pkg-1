@@ -22,13 +22,13 @@
 parameters:
   - name: PublishToGitHub
     type: boolean
-    default: false
+    default: true
   - name: UpdateHomebrew
     type: boolean
-    default: false
+    default: true
   - name: TestAfterPublish
     type: boolean
-    default: false
+    default: true
   - name: GitHubRepo
     type: string
     default: ''

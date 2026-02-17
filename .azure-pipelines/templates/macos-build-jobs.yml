@@ -36,7 +36,7 @@ jobs:
 # JOB: BUILD MACOS CLI (ARM64 + Intel via Matrix)
 # ============================================================================
 - job: BuildMacOSCli
-  displayName: 'Build macOS CLI'
+  displayName: 'macOS | Build CLI'
   condition: ${{ parameters.condition }}
   dependsOn: ${{ parameters.dependsOn }}
   strategy:
@@ -102,7 +102,7 @@ jobs:
 # JOB: VERIFY MACOS CLI (ARM64 + Intel via Matrix)
 # ============================================================================
 - job: VerifyMacOSCli
-  displayName: 'Verify macOS CLI'
+  displayName: 'macOS | Verify CLI'
   dependsOn: BuildMacOSCli
   condition: succeeded()
   strategy:
