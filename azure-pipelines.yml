@@ -746,14 +746,7 @@ jobs:
   parameters:
     MacosArm64Image: ${{ variables.macos_arm64_pool }}
     BundleId: 'com.microsoft.azure.cli'
-    EsrpServiceConnection: 'ame-esrp'
-    TeamId: $(ESRP_TEAM_ID)
-    TeamName: $(ESRP_TEAM_NAME)
-    RequestSigningCert: $(ESRP_REQUEST_SIGNING_CERT)
-    AuthCert: $(ESRP_AUTH_CERT)
-    SignCert: $(ESRP_SIGN_CERT)
-    SignCertAKV: $(ESRP_SIGN_CERT_AKV)
-    Debug: false
+    UseCurrentPipelineArtifacts: true
     dependsOn: ['VerifyMacOSCli']
 
 # Phase 3: Generate cask and test via temp tap
