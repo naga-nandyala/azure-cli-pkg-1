@@ -1,8 +1,14 @@
 variables:
-  ubuntu_pool: 'pool-ubuntu-2204'
-  ubuntu_multi_core_pool: 'pool-ubuntu-latest-multi-core'
-  windows_pool: 'pool-windows-2019'
-  ubuntu_arm64_pool: 'pool-ubuntu-latest-arm64'
+  # TEMPORARY: Using Microsoft-hosted pools to avoid permission issues
+  # Original private pools:
+  # ubuntu_pool: 'pool-ubuntu-2204'
+  # ubuntu_multi_core_pool: 'pool-ubuntu-latest-multi-core'
+  # windows_pool: 'pool-windows-2019'
+  # ubuntu_arm64_pool: 'pool-ubuntu-latest-arm64'
+  ubuntu_pool: 'ubuntu-22.04'
+  ubuntu_multi_core_pool: 'ubuntu-latest'
+  windows_pool: 'windows-latest'
+  ubuntu_arm64_pool: 'ubuntu-latest'
   macos_pool: 'macOS-14'
   macos_intel_pool: 'macos-15'
   macos_arm64_pool: 'macos-15-arm64'
