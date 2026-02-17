@@ -128,6 +128,7 @@ jobs:
     PythonVersion: ${{ parameters.PythonVersion }}
     MacosArm64Image: ${{ variables.macos_arm64_pool }}
     MacosIntelImage: ${{ variables.macos_intel_pool }}
+    UseCurrentPipelineArtifacts: true
     dependsOn:
     - VerifyMacOSCli
 
