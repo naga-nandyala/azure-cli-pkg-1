@@ -32,15 +32,19 @@ parameters:
   default: true
   displayName: 'Run only macOS jobs (skip all other jobs)'
 
+# COMMENTED OUT: These pools require permissions we don't have
+# - name: architectures
+#   type: object
+#   default:
+#   - name: AMD64
+#     value: amd64
+#     pool: pool-ubuntu-latest-multi-core
+#   - name: ARM64
+#     value: arm64
+#     pool: pool-ubuntu-latest-arm64
 - name: architectures
   type: object
-  default:
-  - name: AMD64
-    value: amd64
-    pool: pool-ubuntu-latest-multi-core
-  - name: ARM64
-    value: arm64
-    pool: pool-ubuntu-latest-arm64
+  default: []
 
 jobs:
 - job: CheckPullRequest
