@@ -1,6 +1,6 @@
-# Test Pipeline: Offline Install + az login Test
+# Test Pipeline: Homebrew Cask + Offline Install + az login Test
 #
-# Purpose: Test tarball installation and az login broker activation
+# Purpose: Test cask update, cask installation, tarball installation, and az login broker activation
 # Usage: Downloads artifacts from a previous pipeline run
 
 trigger: none
@@ -20,6 +20,24 @@ parameters:
     displayName: 'Python Version (Homebrew)'
     type: string
     default: '3.13'
+  
+  - name: GitHubRepo
+    displayName: 'GitHub Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+  
+  - name: HomebrewTapRepo
+    displayName: 'Homebrew Tap Repository'
+    type: string
+    default: 'naga-nandyala/homebrew-mycli-app'
+
+resources:
+  repositories:
+  - repository: homebrewtap
+    type: github
+    endpoint: 'github.com_naga-nandyala'
+    name: naga-nandyala/homebrew-mycli-app
+    ref: main
 
 variables:
   # Disable auto-injection tasks
@@ -42,10 +60,175 @@ variables:
 
 jobs:
 # ============================================================================
+# JOB: UPDATE HOMEBREW CASK
+# ============================================================================
+- job: UpdateHomebrewCask
+  displayName: 'Update Homebrew Cask'
+  pool:
+    vmImage: 'ubuntu-latest'
+  
+  steps:
+  - checkout: self
+    fetchDepth: 1
+  
+  - checkout: homebrewtap
+    persistCredentials: true
+    path: homebrew-tap
+  
+  # Download from specific build
+  - task: DownloadPipelineArtifact@2
+    displayName: 'Download ARM64 tarball'
+    inputs:
+      buildType: 'specific'
+      project: '$(System.TeamProjectId)'
+      pipeline: '${{ parameters.SourcePipelineId }}'
+      buildVersionToDownload: 'specific'
+      buildId: ${{ parameters.SourceBuildId }}
+      artifactName: 'cli-signed-notarized-arm64'
+      targetPath: '$(Pipeline.Workspace)/cli-signed-notarized-arm64'
+  
+  - task: DownloadPipelineArtifact@2
+    displayName: 'Download Intel tarball'
+    inputs:
+      buildType: 'specific'
+      project: '$(System.TeamProjectId)'
+      pipeline: '${{ parameters.SourcePipelineId }}'
+      buildVersionToDownload: 'specific'
+      buildId: ${{ parameters.SourceBuildId }}
+      artifactName: 'cli-signed-notarized-x86_64'
+      targetPath: '$(Pipeline.Workspace)/cli-signed-notarized-x86_64'
+  
+  - bash: |
+      set -e
+      
+      GITHUB_REPO="${{ parameters.GitHubRepo }}"
+      
+      ARM64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-arm64 -name "azure-cli-*-macos-arm64.tar.gz" | head -1)
+      X86_64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-x86_64 -name "azure-cli-*-macos-x86_64.tar.gz" | head -1)
+      
+      VERSION=$(basename "$ARM64_TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
+      
+      ARM64_SHA256=$(cat ${ARM64_TARBALL}.sha256 | cut -d' ' -f1)
+      X86_64_SHA256=$(cat ${X86_64_TARBALL}.sha256 | cut -d' ' -f1)
+      
+      echo "=== Updating Homebrew Cask ==="
+      echo "Version: $VERSION"
+      echo "ARM64 SHA256: $ARM64_SHA256"
+      echo "x86_64 SHA256: $X86_64_SHA256"
+      
+      cd $(Pipeline.Workspace)/homebrew-tap
+      
+      REPO_NAME="$(Build.Repository.Name)"
+      REPO_DIR="${REPO_NAME##*/}"
+      REPO_ROOT=""
+      for candidate in \
+        "$(Build.SourcesDirectory)/$REPO_DIR" \
+        "$(Build.SourcesDirectory)/$REPO_NAME" \
+        "$(Build.SourcesDirectory)"; do
+        if [ -d "$candidate" ]; then
+          REPO_ROOT="$candidate"
+          break
+        fi
+      done
+      
+      if [ -z "$REPO_ROOT" ]; then
+        echo "ERROR: Unable to resolve repo root"
+        exit 1
+      fi
+      
+      mkdir -p Casks
+      
+      python3 "$REPO_ROOT/scripts/release/macos/cask_generate.py" \
+        --version "$VERSION" \
+        --arm64-sha "$ARM64_SHA256" \
+        --x86-64-sha "$X86_64_SHA256" \
+        --github-repo "$GITHUB_REPO" \
+        --template "$REPO_ROOT/scripts/release/macos/templates/azure-cli.rb.in" \
+        --output "Casks/azure-cli.rb"
+      
+      echo "=== Generated Cask ==="
+      cat Casks/azure-cli.rb
+      
+      git config user.name "Azure Pipeline"
+      git config user.email "azure-pipeline@microsoft.com"
+      git add Casks/azure-cli.rb
+      git commit -m "Update azure-cli to $VERSION" || echo "No changes"
+      git pull --rebase origin main
+      git push origin HEAD:main
+      
+      echo "Homebrew cask updated successfully"
+      
+    displayName: 'Update cask definition'
+
+# ============================================================================
+# JOB: TEST CASK INSTALL (Both Architectures)
+# ============================================================================
+- job: TestCaskInstall
+  displayName: 'Test Homebrew Cask Installation'
+  dependsOn: UpdateHomebrewCask
+  condition: succeeded()
+  strategy:
+    matrix:
+      ARM64:
+        ARCH: 'arm64'
+        VM_IMAGE: 'macos-15-arm64'
+      Intel:
+        ARCH: 'x86_64'
+        VM_IMAGE: 'macos-15'
+  pool:
+    vmImage: $(VM_IMAGE)
+
+  steps:
+  - checkout: none
+
+  - bash: |
+      echo "=== Environment Info ($(ARCH)) ==="
+      echo "HOMEBREW_CASK_OPTS: $HOMEBREW_CASK_OPTS"
+      echo "macOS version: $(sw_vers -productVersion)"
+      echo "Homebrew version: $(brew --version | head -1)"
+    displayName: 'Show environment info'
+
+  - bash: |
+      echo "Cleanup: Remove pre-installed Azure CLI ($(ARCH))"
+      
+      if command -v az &> /dev/null; then
+        echo "Pre-installed Azure CLI detected: $(which az)"
+        brew uninstall azure-cli 2>/dev/null || true
+        brew uninstall --cask azure-cli 2>/dev/null || true
+        sudo rm -f /usr/local/bin/az
+        sudo rm -f /opt/homebrew/bin/az
+        hash -r
+      fi
+      
+    displayName: 'Cleanup pre-installed Azure CLI'
+
+  - bash: |
+      set -e
+      
+      echo "=== Testing Homebrew Cask Installation ($(ARCH)) ==="
+      
+      # Add our tap
+      brew tap ${{ parameters.HomebrewTapRepo }}
+      
+      # Install azure-cli cask
+      brew install --cask azure-cli
+      
+      # Verify installation
+      echo "=== Verifying Installation ==="
+      which az
+      az --version
+      
+      echo "=== Cask Install Test PASSED ($(ARCH)) ==="
+      
+    displayName: 'Test cask installation'
+
+# ============================================================================
 # JOB: TEST OFFLINE INSTALL + AZ LOGIN (Both Architectures)
 # ============================================================================
 - job: TestOfflineInstall
   displayName: 'Test Offline Tarball Installation'
+  dependsOn: UpdateHomebrewCask
+  condition: succeeded()
   strategy:
     matrix:
       ARM64:
@@ -123,7 +306,7 @@ jobs:
   - bash: |
       set -e
       
-      echo "=== Testing az login with --debug ($(ARCH)) ==="
+      echo "=== Testing az login broker flow ($(ARCH)) ==="
       
       TEST_DIR="$(TEST_DIR)"
       AZ_PYTHON="$(brew --prefix python@${{ parameters.PythonVersion }})/libexec/bin/python3"
@@ -131,18 +314,13 @@ jobs:
       
       AZ_CMD="$TEST_DIR/bin/az"
       
-      # Test 1: Verify login help works (validates auth module loads)
-      echo "--- Testing 'az login --help' ---"
-      "$AZ_CMD" login --help | head -20
+      # Install coreutils for gtimeout (macOS compatible timeout)
+      brew install coreutils 2>/dev/null || true
       
-      # Test 2: Run az login --debug to see broker flow activation
-      echo ""
+      # Run az login --debug to see broker flow activation
       echo "--- Running 'az login --debug' (10 sec timeout) ---"
       echo "Looking for broker activation in debug output..."
       echo ""
-      
-      # Install coreutils for gtimeout (macOS compatible timeout)
-      brew install coreutils 2>/dev/null || true
       
       # Run with gtimeout to capture debug output before interactive prompt
       gtimeout 10 "$AZ_CMD" login --debug 2>&1 || true
@@ -150,15 +328,10 @@ jobs:
       echo ""
       echo "--- End of debug output ---"
       
-      # Test 3: Verify account commands work (should show not logged in)
       echo ""
-      echo "--- Testing 'az account show' (expected: not logged in) ---"
-      "$AZ_CMD" account show 2>&1 || echo "Not logged in (expected in CI)"
-      
-      echo ""
-      echo "=== Login test completed ($(ARCH)) ==="
+      echo "=== Broker test completed ($(ARCH)) ==="
       
       # Cleanup
       rm -rf "$TEST_DIR"
-    displayName: 'Test az login'
+    displayName: 'Test az login broker'
     continueOnError: true
