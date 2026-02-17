@@ -4,8 +4,6 @@
 # Usage: Called from standalone job-based pipeline
 #
 # Parameters:
-#   - TarballBuildId: Build ID for external pipeline artifact download (standalone mode)
-#   - UseCurrentPipelineArtifacts: If true, use artifacts from current pipeline run
 #   - BundleId: Apple bundle ID for notarization
 #   - condition: Job execution condition
 #   - dependsOn: Jobs this depends on
@@ -18,12 +16,6 @@
 #   - cli-signed-notarized-x86_64
 
 parameters:
-  - name: TarballBuildId
-    type: string
-    default: ''
-  - name: UseCurrentPipelineArtifacts
-    type: boolean
-    default: false
   - name: BundleId
     type: string
     default: 'com.microsoft.azure.cli'
@@ -64,27 +56,12 @@ jobs:
   - checkout: self
     fetchDepth: 1
 
-  # Download from current pipeline (integrated mode)
-  - ${{ if eq(parameters.UseCurrentPipelineArtifacts, true) }}:
-    - task: DownloadPipelineArtifact@2
-      displayName: 'Download unsigned build ($(Architecture))'
-      inputs:
-        buildType: 'current'
-        artifactName: 'cli-build-unsigned-$(Architecture)'
-        targetPath: '$(Pipeline.Workspace)/cli-build-unsigned-$(Architecture)'
-
-  # Download from external pipeline (standalone mode)
-  - ${{ if eq(parameters.UseCurrentPipelineArtifacts, false) }}:
-    - task: DownloadPipelineArtifact@2
-      displayName: 'Download from Build Pipeline ${{ parameters.TarballBuildId }} ($(Architecture))'
-      inputs:
-        buildType: 'specific'
-        project: 'release'
-        definition: 'macos-build'
-        buildVersionToDownload: 'specific'
-        buildId: ${{ parameters.TarballBuildId }}
-        artifactName: 'cli-build-unsigned-$(Architecture)'
-        targetPath: '$(Pipeline.Workspace)/cli-build-unsigned-$(Architecture)'
+  - task: DownloadPipelineArtifact@2
+    displayName: 'Download unsigned build ($(Architecture))'
+    inputs:
+      buildType: 'current'
+      artifactName: 'cli-build-unsigned-$(Architecture)'
+      targetPath: '$(Pipeline.Workspace)/cli-build-unsigned-$(Architecture)'
 
   - bash: |
       set -e

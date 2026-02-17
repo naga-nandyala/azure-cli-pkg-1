@@ -11,10 +11,6 @@ parameters:
     type: string
     default: '3.13'
 
-  - name: TarballBuildId
-    displayName: 'Optional Build ID (tarball build pipeline)'
-    type: string
-    default: '0'
 
   - name: BundleId
     displayName: 'Bundle ID for notarization'
@@ -90,8 +86,6 @@ jobs:
 
 - template: templates/macos/macos-sign-notarize-jobs.yml
   parameters:
-    TarballBuildId: ${{ parameters.TarballBuildId }}
-    UseCurrentPipelineArtifacts: ${{ eq(parameters.TarballBuildId, '0') }}
     BundleId: ${{ parameters.BundleId }}
     MacosArm64Image: ${{ variables.macos_arm64_pool }}
     MacosIntelImage: ${{ variables.macos_intel_pool }}

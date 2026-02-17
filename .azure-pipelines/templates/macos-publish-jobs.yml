@@ -1,13 +1,18 @@
 # macOS Publish Jobs Template
 #
-# Purpose: Publish signed tarballs to GitHub and update Homebrew cask
+# Purpose: Publish signed tarballs to GitHub, update Homebrew cask, and test installs
 # Usage: Called after sign/notarize template completes
 #
 # Parameters:
 #   - PublishToGitHub: Whether to create GitHub release
 #   - UpdateHomebrew: Whether to update Homebrew cask
+#   - TestInstall: Whether to run install tests
 #   - GitHubRepo: GitHub repository (owner/repo)
 #   - HomebrewTapRepo: Homebrew tap repository
+#   - MacosArm64Image: VM image for ARM64 tests
+#   - MacosIntelImage: VM image for Intel tests
+#   - PythonVersion: Homebrew Python version for testing
+#   - Debug: Enable debug diagnostics
 #   - dependsOn: Jobs this depends on (typically CreateFinalTarball)
 #
 # Requires:
@@ -20,12 +25,27 @@ parameters:
   - name: UpdateHomebrew
     type: boolean
     default: false
+  - name: TestInstall
+    type: boolean
+    default: false
   - name: GitHubRepo
     type: string
     default: ''
   - name: HomebrewTapRepo
     type: string
     default: ''
+  - name: MacosArm64Image
+    type: string
+    default: 'macos-15-arm64'
+  - name: MacosIntelImage
+    type: string
+    default: 'macos-15'
+  - name: PythonVersion
+    type: string
+    default: '3.13'
+  - name: Debug
+    type: boolean
+    default: false
   - name: dependsOn
     type: object
     default: ['CreateFinalTarball']
@@ -245,3 +265,153 @@ jobs:
       echo "║ • cli-signed-notarized-x86_64                                    ║"
       echo "╚══════════════════════════════════════════════════════════════════╝"
     displayName: 'Print Summary'
+
+# ============================================================================
+# JOB: TEST HOMEBREW CASK INSTALLATION (Optional)
+# ============================================================================
+- ${{ if eq(parameters.TestInstall, true) }}:
+  - job: TestCaskInstall
+    displayName: 'Test Homebrew Cask Installation'
+    dependsOn:
+    - ${{ if eq(parameters.UpdateHomebrew, true) }}:
+      - UpdateHomebrewCask
+    - ${{ if eq(parameters.UpdateHomebrew, false) }}:
+      - ${{ parameters.dependsOn }}
+    condition: succeeded()
+    strategy:
+      matrix:
+        ARM64:
+          Architecture: 'arm64'
+          vmImageName: ${{ parameters.MacosArm64Image }}
+        Intel:
+          Architecture: 'x86_64'
+          vmImageName: ${{ parameters.MacosIntelImage }}
+    pool:
+      vmImage: $(vmImageName)
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo "=== Cleanup: Remove pre-installed Azure CLI ($(Architecture)) ==="
+        
+        if command -v az &> /dev/null; then
+          echo "Pre-installed Azure CLI detected: $(which az)"
+          az --version 2>/dev/null | head -3 || true
+          
+          echo "Removing via Homebrew..."
+          brew uninstall azure-cli 2>/dev/null || true
+          brew uninstall --cask azure-cli 2>/dev/null || true
+          
+          echo "Removing symlinks..."
+          sudo rm -f /usr/local/bin/az
+          sudo rm -f /opt/homebrew/bin/az
+          
+          echo "Removing installation directories..."
+          sudo rm -rf /usr/local/Cellar/azure-cli*
+          sudo rm -rf /opt/homebrew/Cellar/azure-cli*
+          
+          hash -r
+        else
+          echo "No pre-installed Azure CLI detected"
+        fi
+        echo "Cleanup complete"
+      displayName: 'Remove pre-installed Azure CLI'
+    
+    - bash: |
+        set -e
+        
+        echo "=== Testing Homebrew Cask Installation ($(Architecture)) ==="
+        
+        if ! brew list python@${{ parameters.PythonVersion }} &>/dev/null; then
+          echo "Installing Python ${{ parameters.PythonVersion }}..."
+          brew install python@${{ parameters.PythonVersion }}
+        fi
+        
+        brew tap ${{ parameters.HomebrewTapRepo }}
+        brew install --cask azure-cli
+        
+        which az
+        az version
+        
+        INSTALLED_VERSION=$(az version -o tsv --query '"azure-cli"' 2>/dev/null || echo "unknown")
+        
+        echo ""
+        echo "Installed version: $INSTALLED_VERSION"
+        echo "Cask installation successful ($(Architecture))"
+        
+        brew uninstall --cask azure-cli
+      displayName: 'Test cask install'
+
+# ============================================================================
+# JOB: TEST OFFLINE/TARBALL INSTALLATION (Optional)
+# ============================================================================
+- ${{ if eq(parameters.TestInstall, true) }}:
+  - job: TestOfflineInstall
+    displayName: 'Test Offline/Tarball Installation'
+    dependsOn: ${{ parameters.dependsOn }}
+    condition: succeeded()
+    strategy:
+      matrix:
+        ARM64:
+          Architecture: 'arm64'
+          vmImageName: ${{ parameters.MacosArm64Image }}
+        Intel:
+          Architecture: 'x86_64'
+          vmImageName: ${{ parameters.MacosIntelImage }}
+    pool:
+      vmImage: $(vmImageName)
+    
+    steps:
+    - checkout: none
+    
+    - bash: |
+        echo "=== Cleanup: Remove pre-installed Azure CLI ($(Architecture)) ==="
+        
+        if command -v az &> /dev/null; then
+          echo "Pre-installed Azure CLI detected: $(which az)"
+          
+          brew uninstall azure-cli 2>/dev/null || true
+          brew uninstall --cask azure-cli 2>/dev/null || true
+          
+          sudo rm -f /usr/local/bin/az
+          sudo rm -f /opt/homebrew/bin/az
+          
+          hash -r
+        fi
+        echo "Cleanup complete"
+      displayName: 'Remove pre-installed Azure CLI'
+    
+    - download: current
+      artifact: 'cli-signed-notarized-$(Architecture)'
+      displayName: 'Download signed tarball'
+    
+    - bash: |
+        set -e
+        
+        echo "=== Testing Offline/Direct Tarball Installation ($(Architecture)) ==="
+        
+        TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-$(Architecture) -name "azure-cli-*.tar.gz" | sort | tail -1)
+        TEST_DIR="$HOME/azure-cli-test"
+        
+        mkdir -p "$TEST_DIR"
+        tar -xzf "$TARBALL" -C "$TEST_DIR"
+        
+        if ! brew list python@${{ parameters.PythonVersion }} &>/dev/null; then
+          brew install python@${{ parameters.PythonVersion }}
+        fi
+        
+        AZ_PYTHON="$(brew --prefix python@${{ parameters.PythonVersion }})/libexec/bin/python3"
+        export AZ_PYTHON
+        
+        export AZ_DEBUG=1
+        "$TEST_DIR/bin/az" version
+        
+        INSTALLED_VERSION=$("$TEST_DIR/bin/az" version -o tsv --query '"azure-cli"' 2>/dev/null || echo "unknown")
+        
+        echo ""
+        echo "Installed version: $INSTALLED_VERSION"
+        echo "Offline installation successful ($(Architecture))"
+        
+        rm -rf "$TEST_DIR"
+      displayName: 'Test offline install'

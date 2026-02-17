@@ -5,6 +5,8 @@
 #
 # Parameters:
 #   - PythonVersion: Homebrew Python version (default: 3.13)
+#   - MacosArm64Image: VM image for ARM64 builds
+#   - MacosIntelImage: VM image for Intel builds
 #   - condition: Job execution condition
 #   - dependsOn: Jobs this depends on
 #
@@ -16,6 +18,12 @@ parameters:
   - name: PythonVersion
     type: string
     default: '3.13'
+  - name: MacosArm64Image
+    type: string
+    default: 'macos-15-arm64'
+  - name: MacosIntelImage
+    type: string
+    default: 'macos-15'
   - name: condition
     type: string
     default: 'succeeded()'
@@ -35,10 +43,10 @@ jobs:
     matrix:
       ARM64:
         Architecture: 'arm64'
-        vmImageName: 'macos-15-arm64'
+        vmImageName: ${{ parameters.MacosArm64Image }}
       Intel:
         Architecture: 'x86_64'
-        vmImageName: 'macos-15'
+        vmImageName: ${{ parameters.MacosIntelImage }}
   pool:
     vmImage: $(vmImageName)
   timeoutInMinutes: 60
@@ -101,10 +109,10 @@ jobs:
     matrix:
       ARM64:
         Architecture: 'arm64'
-        vmImageName: 'macos-15-arm64'
+        vmImageName: ${{ parameters.MacosArm64Image }}
       Intel:
         Architecture: 'x86_64'
-        vmImageName: 'macos-15'
+        vmImageName: ${{ parameters.MacosIntelImage }}
   pool:
     vmImage: $(vmImageName)
   
