@@ -1,12 +1,12 @@
 # macOS Sign and Notarize Jobs Template (Matrix Strategy)
 #
 # Purpose: Sign and notarize macOS CLI tarballs via ESRP
-# Usage: Called from main pipeline after build phase
+# Usage: Called from main pipeline or standalone wrapper
 #
 # Parameters:
+#   - TarballBuildId: Build ID for external pipeline artifact download (standalone mode)
+#   - UseCurrentPipelineArtifacts: If true, use artifacts from current pipeline run
 #   - BundleId: Apple bundle ID for notarization
-#   - MacosArm64Image: VM image for ARM64 jobs
-#   - MacosIntelImage: VM image for Intel jobs
 #   - condition: Job execution condition
 #   - dependsOn: Jobs this depends on
 #   - PythonVersion: Homebrew Python version for verification
@@ -16,15 +16,15 @@
 #   - cli-signed-notarized-x86_64
 
 parameters:
+  - name: TarballBuildId
+    type: string
+    default: ''
+  - name: UseCurrentPipelineArtifacts
+    type: boolean
+    default: false
   - name: BundleId
     type: string
     default: 'com.microsoft.azure.cli'
-  - name: MacosArm64Image
-    type: string
-    default: 'macos-15-arm64'
-  - name: MacosIntelImage
-    type: string
-    default: 'macos-15'
   - name: condition
     type: string
     default: 'succeeded()'
@@ -47,10 +47,10 @@ jobs:
     matrix:
       ARM64:
         Architecture: 'arm64'
-        vmImageName: ${{ parameters.MacosArm64Image }}
+        vmImageName: 'macos-15-arm64'
       Intel:
         Architecture: 'x86_64'
-        vmImageName: ${{ parameters.MacosIntelImage }}
+        vmImageName: 'macos-15'
   pool:
     vmImage: $(vmImageName)
   
@@ -58,12 +58,27 @@ jobs:
   - checkout: self
     fetchDepth: 1
   
-  - task: DownloadPipelineArtifact@2
-    displayName: 'Download unsigned build ($(Architecture))'
-    inputs:
-      buildType: 'current'
-      artifactName: 'cli-build-unsigned-$(Architecture)'
-      targetPath: '$(Pipeline.Workspace)/cli-build-unsigned-$(Architecture)'
+  # Download from current pipeline (integrated mode)
+  - ${{ if eq(parameters.UseCurrentPipelineArtifacts, true) }}:
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download unsigned build ($(Architecture))'
+      inputs:
+        buildType: 'current'
+        artifactName: 'cli-build-unsigned-$(Architecture)'
+        targetPath: '$(Pipeline.Workspace)/cli-build-unsigned-$(Architecture)'
+  
+  # Download from external pipeline (standalone mode)
+  - ${{ if eq(parameters.UseCurrentPipelineArtifacts, false) }}:
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download from Build Pipeline ${{ parameters.TarballBuildId }} ($(Architecture))'
+      inputs:
+        buildType: 'specific'
+        project: 'release'
+        definition: 'macos-build'
+        buildVersionToDownload: 'specific'
+        buildId: ${{ parameters.TarballBuildId }}
+        artifactName: 'cli-build-unsigned-$(Architecture)'
+        targetPath: '$(Pipeline.Workspace)/cli-build-unsigned-$(Architecture)'
   
   - bash: |
       set -e
@@ -278,10 +293,10 @@ jobs:
     matrix:
       ARM64:
         Architecture: 'arm64'
-        vmImageName: ${{ parameters.MacosArm64Image }}
+        vmImageName: 'macos-15-arm64'
       Intel:
         Architecture: 'x86_64'
-        vmImageName: ${{ parameters.MacosIntelImage }}
+        vmImageName: 'macos-15'
   pool:
     vmImage: $(vmImageName)
   
@@ -460,10 +475,10 @@ jobs:
     matrix:
       ARM64:
         Architecture: 'arm64'
-        vmImageName: ${{ parameters.MacosArm64Image }}
+        vmImageName: 'macos-15-arm64'
       Intel:
         Architecture: 'x86_64'
-        vmImageName: ${{ parameters.MacosIntelImage }}
+        vmImageName: 'macos-15'
   pool:
     vmImage: $(vmImageName)
   
@@ -489,7 +504,7 @@ jobs:
       TARBALL_NAME_ORIG=$(basename "$UNSIGNED_TARBALL")
       VERSION=$(echo "$TARBALL_NAME_ORIG" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
       
-      TARBALL_NAME="azure-cli-${VERSION}-macos-${ARCH}-nopython-signed-notarized.tar.gz"
+      TARBALL_NAME="azure-cli-${VERSION}-macos-${ARCH}.tar.gz"
       OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/final"
       FINAL_DIR="$(Build.ArtifactStagingDirectory)/merged"
       

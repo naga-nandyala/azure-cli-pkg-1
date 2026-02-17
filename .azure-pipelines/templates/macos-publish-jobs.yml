@@ -94,14 +94,14 @@ jobs:
         flattenFolders: true
     
     - bash: |
-        ARM64_TARBALL=$(find "$(Build.ArtifactStagingDirectory)/release" -name "azure-cli-*-macos-arm64-*.tar.gz" | sort | tail -1)
+        ARM64_TARBALL=$(find "$(Build.ArtifactStagingDirectory)/release" -name "azure-cli-*-macos-arm64.tar.gz" | sort | tail -1)
         VERSION=$(basename "$ARM64_TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
         
         echo "=== GitHub Release ==="
         echo "Version: $VERSION"
         ls -lh "$(Build.ArtifactStagingDirectory)/release/"
         
-        echo "##vso[task.setvariable variable=ReleaseTag]v${VERSION}"
+        echo "##vso[task.setvariable variable=ReleaseTag]azure-cli-${VERSION}"
         echo "##vso[task.setvariable variable=AzureCliVersion]${VERSION}"
         
       displayName: 'Prepare release files'
@@ -130,8 +130,8 @@ jobs:
           ## Azure CLI $(AzureCliVersion) - macOS (Homebrew Python)
           
           ### Available Architectures
-          - **Apple Silicon (arm64)**: azure-cli-$(AzureCliVersion)-macos-arm64-nopython-signed-notarized.tar.gz
-          - **Intel (x86_64)**: azure-cli-$(AzureCliVersion)-macos-x86_64-nopython-signed-notarized.tar.gz
+          - **Apple Silicon (arm64)**: azure-cli-$(AzureCliVersion)-macos-arm64.tar.gz
+          - **Intel (x86_64)**: azure-cli-$(AzureCliVersion)-macos-x86_64.tar.gz
           
           ### Requirements
           - macOS 11+ (Big Sur or later)
