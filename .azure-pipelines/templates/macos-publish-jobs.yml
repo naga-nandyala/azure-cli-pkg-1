@@ -227,6 +227,7 @@ jobs:
         git config user.email "azure-pipeline@microsoft.com"
         git add Casks/azure-cli.rb
         git commit -m "Update azure-cli to $VERSION" || echo "No changes"
+        git pull --rebase origin main
         git push origin HEAD:main
         
         echo "Homebrew cask updated successfully"
