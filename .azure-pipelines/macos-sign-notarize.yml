@@ -87,17 +87,13 @@ jobs:
     TarballBuildId: ${{ parameters.TarballBuildId }}
     UseCurrentPipelineArtifacts: false
     BundleId: ${{ parameters.BundleId }}
-    PublishToGitHub: ${{ parameters.PublishToGitHub }}
-    GitHubRepo: ${{ parameters.GitHubRepo }}
-    UpdateHomebrew: ${{ parameters.UpdateHomebrew }}
-    HomebrewTapRepo: ${{ parameters.HomebrewTapRepo }}
 
-# NOTE: The template includes core signing/notarization jobs:
-# - DownloadAnalyze_ARM64, DownloadAnalyze_x86_64: Download and analyze tarballs
-# - SignBinaries_ARM64, SignBinaries_x86_64: ESRP code signing
-# - CreateNotarizeBundle_ARM64, CreateNotarizeBundle_x86_64: Prepare for notarization
-# - Notarize_ARM64, Notarize_x86_64: Apple notarization via ESRP
-# - CreateFinalTarball_ARM64, CreateFinalTarball_x86_64: Create final artifacts
+# NOTE: The template includes core signing/notarization jobs (matrix strategy):
+# - DownloadAnalyze (ARM64 + Intel): Download and analyze tarballs
+# - SignBinaries (ARM64 + Intel): ESRP code signing
+# - CreateNotarizeBundle (ARM64 + Intel): Prepare for notarization
+# - Notarize (ARM64 + Intel): Apple notarization via ESRP
+# - CreateFinalTarball (ARM64 + Intel): Create final artifacts
 #
 # Final Artifacts Published:
 # - cli-signed-notarized-arm64
@@ -110,8 +106,7 @@ jobs:
   - job: CreateGitHubRelease
     displayName: 'Create GitHub Release'
     dependsOn:
-    - CreateFinalTarball_ARM64
-    - CreateFinalTarball_x86_64
+    - CreateFinalTarball
     condition: succeeded()
     pool:
       vmImage: 'ubuntu-latest'
@@ -206,8 +201,7 @@ jobs:
   - job: UpdateHomebrewCask
     displayName: 'Update Homebrew Cask'
     dependsOn:
-    - CreateFinalTarball_ARM64
-    - CreateFinalTarball_x86_64
+    - CreateFinalTarball
     - ${{ if eq(parameters.PublishToGitHub, true) }}:
       - CreateGitHubRelease
     condition: succeeded()
@@ -294,8 +288,7 @@ jobs:
 - job: PrintSummary
   displayName: 'Print Summary'
   dependsOn:
-  - CreateFinalTarball_ARM64
-  - CreateFinalTarball_x86_64
+  - CreateFinalTarball
   condition: always()
   pool:
     vmImage: 'ubuntu-latest'

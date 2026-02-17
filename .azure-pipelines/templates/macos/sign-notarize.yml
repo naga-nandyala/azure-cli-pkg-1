@@ -328,10 +328,10 @@ stages:
       matrix:
         ARM64:
           ARCH: 'arm64'
-          VM_IMAGE: ${{ variables.macos_arm64_pool }}
+          VM_IMAGE: ${{ parameters.MacosArm64Image }}
         Intel:
           ARCH: 'x86_64'
-          VM_IMAGE: ${{ variables.macos_intel_pool }}
+          VM_IMAGE: ${{ parameters.MacosIntelImage }}
     pool:
       vmImage: $(VM_IMAGE)
 
