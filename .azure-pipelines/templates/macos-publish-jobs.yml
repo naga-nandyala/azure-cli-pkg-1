@@ -1,112 +1,43 @@
-# Azure CLI - macOS Sign and Notarize Pipeline (Standalone Wrapper)
+# macOS Publish Jobs Template
 #
-# Purpose: Sign and notarize tar.gz artifacts via ESRP.
-# Architecture: This is a thin wrapper that calls the job template.
-#               The template is the single source of truth.
+# Purpose: Publish signed tarballs to GitHub and update Homebrew cask
+# Usage: Called after sign/notarize template completes
 #
-# Input: Unsigned tarballs from macos-build pipeline (arm64, x86_64)
-# Output: cli-signed-notarized-arm64, cli-signed-notarized-x86_64
+# Parameters:
+#   - PublishToGitHub: Whether to create GitHub release
+#   - UpdateHomebrew: Whether to update Homebrew cask
+#   - GitHubRepo: GitHub repository (owner/repo)
+#   - HomebrewTapRepo: Homebrew tap repository
+#   - dependsOn: Jobs this depends on (typically CreateFinalTarball)
 #
-# Integration: The same template can be called from azure-pipelines.yml
-
-trigger: none
+# Requires:
+#   - Artifacts: cli-signed-notarized-arm64, cli-signed-notarized-x86_64
 
 parameters:
-  - name: TarballBuildId
-    displayName: 'CLI Tarball Build ID (from macos-build pipeline)'
-    type: string
-    default: '296623'
-  
-  - name: BundleId
-    displayName: 'Bundle ID for notarization'
-    type: string
-    default: 'com.microsoft.azure.cli'
-  
   - name: PublishToGitHub
-    displayName: 'Publish to GitHub Release'
     type: boolean
     default: false
-  
-  - name: GitHubRepo
-    displayName: 'GitHub Repository (owner/repo)'
-    type: string
-    default: 'naga-nandyala/azure-cli-pkg-1'
-  
   - name: UpdateHomebrew
-    displayName: 'Update Homebrew cask after release'
     type: boolean
     default: false
-  
-  - name: HomebrewTapRepo
-    displayName: 'Homebrew Tap Repository'
-    type: string
-    default: 'naga-nandyala/homebrew-mycli-app'
-
-resources:
-  repositories:
-  - repository: homebrewtap
-    type: github
-    endpoint: 'github.com_naga-nandyala'
-    name: naga-nandyala/homebrew-mycli-app
-    ref: main
-
-variables:
-  - template: templates/variables.yml
-  - group: 'AME ESRP Variable Group'
-  
-  # Parameter variable mappings
   - name: GitHubRepo
-    value: ${{ parameters.GitHubRepo }}
+    type: string
+    default: ''
   - name: HomebrewTapRepo
-    value: ${{ parameters.HomebrewTapRepo }}
-  
-  # Disable auto-injection tasks
-  - name: Codeql.Enabled
-    value: false
-  - name: Codeql.SkipTaskAutoInjection
-    value: true
-  - name: CodeQL.enabled
-    value: false
-  - name: runCodesignValidationInjection
-    value: false
-  - name: DOTNET_CLI_TELEMETRY_OPTOUT
-    value: 1
-  - name: DOTNET_NOLOGO
-    value: 1
-  - name: NugetSecurityAnalysisWarningLevel
-    value: none
-  - name: skipNugetSecurityAnalysis
-    value: true
+    type: string
+    default: ''
+  - name: dependsOn
+    type: object
+    default: ['CreateFinalTarball']
 
-name: macos-sign-notarize-$(Build.BuildId)
-
-# Use jobs from template (single source of truth)
 jobs:
-- template: templates/macos-sign-notarize-jobs.yml
-  parameters:
-    TarballBuildId: ${{ parameters.TarballBuildId }}
-    UseCurrentPipelineArtifacts: false
-    BundleId: ${{ parameters.BundleId }}
-
-# NOTE: The template includes core signing/notarization jobs (matrix strategy):
-# - DownloadAnalyze (ARM64 + Intel): Download and analyze tarballs
-# - SignBinaries (ARM64 + Intel): ESRP code signing
-# - CreateNotarizeBundle (ARM64 + Intel): Prepare for notarization
-# - Notarize (ARM64 + Intel): Apple notarization via ESRP
-# - CreateFinalTarball (ARM64 + Intel): Create final artifacts
-#
-# Final Artifacts Published:
-# - cli-signed-notarized-arm64
-# - cli-signed-notarized-x86_64
-
 # ============================================================================
-# ADDITIONAL JOBS: GitHub Release (Optional)
+# JOB: GITHUB RELEASE (Optional)
 # ============================================================================
 - ${{ if eq(parameters.PublishToGitHub, true) }}:
   - job: CreateGitHubRelease
     displayName: 'Create GitHub Release'
-    dependsOn:
-    - CreateFinalTarball
+    dependsOn: ${{ parameters.dependsOn }}
     condition: succeeded()
     pool:
       vmImage: 'ubuntu-latest'
@@ -160,7 +91,7 @@ jobs:
       continueOnError: true
       inputs:
         gitHubConnection: 'github.com_naga-nandyala'
-        repositoryName: '$(GitHubRepo)'
+        repositoryName: '${{ parameters.GitHubRepo }}'
         action: 'delete'
         tag: '$(ReleaseTag)'
     
@@ -168,7 +99,7 @@ jobs:
       displayName: 'Create GitHub Release'
       inputs:
         gitHubConnection: 'github.com_naga-nandyala'
-        repositoryName: '$(GitHubRepo)'
+        repositoryName: '${{ parameters.GitHubRepo }}'
         action: 'create'
         target: '$(Build.SourceVersion)'
         tagSource: 'userSpecifiedTag'
@@ -188,20 +119,20 @@ jobs:
           
           ### Installation via Homebrew Cask
           ```bash
-          brew tap $(HomebrewTapRepo)
+          brew tap ${{ parameters.HomebrewTapRepo }}
           brew install --cask azure-cli
           ```
         assets: '$(Build.ArtifactStagingDirectory)/release/*'
         addChangeLog: false
 
 # ============================================================================
-# ADDITIONAL JOBS: Update Homebrew Cask (Optional)
+# JOB: UPDATE HOMEBREW CASK (Optional)
 # ============================================================================
 - ${{ if eq(parameters.UpdateHomebrew, true) }}:
   - job: UpdateHomebrewCask
     displayName: 'Update Homebrew Cask'
     dependsOn:
-    - CreateFinalTarball
+    - ${{ parameters.dependsOn }}
     - ${{ if eq(parameters.PublishToGitHub, true) }}:
       - CreateGitHubRelease
     condition: succeeded()
@@ -283,12 +214,16 @@ jobs:
       displayName: 'Update cask definition'
 
 # ============================================================================
-# SUMMARY JOB
+# JOB: PRINT SUMMARY
 # ============================================================================
 - job: PrintSummary
   displayName: 'Print Summary'
   dependsOn:
-  - CreateFinalTarball
+  - ${{ parameters.dependsOn }}
+  - ${{ if eq(parameters.PublishToGitHub, true) }}:
+    - CreateGitHubRelease
+  - ${{ if eq(parameters.UpdateHomebrew, true) }}:
+    - UpdateHomebrewCask
   condition: always()
   pool:
     vmImage: 'ubuntu-latest'
@@ -298,10 +233,11 @@ jobs:
   
   - bash: |
       echo "╔══════════════════════════════════════════════════════════════════╗"
-      echo "║      AZURE CLI SIGN & NOTARIZE SUMMARY                           ║"
+      echo "║      AZURE CLI MACOS RELEASE SUMMARY                             ║"
       echo "╠══════════════════════════════════════════════════════════════════╣"
       echo "║ Architectures:  ARM64 (Apple Silicon) + x86_64 (Intel)           ║"
-      echo "║ Approach:       Homebrew Python (not bundled)                    ║"
+      echo "║ GitHub Release: ${{ parameters.PublishToGitHub }}                                           ║"
+      echo "║ Homebrew Update: ${{ parameters.UpdateHomebrew }}                                          ║"
       echo "╠══════════════════════════════════════════════════════════════════╣"
       echo "║ ARTIFACTS                                                        ║"
       echo "╠══════════════════════════════════════════════════════════════════╣"

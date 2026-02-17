@@ -1,7 +1,7 @@
-# Azure CLI - macOS Release Orchestrator
+# Azure CLI - macOS Release Orchestrator (Job Template Based)
 #
 # Purpose: build, sign/notarize, publish, update cask, and test install.
-# This pipeline composes modular templates for maintainability.
+# This pipeline composes job templates for standalone macOS release flow.
 
 trigger: none
 
@@ -81,21 +81,25 @@ variables:
   - name: skipNugetSecurityAnalysis
     value: true
 
-stages:
-- template: templates/macos/tarball-build.yml
+jobs:
+- template: templates/macos/macos-build-jobs.yml
   parameters:
     PythonVersion: ${{ parameters.PythonVersion }}
     MacosArm64Image: ${{ variables.macos_arm64_pool }}
     MacosIntelImage: ${{ variables.macos_intel_pool }}
 
-- template: templates/macos/sign-notarize.yml
+- template: templates/macos/macos-sign-notarize-jobs.yml
   parameters:
     TarballBuildId: ${{ parameters.TarballBuildId }}
+    UseCurrentPipelineArtifacts: ${{ eq(parameters.TarballBuildId, '0') }}
     BundleId: ${{ parameters.BundleId }}
     MacosArm64Image: ${{ variables.macos_arm64_pool }}
     MacosIntelImage: ${{ variables.macos_intel_pool }}
+    dependsOn:
+    - BuildMacOSCli
+    - VerifyMacOSCli
 
-- template: templates/macos/update-cask.yml
+- template: templates/macos/macos-release-jobs.yml
   parameters:
     PublishToGitHub: ${{ parameters.PublishToGitHub }}
     UpdateHomebrew: ${{ parameters.UpdateHomebrew }}
@@ -103,10 +107,8 @@ stages:
     HomebrewTapRepo: ${{ parameters.HomebrewTapRepo }}
     Debug: ${{ parameters.Debug }}
     UbuntuImage: ${{ variables.ubuntu_pool }}
-
-- template: templates/macos/test-install.yml
-  parameters:
-    UpdateHomebrew: ${{ parameters.UpdateHomebrew }}
-    HomebrewTapRepo: ${{ parameters.HomebrewTapRepo }}
     MacosArm64Image: ${{ variables.macos_arm64_pool }}
     MacosIntelImage: ${{ variables.macos_intel_pool }}
+    PublishCondition: true
+    UpdateCondition: true
+    TestCondition: true

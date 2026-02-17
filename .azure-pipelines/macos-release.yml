@@ -1,0 +1,144 @@
+# Azure CLI - macOS Release Pipeline (Build → Sign → Publish)
+#
+# Purpose: Complete end-to-end macOS release pipeline
+# Architecture: Chains 3 job templates in sequence
+#
+# Pipeline Flow:
+#   1. macos-build-jobs.yml      → Build unsigned tarballs (ARM64 + Intel)
+#   2. macos-sign-notarize-jobs.yml → Sign and notarize via ESRP
+#   3. macos-publish-jobs.yml    → GitHub release + Homebrew cask update
+#
+# Output Artifacts:
+#   - cli-build-unsigned-arm64, cli-build-unsigned-x86_64 (intermediate)
+#   - cli-signed-notarized-arm64, cli-signed-notarized-x86_64 (final)
+
+trigger: none
+
+parameters:
+  # Build parameters
+  - name: PythonVersion
+    displayName: 'Python Version (Homebrew)'
+    type: string
+    default: '3.13'
+  
+  # Sign/notarize parameters
+  - name: BundleId
+    displayName: 'Bundle ID for notarization'
+    type: string
+    default: 'com.microsoft.azure.cli'
+  
+  # Publish parameters
+  - name: PublishToGitHub
+    displayName: 'Publish to GitHub Release'
+    type: boolean
+    default: false
+  
+  - name: GitHubRepo
+    displayName: 'GitHub Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+  
+  - name: UpdateHomebrew
+    displayName: 'Update Homebrew cask after release'
+    type: boolean
+    default: false
+  
+  - name: HomebrewTapRepo
+    displayName: 'Homebrew Tap Repository'
+    type: string
+    default: 'naga-nandyala/homebrew-mycli-app'
+
+resources:
+  repositories:
+  - repository: selfRepo
+    type: github
+    endpoint: 'github.com_naga-nandyala'
+    name: naga-nandyala/azure-cli-pkg-1
+    ref: main
+  - repository: homebrewtap
+    type: github
+    endpoint: 'github.com_naga-nandyala'
+    name: naga-nandyala/homebrew-mycli-app
+    ref: main
+
+variables:
+  - template: templates/variables.yml
+  - group: 'AME ESRP Variable Group'
+  
+  # Parameter variable mappings (for use in templates)
+  - name: GitHubRepo
+    value: ${{ parameters.GitHubRepo }}
+  - name: HomebrewTapRepo
+    value: ${{ parameters.HomebrewTapRepo }}
+  
+  # Disable auto-injection tasks
+  - name: Codeql.Enabled
+    value: false
+  - name: Codeql.SkipTaskAutoInjection
+    value: true
+  - name: CodeQL.enabled
+    value: false
+  - name: runCodesignValidationInjection
+    value: false
+  - name: DOTNET_CLI_TELEMETRY_OPTOUT
+    value: 1
+  - name: DOTNET_NOLOGO
+    value: 1
+  - name: NugetSecurityAnalysisWarningLevel
+    value: none
+  - name: skipNugetSecurityAnalysis
+    value: true
+
+name: macos-release-$(Build.BuildId)
+
+# ============================================================================
+# JOBS: End-to-end macOS release flow
+# ============================================================================
+jobs:
+# ============================================================================
+# PHASE 1: BUILD (unsigned tarballs)
+# ============================================================================
+- template: templates/macos-build-jobs.yml
+  parameters:
+    PythonVersion: ${{ parameters.PythonVersion }}
+
+# Jobs included:
+# - BuildMacOSCli (matrix: ARM64 + Intel)
+# - VerifyMacOSCli (matrix: ARM64 + Intel)
+# Artifacts: cli-build-unsigned-arm64, cli-build-unsigned-x86_64
+
+# ============================================================================
+# PHASE 2: SIGN & NOTARIZE (via ESRP)
+# ============================================================================
+- template: templates/macos-sign-notarize-jobs.yml
+  parameters:
+    UseCurrentPipelineArtifacts: true
+    BundleId: ${{ parameters.BundleId }}
+    PythonVersion: ${{ parameters.PythonVersion }}
+    dependsOn:
+    - VerifyMacOSCli
+
+# Jobs included:
+# - DownloadAnalyze (matrix: ARM64 + Intel)
+# - SignBinaries (matrix: ARM64 + Intel)
+# - CreateNotarizeBundle (matrix: ARM64 + Intel)
+# - Notarize (matrix: ARM64 + Intel)
+# - CreateFinalTarball (matrix: ARM64 + Intel)
+# Artifacts: cli-signed-notarized-arm64, cli-signed-notarized-x86_64
+
+# ============================================================================
+# PHASE 3: PUBLISH (GitHub + Homebrew)
+# ============================================================================
+- template: templates/macos-publish-jobs.yml
+  parameters:
+    PublishToGitHub: ${{ parameters.PublishToGitHub }}
+    UpdateHomebrew: ${{ parameters.UpdateHomebrew }}
+    GitHubRepo: ${{ parameters.GitHubRepo }}
+    HomebrewTapRepo: ${{ parameters.HomebrewTapRepo }}
+    dependsOn:
+    - CreateFinalTarball
+
+# Jobs included:
+# - CreateGitHubRelease (conditional)
+# - UpdateHomebrewCask (conditional)
+# - PrintSummary

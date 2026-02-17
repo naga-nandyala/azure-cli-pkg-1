@@ -1,0 +1,427 @@
+# macOS Publish/Update/Test Jobs Template (Standalone)
+#
+# Purpose: Publish GitHub release, update Homebrew cask, and test installs
+# Usage: Called from standalone job-based pipeline
+
+parameters:
+  - name: PublishToGitHub
+    type: boolean
+    default: true
+  - name: UpdateHomebrew
+    type: boolean
+    default: true
+  - name: GitHubRepo
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+  - name: HomebrewTapRepo
+    type: string
+    default: 'naga-nandyala/homebrew-mycli-app'
+  - name: Debug
+    type: boolean
+    default: false
+  - name: UbuntuImage
+    type: string
+  - name: MacosArm64Image
+    type: string
+  - name: MacosIntelImage
+    type: string
+  - name: PublishCondition
+    type: string
+    default: 'true'
+  - name: UpdateCondition
+    type: string
+    default: 'true'
+  - name: TestCondition
+    type: string
+    default: 'true'
+
+jobs:
+- job: CreateRelease
+  displayName: 'Create GitHub Release'
+  dependsOn: CreateFinalTarball
+  condition: and(succeeded(), eq('${{ parameters.PublishToGitHub }}', true), ${{ parameters.PublishCondition }})
+  pool:
+    vmImage: ${{ parameters.UbuntuImage }}
+
+  steps:
+  - checkout: none
+
+  - download: current
+    artifact: 'cli-signed-notarized-arm64'
+    displayName: 'Download signed tarball (ARM64)'
+
+  - download: current
+    artifact: 'cli-signed-notarized-x86_64'
+    displayName: 'Download signed tarball (Intel)'
+
+  - task: CopyFiles@2
+    displayName: 'Copy ARM64 release files to staging'
+    inputs:
+      SourceFolder: '$(Pipeline.Workspace)/cli-signed-notarized-arm64'
+      Contents: |
+        azure-cli-*.tar.gz
+        azure-cli-*.tar.gz.sha256
+      TargetFolder: '$(Build.ArtifactStagingDirectory)/release'
+      flattenFolders: true
+
+  - task: CopyFiles@2
+    displayName: 'Copy Intel release files to staging'
+    inputs:
+      SourceFolder: '$(Pipeline.Workspace)/cli-signed-notarized-x86_64'
+      Contents: |
+        azure-cli-*.tar.gz
+        azure-cli-*.tar.gz.sha256
+      TargetFolder: '$(Build.ArtifactStagingDirectory)/release'
+      flattenFolders: true
+
+  - bash: |
+      ARM64_TARBALL=$(find "$(Build.ArtifactStagingDirectory)/release" -name "azure-cli-*-macos-arm64-*.tar.gz" | sort | tail -1)
+      VERSION=$(basename "$ARM64_TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
+
+      echo "=== GitHub Release ==="
+      echo "Version: $VERSION"
+      echo ""
+      echo "=== Release Assets ==="
+      ls -lh "$(Build.ArtifactStagingDirectory)/release/"
+      echo ""
+      echo "=== SHA256 Checksums ==="
+      cat "$(Build.ArtifactStagingDirectory)/release/"*.sha256
+
+      echo "##vso[task.setvariable variable=ReleaseTag]azure-cli-${VERSION}"
+      echo "##vso[task.setvariable variable=AzureCliVersion]${VERSION}"
+
+    displayName: 'Prepare release files'
+
+  - task: GitHubRelease@1
+    displayName: 'Delete existing release if present'
+    continueOnError: true
+    inputs:
+      gitHubConnection: 'github.com_naga-nandyala'
+      repositoryName: '${{ parameters.GitHubRepo }}'
+      action: 'delete'
+      tag: '$(ReleaseTag)'
+
+  - task: GitHubRelease@1
+    displayName: 'Create GitHub Release'
+    inputs:
+      gitHubConnection: 'github.com_naga-nandyala'
+      repositoryName: '${{ parameters.GitHubRepo }}'
+      action: 'create'
+      target: '$(Build.SourceVersion)'
+      tagSource: 'userSpecifiedTag'
+      tag: '$(ReleaseTag)'
+      title: 'Azure CLI $(AzureCliVersion) - macOS (Homebrew Python)'
+      releaseNotesSource: 'inline'
+      releaseNotesInline: |
+        ## Azure CLI $(AzureCliVersion) - macOS (Homebrew Python)
+
+        This release uses Homebrew Python instead of bundling Python runtime.
+        Shares Python with other tools.
+
+        ### Available Architectures
+        - **Apple Silicon (arm64)**: azure-cli-$(AzureCliVersion)-macos-arm64-nopython-signed-notarized.tar.gz
+        - **Intel (x86_64)**: azure-cli-$(AzureCliVersion)-macos-x86_64-nopython-signed-notarized.tar.gz
+
+        ### Requirements
+        - macOS 11+ (Big Sur or later)
+        - Homebrew Python 3.13
+
+        ### Installation via Homebrew Cask (Recommended)
+        ```bash
+        brew tap ${{ parameters.HomebrewTapRepo }}
+        brew install --cask azure-cli
+        ```
+
+        ### Manual Installation
+        ```bash
+        brew install python@3.13
+        # Download tarball for your architecture
+        tar xzf azure-cli-$(AzureCliVersion)-macos-<arch>-nopython-signed-notarized.tar.gz
+        ./bin/az version
+        ```
+
+        ### Alternative Python Sources
+        The portable launcher supports Homebrew, python.org, pyenv, or custom path via AZ_PYTHON.
+
+        ### Verification
+        ```bash
+        codesign -v bin/az
+        spctl --assess -vv bin/az
+        ```
+      assets: '$(Build.ArtifactStagingDirectory)/release/*'
+      addChangeLog: false
+
+- job: UpdateCask
+  displayName: 'Update Homebrew Cask Definition'
+  dependsOn: CreateFinalTarball
+  condition: and(succeeded(), eq('${{ parameters.UpdateHomebrew }}', true), ${{ parameters.UpdateCondition }})
+  pool:
+    vmImage: ${{ parameters.UbuntuImage }}
+
+  steps:
+  - checkout: self
+    fetchDepth: 1
+
+  - checkout: homebrewtap
+    persistCredentials: true
+    path: homebrew-tap
+
+  - bash: |
+      set -e
+
+      REPO_NAME="$(Build.Repository.Name)"
+      REPO_DIR="${REPO_NAME##*/}"
+      REPO_ROOT=""
+      for candidate in \
+        "$(Build.SourcesDirectory)/$REPO_DIR" \
+        "$(Build.SourcesDirectory)/$REPO_NAME" \
+        "$(Build.SourcesDirectory)"; do
+        if [ -d "$candidate" ]; then
+          REPO_ROOT="$candidate"
+          break
+        fi
+      done
+
+      echo "=== Diagnostics ==="
+      echo "Build.SourcesDirectory: $(Build.SourcesDirectory)"
+      echo "Build.Repository.Name:  $(Build.Repository.Name)"
+      echo "Repo root:              $REPO_ROOT"
+      ls -la "$REPO_ROOT" || true
+      ls -la "$REPO_ROOT/scripts/release/macos" || true
+
+    displayName: 'Diagnostics: repo paths'
+    condition: eq('${{ parameters.Debug }}', true)
+
+  - download: current
+    artifact: 'cli-signed-notarized-arm64'
+    displayName: 'Download signed tarball (ARM64)'
+
+  - download: current
+    artifact: 'cli-signed-notarized-x86_64'
+    displayName: 'Download signed tarball (Intel)'
+
+  - bash: |
+      set -e
+
+      GITHUB_REPO="${{ parameters.GitHubRepo }}"
+
+      ARM64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-arm64 -name "azure-cli-*.tar.gz" | sort | tail -1)
+      X86_64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-x86_64 -name "azure-cli-*.tar.gz" | sort | tail -1)
+
+      VERSION=$(basename "$ARM64_TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
+
+      ARM64_SHA256=$(cat ${ARM64_TARBALL}.sha256 | cut -d' ' -f1)
+      X86_64_SHA256=$(cat ${X86_64_TARBALL}.sha256 | cut -d' ' -f1)
+
+      echo "=== Updating Homebrew Cask ==="
+      echo "Version: $VERSION"
+      echo "ARM64 SHA256: $ARM64_SHA256"
+      echo "x86_64 SHA256: $X86_64_SHA256"
+
+      cd $(Pipeline.Workspace)/homebrew-tap
+
+      mkdir -p Casks
+      CASK_FILE="Casks/azure-cli.rb"
+
+      REPO_NAME="$(Build.Repository.Name)"
+      REPO_DIR="${REPO_NAME##*/}"
+      REPO_ROOT=""
+      for candidate in \
+        "$(Build.SourcesDirectory)/$REPO_DIR" \
+        "$(Build.SourcesDirectory)/$REPO_NAME" \
+        "$(Build.SourcesDirectory)"; do
+        if [ -d "$candidate" ]; then
+          REPO_ROOT="$candidate"
+          break
+        fi
+      done
+
+      if [ -z "$REPO_ROOT" ]; then
+        echo "ERROR: Unable to resolve repo root"
+        echo "Build.SourcesDirectory: $(Build.SourcesDirectory)"
+        echo "Build.Repository.Name: $(Build.Repository.Name)"
+        exit 1
+      fi
+
+      TEMPLATE_PATH="$REPO_ROOT/scripts/release/macos/templates/azure-cli.rb.in"
+      OUTPUT_PATH="$CASK_FILE"
+
+      python3 "$REPO_ROOT/scripts/release/macos/cask_generate.py" \
+        --version "$VERSION" \
+        --arm64-sha256 "$ARM64_SHA256" \
+        --x86-64-sha256 "$X86_64_SHA256" \
+        --template "$TEMPLATE_PATH" \
+        --output "$OUTPUT_PATH"
+
+      echo "=== Updated Cask ==="
+      cat "$CASK_FILE"
+
+      git config user.name "Azure CLI Bot"
+      git config user.email "azure-cli-bot@microsoft.com"
+
+      git add "$CASK_FILE"
+      git commit -m "Update Azure CLI cask to $VERSION" || echo "No changes to commit"
+      git push origin HEAD:main
+
+    displayName: 'Generate and publish cask'
+
+- job: TestCaskInstall
+  displayName: 'Test Homebrew Cask Installation'
+  dependsOn: UpdateCask
+  condition: and(succeeded(), eq('${{ parameters.UpdateHomebrew }}', true), ${{ parameters.TestCondition }})
+  strategy:
+    matrix:
+      ARM64:
+        ARCH: 'arm64'
+        VM_IMAGE: ${{ parameters.MacosArm64Image }}
+      Intel:
+        ARCH: 'x86_64'
+        VM_IMAGE: ${{ parameters.MacosIntelImage }}
+  pool:
+    vmImage: $(VM_IMAGE)
+
+  steps:
+  - checkout: none
+
+  - bash: |
+      echo "Cleanup: Remove pre-installed Azure CLI ($(ARCH))"
+
+      if command -v az &> /dev/null; then
+        echo "Pre-installed Azure CLI detected: $(which az)"
+        az --version 2>/dev/null | head -3 || true
+        echo ""
+
+        echo "Removing via Homebrew..."
+        brew uninstall azure-cli 2>/dev/null || true
+        brew uninstall --cask azure-cli 2>/dev/null || true
+        brew uninstall azure-cli 2>/dev/null || true
+        brew uninstall --cask azure-cli 2>/dev/null || true
+
+        echo "Removing symlinks..."
+        sudo rm -f /usr/local/bin/az
+        sudo rm -f /opt/homebrew/bin/az
+
+        echo "Removing installation directories..."
+        sudo rm -rf /usr/local/microsoft/azure-cli
+        sudo rm -rf /usr/local/az
+        sudo rm -rf /opt/az
+        sudo rm -rf /usr/local/Cellar/azure-cli*
+        sudo rm -rf /opt/homebrew/Cellar/azure-cli*
+
+        hash -r
+      else
+        echo "No pre-installed Azure CLI detected"
+      fi
+      echo ""
+      echo "Cleanup complete"
+
+    displayName: 'Remove pre-installed Azure CLI ($(ARCH))'
+
+  - bash: |
+      set -e
+
+      echo "=== Testing Homebrew Cask Installation ($(ARCH)) ==="
+
+      if ! brew list python@3.13 &>/dev/null; then
+        echo "Installing Python 3.13..."
+        brew install python@3.13
+      fi
+
+      brew tap ${{ parameters.HomebrewTapRepo }}
+      brew install --cask azure-cli
+
+      which az
+      az version
+
+      INSTALLED_VERSION=$(az version -o tsv --query '"azure-cli"' 2>/dev/null || echo "unknown")
+
+      echo ""
+      echo "Installed version: $INSTALLED_VERSION"
+      echo ""
+      echo "Cask installation successful ($(ARCH))"
+
+      brew uninstall --cask azure-cli
+
+    displayName: 'Test cask install ($(ARCH))'
+
+- job: TestOfflineInstall
+  displayName: 'Test Offline/Tarball Installation'
+  dependsOn: UpdateCask
+  condition: and(succeeded(), eq('${{ parameters.UpdateHomebrew }}', true), ${{ parameters.TestCondition }})
+  strategy:
+    matrix:
+      ARM64:
+        ARCH: 'arm64'
+        VM_IMAGE: ${{ parameters.MacosArm64Image }}
+      Intel:
+        ARCH: 'x86_64'
+        VM_IMAGE: ${{ parameters.MacosIntelImage }}
+  pool:
+    vmImage: $(VM_IMAGE)
+
+  steps:
+  - checkout: none
+
+  - bash: |
+      echo "Cleanup: Remove pre-installed Azure CLI ($(ARCH))"
+
+      if command -v az &> /dev/null; then
+        echo "Pre-installed Azure CLI detected: $(which az)"
+        az --version 2>/dev/null | head -3 || true
+        echo ""
+
+        echo "Removing via Homebrew..."
+        brew uninstall azure-cli 2>/dev/null || true
+        brew uninstall --cask azure-cli 2>/dev/null || true
+
+        echo "Removing symlinks..."
+        sudo rm -f /usr/local/bin/az
+        sudo rm -f /opt/homebrew/bin/az
+
+        echo "Removing installation directories..."
+        sudo rm -rf /usr/local/Cellar/azure-cli*
+        sudo rm -rf /opt/homebrew/Cellar/azure-cli*
+
+        hash -r
+      else
+        echo "No pre-installed Azure CLI detected"
+      fi
+      echo ""
+
+    displayName: 'Remove pre-installed Azure CLI ($(ARCH))'
+
+  - download: current
+    artifact: 'cli-signed-notarized-$(ARCH)'
+    displayName: 'Download signed tarball ($(ARCH))'
+
+  - bash: |
+      set -e
+
+      echo "=== Testing Offline/Direct Tarball Installation ($(ARCH)) ==="
+
+      TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-$(ARCH) -name "azure-cli-*.tar.gz" | sort | tail -1)
+      TEST_DIR="$HOME/azure-cli-test"
+
+      mkdir -p "$TEST_DIR"
+      tar -xzf "$TARBALL" -C "$TEST_DIR"
+
+      if ! brew list python@3.13 &>/dev/null; then
+        brew install python@3.13
+      fi
+
+      AZ_PYTHON="$(brew --prefix python@3.13)/libexec/bin/python3"
+      export AZ_PYTHON
+
+      export AZ_DEBUG=1
+      "$TEST_DIR/bin/az" version
+
+      INSTALLED_VERSION=$("$TEST_DIR/bin/az" version -o tsv --query '"azure-cli"' 2>/dev/null || echo "unknown")
+
+      echo ""
+      echo "Installed version: $INSTALLED_VERSION"
+      echo ""
+      echo "Offline installation successful ($(ARCH))"
+
+      rm -rf "$TEST_DIR"
+
+    displayName: 'Test offline install ($(ARCH))'
