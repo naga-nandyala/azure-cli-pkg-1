@@ -14,7 +14,7 @@ parameters:
   - name: SourcePipelineId
     displayName: 'Source Pipeline Definition ID (from URL)'
     type: string
-    default: ''  # Get from Azure DevOps URL: ?definitionId=XXX
+    default: 'naga_macos_opus_pipeline'  # Get from Azure DevOps URL: ?definitionId=XXX
   
   - name: PythonVersion
     displayName: 'Python Version (Homebrew)'
@@ -38,6 +38,25 @@ resources:
     endpoint: 'github.com_naga-nandyala'
     name: naga-nandyala/homebrew-mycli-app
     ref: main
+
+variables:
+  # Disable auto-injection tasks
+  - name: Codeql.Enabled
+    value: false
+  - name: Codeql.SkipTaskAutoInjection
+    value: true
+  - name: CodeQL.enabled
+    value: false
+  - name: runCodesignValidationInjection
+    value: false
+  - name: DOTNET_CLI_TELEMETRY_OPTOUT
+    value: 1
+  - name: DOTNET_NOLOGO
+    value: 1
+  - name: NugetSecurityAnalysisWarningLevel
+    value: none
+  - name: skipNugetSecurityAnalysis
+    value: true
 
 jobs:
 - job: UpdateHomebrewCask
