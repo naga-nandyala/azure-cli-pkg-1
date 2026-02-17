@@ -308,14 +308,16 @@ jobs:
       "$AZ_CMD" login --help | head -20
       
       # Test 2: Run az login --debug to see broker flow activation
-      # This will timeout after 10 seconds but show debug output
       echo ""
       echo "--- Running 'az login --debug' (10 sec timeout) ---"
       echo "Looking for broker activation in debug output..."
       echo ""
       
-      # Run with timeout, capture both stdout and stderr
-      timeout 10 "$AZ_CMD" login --debug 2>&1 || true
+      # Install coreutils for gtimeout (macOS compatible timeout)
+      brew install coreutils 2>/dev/null || true
+      
+      # Run with gtimeout to capture debug output before interactive prompt
+      gtimeout 10 "$AZ_CMD" login --debug 2>&1 || true
       
       echo ""
       echo "--- End of debug output ---"
