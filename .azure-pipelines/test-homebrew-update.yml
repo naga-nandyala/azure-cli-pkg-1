@@ -159,10 +159,14 @@ jobs:
       cat $(Pipeline.Workspace)/cask-staging/azure-cli.rb
       
       # Replace GitHub URL with file:// URL for local testing
-      # The template generates: url "https://github.com/.../azure-cli-VERSION-macos-ARCH.tar.gz"
-      # We need to replace with file:// pointing to local tarballs
-      sed -i.bak "s|url \"https://github.com/[^\"]*\"|url \"file://$(Pipeline.Workspace)/cli-signed-notarized-#{arch}/azure-cli-#{version}-macos-#{arch}.tar.gz\"|" \
+      # The template generates: url "https://github.com/.../azure-cli-#{version}-#{os}-#{arch}.tar.gz"
+      # We replace with file:// URL using the same #{arch} interpolation
+      WORKSPACE_PATH="$(Pipeline.Workspace)"
+      sed -i.bak "s|url \"https://github.com/[^\"]*\"|url \"file://${WORKSPACE_PATH}/cli-signed-notarized-#{arch}/azure-cli-#{version}-macos-#{arch}.tar.gz\"|" \
         $(Pipeline.Workspace)/cask-staging/azure-cli.rb
+      
+      # Also remove the livecheck block since we're testing locally
+      sed -i.bak '/livecheck do/,/end/d' $(Pipeline.Workspace)/cask-staging/azure-cli.rb
       
       echo "=== Generated Cask (after URL replacement for local testing) ==="
       cat $(Pipeline.Workspace)/cask-staging/azure-cli.rb
