@@ -41,7 +41,7 @@ parameters:
   - name: UpdateHomebrew
     displayName: 'Update Homebrew cask after release'
     type: boolean
-    default: false
+    default: true
   
   - name: HomebrewTapRepo
     displayName: 'Homebrew Tap Repository'
