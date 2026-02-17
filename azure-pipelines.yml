@@ -745,7 +745,9 @@ jobs:
 - template: .azure-pipelines/templates/macos-sign-notarize-jobs.yml
   parameters:
     MacosArm64Image: ${{ variables.macos_arm64_pool }}
+    MacosIntelImage: ${{ variables.macos_pool }}
     BundleId: 'com.microsoft.azure.cli'
+    PythonVersion: $(macos_cask_python_version)
     UseCurrentPipelineArtifacts: true
     dependsOn: ['VerifyMacOSCli']
 
