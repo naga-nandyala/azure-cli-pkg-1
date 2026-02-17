@@ -34,6 +34,9 @@ parameters:
   - name: Debug
     type: boolean
     default: false
+  - name: condition
+    type: string
+    default: 'succeeded()'
   - name: dependsOn
     type: object
     default: ['CreateFinalTarball']
@@ -45,7 +48,7 @@ jobs:
 - job: TestTempTapCask
   displayName: 'Generate Cask and Test Via Temp HomebrewTap'
   dependsOn: ${{ parameters.dependsOn }}
-  condition: succeeded()
+  condition: ${{ parameters.condition }}
   strategy:
     matrix:
       ARM64:
@@ -247,7 +250,7 @@ jobs:
 - job: TestOfflineInstall
   displayName: 'Test Offline/Tarball Installation'
   dependsOn: ${{ parameters.dependsOn }}
-  condition: succeeded()
+  condition: ${{ parameters.condition }}
   strategy:
     matrix:
       ARM64:

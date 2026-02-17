@@ -47,6 +47,9 @@ parameters:
   - name: Debug
     type: boolean
     default: false
+  - name: condition
+    type: string
+    default: 'succeeded()'
   - name: dependsOn
     type: object
     default: ['TestTempTapCask', 'TestOfflineInstall']

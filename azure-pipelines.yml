@@ -16,12 +16,22 @@ pr:
 
 variables:
 - template: ${{ variables.Pipeline.Workspace }}/.azure-pipelines/templates/variables.yml
+- group: 'AME ESRP Variable Group'
 - name: Codeql.Enabled
   value: false
 - name: ComponentDetection.ForceScan
   value: eq(variables['Build.SourceBranch'], 'refs/heads/release')
 
+# macOS Cask parameters
+- name: macos_cask_python_version
+  value: '3.13'
+
 parameters:
+- name: runCaskOnly
+  type: boolean
+  default: false
+  displayName: 'Run only macOS Cask jobs (skip all other jobs)'
+
 - name: architectures
   type: object
   default:
@@ -35,7 +45,7 @@ parameters:
 jobs:
 - job: CheckPullRequest
   displayName: "Check the Format of Pull Request Title and Content"
-  condition: and(succeeded(), in(variables['System.PullRequest.TargetBranch'], 'dev', 'release', 'main'))
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded(), in(variables['System.PullRequest.TargetBranch'], 'dev', 'release', 'main'))
 
   pool:
     name: ${{ variables.ubuntu_pool }}
@@ -58,7 +68,7 @@ jobs:
 
 - job: RejectPullRequestToMasterBranch
   displayName: "Reject Pull Request To Master Branch"
-  condition: and(succeeded(), eq(variables['System.PullRequest.TargetBranch'], 'master'))
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded(), eq(variables['System.PullRequest.TargetBranch'], 'master'))
 
   pool:
     name: ${{ variables.ubuntu_pool }}
@@ -69,6 +79,7 @@ jobs:
 
 - job: CredentialScanner
   displayName: "Credential Scanner"
+  condition: ne('${{ parameters.runCaskOnly }}', 'true')
   pool:
     name: ${{ variables.windows_pool }}
   steps:
@@ -87,6 +98,7 @@ jobs:
 
 - job: PolicyCheck
   displayName: "Policy Check"
+  condition: ne('${{ parameters.runCaskOnly }}', 'true')
   pool:
     name: ${{ variables.windows_pool }}
   steps:
@@ -125,7 +137,7 @@ jobs:
 
 - job: VerifyLinuxRequirements
   displayName: 'Verify src/azure-cli/requirements.*.Linux.txt'
-  condition: succeeded()
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded())
   pool:
     name: ${{ variables.ubuntu_pool }}
 
@@ -140,7 +152,7 @@ jobs:
 
 - job: VerifyDarwinRequirements
   displayName: 'Verify src/azure-cli/requirements.*.Darwin.txt'
-  condition: succeeded()
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded())
   pool:
     vmImage: ${{ variables.macos_pool }}
 
@@ -155,7 +167,7 @@ jobs:
 
 - job: VerifyWindowsRequirements
   displayName: 'Verify src/azure-cli/requirements.*.Windows.txt'
-  condition: succeeded()
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded())
   pool:
     name: ${{ variables.windows_pool }}
 
@@ -172,7 +184,7 @@ jobs:
 
 - job: VerifyVersions
   displayName: Verify Command Module Versions
-  condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/release'), eq(variables['System.PullRequest.TargetBranch'], 'release')))
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/release'), eq(variables['System.PullRequest.TargetBranch'], 'release')))
 
   pool:
     name: ${{ variables.ubuntu_pool }}
@@ -199,7 +211,7 @@ jobs:
         Platform: x64
 
   dependsOn: ExtractMetadata
-  condition: succeeded()
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded())
   pool:
     name: ${{ variables.windows_pool }}
   steps:
@@ -244,7 +256,7 @@ jobs:
         Platform: x64
 
   dependsOn: ExtractMetadata
-  condition: succeeded()
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded())
   pool:
     name: ${{ variables.windows_pool }}
   steps:
@@ -291,7 +303,7 @@ jobs:
         Platform: x64
 
   dependsOn: BuildWindowsMSI
-  condition: and(succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI', 'Manual', 'Schedule'))
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI', 'Manual', 'Schedule'))
   pool:
     name: ${{ variables.windows_pool }}
   steps:
@@ -319,7 +331,7 @@ jobs:
     matrix:
       x64:
         Platform: x64
-  condition: and(succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI', 'Manual', 'Schedule'))
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI', 'Manual', 'Schedule'))
   pool:
     name: ${{ variables.windows_pool }}
   steps:
@@ -343,6 +355,7 @@ jobs:
 - job: BuildDockerImageAzureLinux
   displayName: Build Docker Image Azure Linux
   dependsOn: BuildRpmPackagesAzureLinux
+  condition: ne('${{ parameters.runCaskOnly }}', 'true')
   strategy:
     matrix:
       ${{ each arch in parameters.architectures }}:
@@ -384,6 +397,7 @@ jobs:
 
 - job: TestDockerImageAzureLinux
   displayName: Test Docker Image Azure Linux
+  condition: ne('${{ parameters.runCaskOnly }}', 'true')
   dependsOn:
     - BuildDockerImageAzureLinux
     - ExtractMetadata
@@ -428,7 +442,7 @@ jobs:
   displayName: Build Python Wheels
 
   dependsOn: ExtractMetadata
-  condition: succeeded()
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded())
   pool:
     name: ${{ variables.ubuntu_pool }}
   steps:
@@ -473,7 +487,7 @@ jobs:
       Python313:
         python.version: '3.13'
   dependsOn: BuildPythonWheel
-  condition: succeeded()
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded())
   pool:
     name: ${{ variables.ubuntu_pool }}
   steps:
@@ -503,6 +517,7 @@ jobs:
 
 - job: TestCore
   displayName: Unit Test for Core
+  condition: ne('${{ parameters.runCaskOnly }}', 'true')
   timeoutInMinutes: 10
   pool:
     name: ${{ variables.ubuntu_pool }}
@@ -520,6 +535,7 @@ jobs:
 
 - job: TestTelemetry
   displayName: Unit Test for Telemetry
+  condition: ne('${{ parameters.runCaskOnly }}', 'true')
   timeoutInMinutes: 10
   pool:
     name: ${{ variables.ubuntu_pool }}
@@ -538,7 +554,7 @@ jobs:
 - job: IntegrationTestAgainstProfiles
   displayName: Integration Test against Profiles
   dependsOn: BuildPythonWheel
-  condition: succeeded()
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded())
   timeoutInMinutes: 20
 
   pool:
@@ -561,7 +577,7 @@ jobs:
 
 - job: TestExtensionsLoading
   displayName: Test Extensions Loading
-  condition: succeeded()
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded())
   timeoutInMinutes: 80
 
   pool:
@@ -584,7 +600,7 @@ jobs:
   displayName: Build Homebrew Formula
 
   dependsOn: BuildPythonWheel
-  condition: and(succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI', 'Manual', 'Schedule'))
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI', 'Manual', 'Schedule'))
   pool:
     name: ${{ variables.ubuntu_pool }}
   steps:
@@ -639,7 +655,7 @@ jobs:
   displayName: Test Homebrew Formula
 
   dependsOn: BuildHomebrewFormula
-  condition: succeeded()
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded())
   pool:
     vmImage: ${{ variables.macos_pool }}
   steps:
@@ -711,10 +727,51 @@ jobs:
 
     displayName: 'Test Homebrew Package'
 
+# ============================================================================
+# HOMEBREW CASK JOBS (Pre-built, signed, notarized binaries)
+# These run in parallel with the formula jobs above
+# ============================================================================
+
+# Phase 1: Build unsigned tarballs (ARM64 + Intel)
+- template: .azure-pipelines/templates/macos-build-jobs.yml
+  parameters:
+    PythonVersion: $(macos_cask_python_version)
+    MacosArm64Image: ${{ variables.macos_arm64_pool }}
+    MacosIntelImage: ${{ variables.macos_pool }}
+    Debug: false
+    condition: and(succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI', 'Manual', 'Schedule'))
+    dependsOn: ['ExtractMetadata']
+
+# Phase 2: Sign and notarize via ESRP
+- template: .azure-pipelines/templates/macos-sign-notarize-jobs.yml
+  parameters:
+    MacosArm64Image: ${{ variables.macos_arm64_pool }}
+    BundleId: 'com.microsoft.azure.cli'
+    EsrpServiceConnection: 'ame-esrp'
+    TeamId: $(ESRP_TEAM_ID)
+    TeamName: $(ESRP_TEAM_NAME)
+    RequestSigningCert: $(ESRP_REQUEST_SIGNING_CERT)
+    AuthCert: $(ESRP_AUTH_CERT)
+    SignCert: $(ESRP_SIGN_CERT)
+    SignCertAKV: $(ESRP_SIGN_CERT_AKV)
+    Debug: false
+    dependsOn: ['VerifyMacOSCli']
+
+# Phase 3: Generate cask and test via temp tap
+- template: .azure-pipelines/templates/macos-cask-generation-and-tests.yml
+  parameters:
+    MacosArm64Image: ${{ variables.macos_arm64_pool }}
+    MacosIntelImage: ${{ variables.macos_pool }}
+    PythonVersion: $(macos_cask_python_version)
+    GitHubRepo: $(Build.Repository.Name)
+    Debug: false
+    dependsOn: ['CreateFinalTarball']
+
+# Note: Publishing is handled separately via macos-release.yml pipeline
 
 - job: BuildRpmPackagesAzureLinux
   displayName: Build Rpm Package
-  condition: and(succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI', 'Manual', 'Schedule'))
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI', 'Manual', 'Schedule'))
   strategy:
     matrix:
       ${{ each arch in parameters.architectures }}:
@@ -758,7 +815,7 @@ jobs:
   dependsOn:
   - BuildRpmPackagesAzureLinux
   - ExtractMetadata
-  condition: and(succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI', 'Manual', 'Schedule'))
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI', 'Manual', 'Schedule'))
   pool:
     name: $(pool)
   strategy:
@@ -800,7 +857,7 @@ jobs:
 - job: BuildRpmPackages
   displayName: Build Rpm Packages
   # Do not run this job for Pull Requests due to the slowness
-  condition: and(succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI', 'Manual', 'Schedule'))
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI', 'Manual', 'Schedule'))
   pool:
     name: $(pool)
   strategy:
@@ -855,7 +912,7 @@ jobs:
   dependsOn:
     - BuildRpmPackages
     - ExtractMetadata
-  condition: and(succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI', 'Manual', 'Schedule'))
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI', 'Manual', 'Schedule'))
   pool:
     name: $(pool)
   strategy:
@@ -915,7 +972,7 @@ jobs:
 
 - job: BuildDebPackages
   displayName: Build Deb Packages
-  condition: and(succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI', 'Manual', 'Schedule'))
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI', 'Manual', 'Schedule'))
   pool:
     name: $(pool)
   strategy:
@@ -982,7 +1039,7 @@ jobs:
   displayName: Test Deb Packages
   dependsOn:
   - BuildDebPackages
-  condition: and(succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI', 'Manual', 'Schedule'))
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI', 'Manual', 'Schedule'))
   strategy:
     matrix:
       ${{ each arch in parameters.architectures }}:
@@ -1039,6 +1096,7 @@ jobs:
 
 - job: CheckStyle
   displayName: "Check CLI Style"
+  condition: ne('${{ parameters.runCaskOnly }}', 'true')
   timeoutInMinutes: 120
   pool:
     name: ${{ variables.ubuntu_multi_core_pool }}
@@ -1055,7 +1113,7 @@ jobs:
 
 - job: CheckHeaders
   displayName: "Check License, History, and DocMap"
-  condition: and(not(contains(variables['Build.SourceBranch'], 'lts')), not(contains(variables['System.PullRequest.TargetBranch'], 'lts')))
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), not(contains(variables['Build.SourceBranch'], 'lts')), not(contains(variables['System.PullRequest.TargetBranch'], 'lts')))
   pool:
     name: ${{ variables.ubuntu_pool }}
   steps:
@@ -1073,6 +1131,7 @@ jobs:
 
 - job: PerformanceCheck
   displayName: "PerformanceCheck"
+  condition: ne('${{ parameters.runCaskOnly }}', 'true')
   strategy:
     matrix:
       Python312:
@@ -1101,6 +1160,7 @@ jobs:
 
 - job: CheckLinter
   displayName: "Check CLI Linter"
+  condition: ne('${{ parameters.runCaskOnly }}', 'true')
 
   pool:
     name: ${{ variables.ubuntu_multi_core_pool }}
@@ -1123,7 +1183,7 @@ jobs:
       fi
 
 - job: AzdevScan
-  condition: and(succeeded(), eq(variables['Build.Reason'], 'PullRequest'))
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), succeeded(), eq(variables['Build.Reason'], 'PullRequest'))
   displayName: "Secret Scan"
   pool:
     name: ${{ variables.ubuntu_pool }}
@@ -1154,7 +1214,7 @@ jobs:
         fi
 
 - job: CodegenCoverage
-  condition: in(variables['Build.Reason'], 'BatchedCI', 'IndividualCI')
+  condition: and(ne('${{ parameters.runCaskOnly }}', 'true'), in(variables['Build.Reason'], 'BatchedCI', 'IndividualCI'))
   timeoutInMinutes: 180
   displayName: "Codegen Coverage"
   continueOnError: true
