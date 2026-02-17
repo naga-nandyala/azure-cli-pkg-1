@@ -305,9 +305,9 @@ jobs:
         exit 1
       fi
       
-      # Verify both architectures are present
-      if grep -q "arm64:" $(Pipeline.Workspace)/cask-definition/azure-cli.rb && \
-         grep -q "x86_64:" $(Pipeline.Workspace)/cask-definition/azure-cli.rb; then
+      # Verify both architectures are present (cask uses 'arm:' and 'intel:' syntax)
+      if grep -q "arm:" $(Pipeline.Workspace)/cask-definition/azure-cli.rb && \
+         grep -q "intel:" $(Pipeline.Workspace)/cask-definition/azure-cli.rb; then
         echo "✓ Both arm64 and x86_64 architectures present"
       else
         echo "✗ ERROR: Missing architecture definitions"
