@@ -1,0 +1,178 @@
+parameters:
+  - name: UpdateHomebrew
+    type: boolean
+    default: true
+  - name: HomebrewTapRepo
+    type: string
+    default: 'naga-nandyala/homebrew-mycli-app'
+
+stages:
+- stage: TestInstallation
+  displayName: 'Stage 11: Test Installation'
+  dependsOn:
+  - CreateFinalTarball
+  - UpdateHomebrewCask
+  condition: and(succeeded(), eq('${{ parameters.UpdateHomebrew }}', true))
+  jobs:
+  - job: TestCaskInstall
+    displayName: 'Test Homebrew Cask Installation'
+    strategy:
+      matrix:
+        ARM64:
+          ARCH: 'arm64'
+          VM_IMAGE: 'macos-15-arm64'
+        Intel:
+          ARCH: 'x86_64'
+          VM_IMAGE: 'macos-15'
+    pool:
+      vmImage: $(VM_IMAGE)
+
+    steps:
+    - checkout: none
+
+    - bash: |
+        echo "╔══════════════════════════════════════════════════════════════════════╗"
+        echo "║  CLEANUP: Remove Pre-installed Azure CLI ($(ARCH))                   ║"
+        echo "╚══════════════════════════════════════════════════════════════════════╝"
+        echo ""
+
+        if command -v az &> /dev/null; then
+          echo "Pre-installed Azure CLI detected: $(which az)"
+          az --version 2>/dev/null | head -3 || true
+          echo ""
+
+          echo "Removing via Homebrew..."
+          brew uninstall azure-cli 2>/dev/null || true
+          brew uninstall --cask azure-cli 2>/dev/null || true
+          brew uninstall azure-cli 2>/dev/null || true
+          brew uninstall --cask azure-cli 2>/dev/null || true
+
+          echo "Removing symlinks..."
+          sudo rm -f /usr/local/bin/az
+          sudo rm -f /opt/homebrew/bin/az
+
+          echo "Removing installation directories..."
+          sudo rm -rf /usr/local/microsoft/azure-cli
+          sudo rm -rf /usr/local/az
+          sudo rm -rf /opt/az
+          sudo rm -rf /usr/local/Cellar/azure-cli*
+          sudo rm -rf /opt/homebrew/Cellar/azure-cli*
+
+          hash -r
+        else
+          echo "No pre-installed Azure CLI detected"
+        fi
+        echo ""
+        echo "Cleanup complete"
+
+      displayName: 'Remove pre-installed Azure CLI ($(ARCH))'
+
+    - bash: |
+        set -e
+
+        echo "=== Testing Homebrew Cask Installation ($(ARCH)) ==="
+
+        if ! brew list python@3.13 &>/dev/null; then
+          echo "Installing Python 3.13..."
+          brew install python@3.13
+        fi
+
+        brew tap ${{ parameters.HomebrewTapRepo }}
+        brew install --cask azure-cli
+
+        which az
+        az version
+
+        INSTALLED_VERSION=$(az version -o tsv --query '"azure-cli"' 2>/dev/null || echo "unknown")
+
+        echo ""
+        echo "Installed version: $INSTALLED_VERSION"
+        echo ""
+        echo "Cask installation successful ($(ARCH))"
+
+        brew uninstall --cask azure-cli
+
+      displayName: 'Test cask install ($(ARCH))'
+
+  - job: TestOfflineInstall
+    displayName: 'Test Offline/Tarball Installation'
+    strategy:
+      matrix:
+        ARM64:
+          ARCH: 'arm64'
+          VM_IMAGE: 'macos-15-arm64'
+        Intel:
+          ARCH: 'x86_64'
+          VM_IMAGE: 'macos-15'
+    pool:
+      vmImage: $(VM_IMAGE)
+
+    steps:
+    - checkout: none
+
+    - bash: |
+        echo "╔══════════════════════════════════════════════════════════════════════╗"
+        echo "║  CLEANUP: Remove Pre-installed Azure CLI ($(ARCH))                   ║"
+        echo "╚══════════════════════════════════════════════════════════════════════╝"
+        echo ""
+
+        if command -v az &> /dev/null; then
+          echo "Pre-installed Azure CLI detected: $(which az)"
+          az --version 2>/dev/null | head -3 || true
+          echo ""
+
+          echo "Removing via Homebrew..."
+          brew uninstall azure-cli 2>/dev/null || true
+          brew uninstall --cask azure-cli 2>/dev/null || true
+
+          echo "Removing symlinks..."
+          sudo rm -f /usr/local/bin/az
+          sudo rm -f /opt/homebrew/bin/az
+
+          echo "Removing installation directories..."
+          sudo rm -rf /usr/local/Cellar/azure-cli*
+          sudo rm -rf /opt/homebrew/Cellar/azure-cli*
+
+          hash -r
+        else
+          echo "No pre-installed Azure CLI detected"
+        fi
+        echo ""
+
+      displayName: 'Remove pre-installed Azure CLI ($(ARCH))'
+
+    - download: current
+      artifact: 'cli-signed-notarized-$(ARCH)'
+      displayName: 'Download signed tarball ($(ARCH))'
+
+    - bash: |
+        set -e
+
+        echo "=== Testing Offline/Direct Tarball Installation ($(ARCH)) ==="
+
+        TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-$(ARCH) -name "azure-cli-*.tar.gz" | sort | tail -1)
+        TEST_DIR="$HOME/azure-cli-test"
+
+        mkdir -p "$TEST_DIR"
+        tar -xzf "$TARBALL" -C "$TEST_DIR"
+
+        if ! brew list python@3.13 &>/dev/null; then
+          brew install python@3.13
+        fi
+
+        AZ_PYTHON="$(brew --prefix python@3.13)/libexec/bin/python3"
+        export AZ_PYTHON
+
+        export AZ_DEBUG=1
+        "$TEST_DIR/bin/az" version
+
+        INSTALLED_VERSION=$("$TEST_DIR/bin/az" version -o tsv --query '"azure-cli"' 2>/dev/null || echo "unknown")
+
+        echo ""
+        echo "Installed version: $INSTALLED_VERSION"
+        echo ""
+        echo "Offline installation successful ($(ARCH))"
+
+        rm -rf "$TEST_DIR"
+
+      displayName: 'Test offline install ($(ARCH))'

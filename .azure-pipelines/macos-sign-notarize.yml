@@ -1,0 +1,318 @@
+# Azure CLI - macOS Sign and Notarize Pipeline (Standalone Wrapper)
+#
+# Purpose: Sign and notarize tar.gz artifacts via ESRP.
+# Architecture: This is a thin wrapper that calls the job template.
+#               The template is the single source of truth.
+#
+# Input: Unsigned tarballs from macos-build pipeline (arm64, x86_64)
+# Output: cli-signed-notarized-arm64, cli-signed-notarized-x86_64
+#
+# Integration: The same template can be called from azure-pipelines.yml
+
+trigger: none
+
+parameters:
+  - name: TarballBuildId
+    displayName: 'CLI Tarball Build ID (from macos-build pipeline)'
+    type: string
+    default: '296623'
+  
+  - name: BundleId
+    displayName: 'Bundle ID for notarization'
+    type: string
+    default: 'com.microsoft.azure.cli'
+  
+  - name: PublishToGitHub
+    displayName: 'Publish to GitHub Release'
+    type: boolean
+    default: false
+  
+  - name: GitHubRepo
+    displayName: 'GitHub Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+  
+  - name: UpdateHomebrew
+    displayName: 'Update Homebrew cask after release'
+    type: boolean
+    default: false
+  
+  - name: HomebrewTapRepo
+    displayName: 'Homebrew Tap Repository'
+    type: string
+    default: 'naga-nandyala/homebrew-mycli-app'
+
+resources:
+  repositories:
+  - repository: homebrewtap
+    type: github
+    endpoint: 'github.com_naga-nandyala'
+    name: naga-nandyala/homebrew-mycli-app
+    ref: main
+
+variables:
+  - template: templates/variables.yml
+  - group: 'AME ESRP Variable Group'
+  
+  # Parameter variable mappings
+  - name: GitHubRepo
+    value: ${{ parameters.GitHubRepo }}
+  - name: HomebrewTapRepo
+    value: ${{ parameters.HomebrewTapRepo }}
+  
+  # Disable auto-injection tasks
+  - name: Codeql.Enabled
+    value: false
+  - name: Codeql.SkipTaskAutoInjection
+    value: true
+  - name: CodeQL.enabled
+    value: false
+  - name: runCodesignValidationInjection
+    value: false
+  - name: DOTNET_CLI_TELEMETRY_OPTOUT
+    value: 1
+  - name: DOTNET_NOLOGO
+    value: 1
+  - name: NugetSecurityAnalysisWarningLevel
+    value: none
+  - name: skipNugetSecurityAnalysis
+    value: true
+
+name: macos-sign-notarize-$(Build.BuildId)
+
+# Use jobs from template (single source of truth)
+jobs:
+- template: templates/macos-sign-notarize-jobs.yml
+  parameters:
+    TarballBuildId: ${{ parameters.TarballBuildId }}
+    UseCurrentPipelineArtifacts: false
+    BundleId: ${{ parameters.BundleId }}
+    PublishToGitHub: ${{ parameters.PublishToGitHub }}
+    GitHubRepo: ${{ parameters.GitHubRepo }}
+    UpdateHomebrew: ${{ parameters.UpdateHomebrew }}
+    HomebrewTapRepo: ${{ parameters.HomebrewTapRepo }}
+
+# NOTE: The template includes core signing/notarization jobs:
+# - DownloadAnalyze_ARM64, DownloadAnalyze_x86_64: Download and analyze tarballs
+# - SignBinaries_ARM64, SignBinaries_x86_64: ESRP code signing
+# - CreateNotarizeBundle_ARM64, CreateNotarizeBundle_x86_64: Prepare for notarization
+# - Notarize_ARM64, Notarize_x86_64: Apple notarization via ESRP
+# - CreateFinalTarball_ARM64, CreateFinalTarball_x86_64: Create final artifacts
+#
+# Final Artifacts Published:
+# - cli-signed-notarized-arm64
+# - cli-signed-notarized-x86_64
+
+# ============================================================================
+# ADDITIONAL JOBS: GitHub Release (Optional)
+# ============================================================================
+- ${{ if eq(parameters.PublishToGitHub, true) }}:
+  - job: CreateGitHubRelease
+    displayName: 'Create GitHub Release'
+    dependsOn:
+    - CreateFinalTarball_ARM64
+    - CreateFinalTarball_x86_64
+    condition: succeeded()
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: none
+    
+    - download: current
+      artifact: 'cli-signed-notarized-arm64'
+      displayName: 'Download signed tarball (ARM64)'
+    
+    - download: current
+      artifact: 'cli-signed-notarized-x86_64'
+      displayName: 'Download signed tarball (Intel)'
+    
+    - task: CopyFiles@2
+      displayName: 'Copy ARM64 release files'
+      inputs:
+        SourceFolder: '$(Pipeline.Workspace)/cli-signed-notarized-arm64'
+        Contents: |
+          azure-cli-*.tar.gz
+          azure-cli-*.tar.gz.sha256
+        TargetFolder: '$(Build.ArtifactStagingDirectory)/release'
+        flattenFolders: true
+    
+    - task: CopyFiles@2
+      displayName: 'Copy Intel release files'
+      inputs:
+        SourceFolder: '$(Pipeline.Workspace)/cli-signed-notarized-x86_64'
+        Contents: |
+          azure-cli-*.tar.gz
+          azure-cli-*.tar.gz.sha256
+        TargetFolder: '$(Build.ArtifactStagingDirectory)/release'
+        flattenFolders: true
+    
+    - bash: |
+        ARM64_TARBALL=$(find "$(Build.ArtifactStagingDirectory)/release" -name "azure-cli-*-macos-arm64-*.tar.gz" | sort | tail -1)
+        VERSION=$(basename "$ARM64_TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
+        
+        echo "=== GitHub Release ==="
+        echo "Version: $VERSION"
+        ls -lh "$(Build.ArtifactStagingDirectory)/release/"
+        
+        echo "##vso[task.setvariable variable=ReleaseTag]v${VERSION}"
+        echo "##vso[task.setvariable variable=AzureCliVersion]${VERSION}"
+        
+      displayName: 'Prepare release files'
+    
+    - task: GitHubRelease@1
+      displayName: 'Delete existing release if present'
+      continueOnError: true
+      inputs:
+        gitHubConnection: 'github.com_naga-nandyala'
+        repositoryName: '$(GitHubRepo)'
+        action: 'delete'
+        tag: '$(ReleaseTag)'
+    
+    - task: GitHubRelease@1
+      displayName: 'Create GitHub Release'
+      inputs:
+        gitHubConnection: 'github.com_naga-nandyala'
+        repositoryName: '$(GitHubRepo)'
+        action: 'create'
+        target: '$(Build.SourceVersion)'
+        tagSource: 'userSpecifiedTag'
+        tag: '$(ReleaseTag)'
+        title: 'Azure CLI $(AzureCliVersion) - macOS (Homebrew Python)'
+        releaseNotesSource: 'inline'
+        releaseNotesInline: |
+          ## Azure CLI $(AzureCliVersion) - macOS (Homebrew Python)
+          
+          ### Available Architectures
+          - **Apple Silicon (arm64)**: azure-cli-$(AzureCliVersion)-macos-arm64-nopython-signed-notarized.tar.gz
+          - **Intel (x86_64)**: azure-cli-$(AzureCliVersion)-macos-x86_64-nopython-signed-notarized.tar.gz
+          
+          ### Requirements
+          - macOS 11+ (Big Sur or later)
+          - Homebrew Python 3.13
+          
+          ### Installation via Homebrew Cask
+          ```bash
+          brew tap $(HomebrewTapRepo)
+          brew install --cask azure-cli
+          ```
+        assets: '$(Build.ArtifactStagingDirectory)/release/*'
+        addChangeLog: false
+
+# ============================================================================
+# ADDITIONAL JOBS: Update Homebrew Cask (Optional)
+# ============================================================================
+- ${{ if eq(parameters.UpdateHomebrew, true) }}:
+  - job: UpdateHomebrewCask
+    displayName: 'Update Homebrew Cask'
+    dependsOn:
+    - CreateFinalTarball_ARM64
+    - CreateFinalTarball_x86_64
+    - ${{ if eq(parameters.PublishToGitHub, true) }}:
+      - CreateGitHubRelease
+    condition: succeeded()
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - checkout: self
+      fetchDepth: 1
+
+    - checkout: homebrewtap
+      persistCredentials: true
+      path: homebrew-tap
+    
+    - download: current
+      artifact: 'cli-signed-notarized-arm64'
+      displayName: 'Download signed tarball (ARM64)'
+    
+    - download: current
+      artifact: 'cli-signed-notarized-x86_64'
+      displayName: 'Download signed tarball (Intel)'
+    
+    - bash: |
+        set -e
+        
+        GITHUB_REPO="${{ parameters.GitHubRepo }}"
+        
+        ARM64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-arm64 -name "azure-cli-*.tar.gz" | sort | tail -1)
+        X86_64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-x86_64 -name "azure-cli-*.tar.gz" | sort | tail -1)
+        
+        VERSION=$(basename "$ARM64_TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
+        
+        ARM64_SHA256=$(cat ${ARM64_TARBALL}.sha256 | cut -d' ' -f1)
+        X86_64_SHA256=$(cat ${X86_64_TARBALL}.sha256 | cut -d' ' -f1)
+        
+        echo "=== Updating Homebrew Cask ==="
+        echo "Version: $VERSION"
+        echo "ARM64 SHA256: $ARM64_SHA256"
+        echo "x86_64 SHA256: $X86_64_SHA256"
+        
+        cd $(Pipeline.Workspace)/homebrew-tap
+        
+        mkdir -p Casks
+        
+        REPO_NAME="$(Build.Repository.Name)"
+        REPO_DIR="${REPO_NAME##*/}"
+        REPO_ROOT=""
+        for candidate in \
+          "$(Build.SourcesDirectory)/$REPO_DIR" \
+          "$(Build.SourcesDirectory)/$REPO_NAME" \
+          "$(Build.SourcesDirectory)"; do
+          if [ -d "$candidate" ]; then
+            REPO_ROOT="$candidate"
+            break
+          fi
+        done
+
+        if [ -z "$REPO_ROOT" ]; then
+          echo "ERROR: Unable to resolve repo root"
+          exit 1
+        fi
+
+        python3 "$REPO_ROOT/scripts/release/macos/cask_generate.py" \
+          --version "$VERSION" \
+          --arm64-sha "$ARM64_SHA256" \
+          --x86-64-sha "$X86_64_SHA256" \
+          --github-repo "$GITHUB_REPO" \
+          --template "$REPO_ROOT/scripts/release/macos/templates/azure-cli.rb.in" \
+          --output "Casks/azure-cli.rb"
+        
+        git config user.name "Azure Pipeline"
+        git config user.email "azure-pipeline@microsoft.com"
+        git add Casks/azure-cli.rb
+        git commit -m "Update azure-cli to $VERSION" || echo "No changes"
+        git push origin HEAD:main
+        
+        echo "Homebrew cask updated successfully"
+        
+      displayName: 'Update cask definition'
+
+# ============================================================================
+# SUMMARY JOB
+# ============================================================================
+- job: PrintSummary
+  displayName: 'Print Summary'
+  dependsOn:
+  - CreateFinalTarball_ARM64
+  - CreateFinalTarball_x86_64
+  condition: always()
+  pool:
+    vmImage: 'ubuntu-latest'
+  
+  steps:
+  - checkout: none
+  
+  - bash: |
+      echo "╔══════════════════════════════════════════════════════════════════╗"
+      echo "║      AZURE CLI SIGN & NOTARIZE SUMMARY                           ║"
+      echo "╠══════════════════════════════════════════════════════════════════╣"
+      echo "║ Architectures:  ARM64 (Apple Silicon) + x86_64 (Intel)           ║"
+      echo "║ Approach:       Homebrew Python (not bundled)                    ║"
+      echo "╠══════════════════════════════════════════════════════════════════╣"
+      echo "║ ARTIFACTS                                                        ║"
+      echo "╠══════════════════════════════════════════════════════════════════╣"
+      echo "║ • cli-signed-notarized-arm64                                     ║"
+      echo "║ • cli-signed-notarized-x86_64                                    ║"
+      echo "╚══════════════════════════════════════════════════════════════════╝"
+    displayName: 'Print Summary'

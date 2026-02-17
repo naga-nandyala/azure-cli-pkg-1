@@ -11,8 +11,8 @@ Usage:
         --arm64-sha "<arm64 sha256>" \
         --x86-64-sha "<x86_64 sha256>" \
         --github-repo "Azure/azure-cli" \
-        --template "scripts/release/macos/templates/azure-cli-v3.rb.in" \
-        --output "azure-cli-v3.rb"
+        --template "scripts/release/macos/templates/azure-cli.rb.in" \
+        --output "azure-cli.rb"
 
 Environment variable fallbacks (used when a CLI flag is omitted):
     VERSION, ARM64_SHA, X86_64_SHA, GITHUB_REPO, TEMPLATE, OUTPUT
@@ -23,8 +23,8 @@ import os
 from pathlib import Path
 from typing import Dict
 
-DEFAULT_TEMPLATE = "scripts/release/macos/templates/azure-cli-v3.rb.in"
-DEFAULT_OUTPUT = "azure-cli-v3.rb"
+DEFAULT_TEMPLATE = "scripts/release/macos/templates/azure-cli.rb.in"
+DEFAULT_OUTPUT = "azure-cli.rb"
 
 
 def _env_or_arg(value: str, env_key: str) -> str:

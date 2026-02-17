@@ -1,0 +1,104 @@
+# Azure CLI - macOS Release Orchestrator
+#
+# Purpose: build, sign/notarize, publish, update cask, and test install.
+# This pipeline composes modular templates for maintainability.
+
+trigger: none
+
+parameters:
+  - name: PythonVersion
+    displayName: 'Python Version (Homebrew)'
+    type: string
+    default: '3.13'
+
+  - name: TarballBuildId
+    displayName: 'Optional Build ID (tarball build pipeline)'
+    type: string
+    default: '0'
+
+  - name: BundleId
+    displayName: 'Bundle ID for notarization'
+    type: string
+    default: 'com.microsoft.azure.cli'
+
+  - name: PublishToGitHub
+    displayName: 'Publish to GitHub Release'
+    type: boolean
+    default: true
+
+  - name: UpdateHomebrew
+    displayName: 'Update Homebrew cask after release'
+    type: boolean
+    default: true
+
+  - name: GitHubRepo
+    displayName: 'GitHub Repository (owner/repo)'
+    type: string
+    default: 'naga-nandyala/azure-cli-pkg-1'
+
+  - name: HomebrewTapRepo
+    displayName: 'Homebrew Tap Repository'
+    type: string
+    default: 'naga-nandyala/homebrew-mycli-app'
+
+  - name: Debug
+    displayName: 'Enable diagnostics steps'
+    type: boolean
+    default: false
+
+resources:
+  repositories:
+  - repository: homebrewtap
+    type: github
+    endpoint: 'github.com_naga-nandyala'
+    name: naga-nandyala/homebrew-mycli-app
+    ref: main
+
+variables:
+  - template: templates/variables.yml
+
+  - name: GitHubRepo
+    value: ${{ parameters.GitHubRepo }}
+  - name: HomebrewTapRepo
+    value: ${{ parameters.HomebrewTapRepo }}
+
+  # Disable auto-injection tasks
+  - name: Codeql.Enabled
+    value: false
+  - name: Codeql.SkipTaskAutoInjection
+    value: true
+  - name: CodeQL.enabled
+    value: false
+  - name: runCodesignValidationInjection
+    value: false
+  - name: DOTNET_CLI_TELEMETRY_OPTOUT
+    value: 1
+  - name: DOTNET_NOLOGO
+    value: 1
+  - name: NugetSecurityAnalysisWarningLevel
+    value: none
+  - name: skipNugetSecurityAnalysis
+    value: true
+
+stages:
+- template: templates/macos/tarball-build.yml
+  parameters:
+    PythonVersion: ${{ parameters.PythonVersion }}
+
+- template: templates/macos/sign-notarize.yml
+  parameters:
+    TarballBuildId: ${{ parameters.TarballBuildId }}
+    BundleId: ${{ parameters.BundleId }}
+
+- template: templates/macos/update-cask.yml
+  parameters:
+    PublishToGitHub: ${{ parameters.PublishToGitHub }}
+    UpdateHomebrew: ${{ parameters.UpdateHomebrew }}
+    GitHubRepo: ${{ parameters.GitHubRepo }}
+    HomebrewTapRepo: ${{ parameters.HomebrewTapRepo }}
+    Debug: ${{ parameters.Debug }}
+
+- template: templates/macos/test-install.yml
+  parameters:
+    UpdateHomebrew: ${{ parameters.UpdateHomebrew }}
+    HomebrewTapRepo: ${{ parameters.HomebrewTapRepo }}
