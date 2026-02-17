@@ -1,5 +1,6 @@
 variables:
   ubuntu_pool: 'pool-ubuntu-2204'
+  ubuntu_vm_image_latest: 'ubuntu-latest'
   ubuntu_multi_core_pool: 'pool-ubuntu-latest-multi-core'
   windows_pool: 'pool-windows-2019'
   ubuntu_arm64_pool: 'pool-ubuntu-latest-arm64'

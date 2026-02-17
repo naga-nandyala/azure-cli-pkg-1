@@ -106,7 +106,7 @@ jobs:
     GitHubRepo: ${{ parameters.GitHubRepo }}
     HomebrewTapRepo: ${{ parameters.HomebrewTapRepo }}
     Debug: ${{ parameters.Debug }}
-    UbuntuImage: ${{ variables.ubuntu_pool }}
+    UbuntuImage: ${{ variables.ubuntu_vm_image_latest }}
     MacosArm64Image: ${{ variables.macos_arm64_pool }}
     MacosIntelImage: ${{ variables.macos_intel_pool }}
     PublishCondition: true
