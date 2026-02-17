@@ -56,6 +56,7 @@ resources:
 
 variables:
   - template: templates/variables.yml
+  - group: 'AME ESRP Variable Group'
 
   - name: GitHubRepo
     value: ${{ parameters.GitHubRepo }}
