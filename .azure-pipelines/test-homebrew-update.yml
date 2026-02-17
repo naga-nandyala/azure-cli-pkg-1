@@ -28,12 +28,12 @@ parameters:
   - name: SourceBuildId
     displayName: 'Build ID (Run ID) with signed tarballs'
     type: string
-    default: '297555'
+    default: '297504'  # Last successful build
   
-  - name: SourcePipelineId
-    displayName: 'Source Pipeline Definition ID (from URL)'
+  - name: SourcePipelineName
+    displayName: 'Source Pipeline Name'
     type: string
-    default: ''  # Get from Azure DevOps URL: ?definitionId=XXX
+    default: 'naga_macos_opus_pipeline'
   
   - name: GitHubRepo
     displayName: 'GitHub Repository (owner/repo)'
@@ -73,7 +73,7 @@ jobs:
     inputs:
       buildType: 'specific'
       project: '$(System.TeamProjectId)'
-      pipeline: '${{ parameters.SourcePipelineId }}'
+      pipeline: '${{ parameters.SourcePipelineName }}'
       buildVersionToDownload: 'specific'
       buildId: ${{ parameters.SourceBuildId }}
       artifactName: 'cli-signed-notarized-arm64'
@@ -84,7 +84,7 @@ jobs:
     inputs:
       buildType: 'specific'
       project: '$(System.TeamProjectId)'
-      pipeline: '${{ parameters.SourcePipelineId }}'
+      pipeline: '${{ parameters.SourcePipelineName }}'
       buildVersionToDownload: 'specific'
       buildId: ${{ parameters.SourceBuildId }}
       artifactName: 'cli-signed-notarized-x86_64'
@@ -233,7 +233,7 @@ jobs:
     inputs:
       buildType: 'specific'
       project: '$(System.TeamProjectId)'
-      pipeline: '${{ parameters.SourcePipelineId }}'
+      pipeline: '${{ parameters.SourcePipelineName }}'
       buildVersionToDownload: 'specific'
       buildId: ${{ parameters.SourceBuildId }}
       artifactName: 'cli-signed-notarized-$(ARCH)'
