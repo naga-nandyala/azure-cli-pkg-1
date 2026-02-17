@@ -60,7 +60,7 @@ jobs:
 # ============================================================================
 - ${{ if eq(parameters.PublishToGitHub, true) }}:
   - job: CreateGitHubRelease
-    displayName: 'Create GitHub Release'
+    displayName: 'macOS | Create GitHub Release'
     dependsOn: ${{ parameters.dependsOn }}
     condition: succeeded()
     pool:
@@ -154,7 +154,7 @@ jobs:
 # ============================================================================
 - ${{ if eq(parameters.UpdateHomebrew, true) }}:
   - job: UpdateHomebrewCask
-    displayName: 'Update Homebrew Cask'
+    displayName: 'macOS | Update Homebrew Cask'
     dependsOn:
     - ${{ parameters.dependsOn }}
     - ${{ if eq(parameters.PublishToGitHub, true) }}:
@@ -206,7 +206,7 @@ jobs:
 # ============================================================================
 - ${{ if and(eq(parameters.TestAfterPublish, true), eq(parameters.UpdateHomebrew, true)) }}:
   - job: TestPublishedCask
-    displayName: 'Test Published Cask'
+    displayName: 'macOS | Test Published Cask'
     dependsOn: UpdateHomebrewCask
     condition: succeeded()
     strategy:
@@ -269,7 +269,7 @@ jobs:
 # JOB: PRINT SUMMARY
 # ============================================================================
 - job: PrintSummary
-  displayName: 'Print Summary'
+  displayName: 'macOS | Print Summary'
   dependsOn:
   - ${{ parameters.dependsOn }}
   - ${{ if eq(parameters.PublishToGitHub, true) }}:
