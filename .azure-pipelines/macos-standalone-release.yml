@@ -84,11 +84,15 @@ stages:
 - template: templates/macos/tarball-build.yml
   parameters:
     PythonVersion: ${{ parameters.PythonVersion }}
+    MacosArm64Image: ${{ variables.macos_arm64_pool }}
+    MacosIntelImage: ${{ variables.macos_intel_pool }}
 
 - template: templates/macos/sign-notarize.yml
   parameters:
     TarballBuildId: ${{ parameters.TarballBuildId }}
     BundleId: ${{ parameters.BundleId }}
+    MacosArm64Image: ${{ variables.macos_arm64_pool }}
+    MacosIntelImage: ${{ variables.macos_intel_pool }}
 
 - template: templates/macos/update-cask.yml
   parameters:
@@ -97,8 +101,11 @@ stages:
     GitHubRepo: ${{ parameters.GitHubRepo }}
     HomebrewTapRepo: ${{ parameters.HomebrewTapRepo }}
     Debug: ${{ parameters.Debug }}
+    UbuntuImage: ${{ variables.ubuntu_pool }}
 
 - template: templates/macos/test-install.yml
   parameters:
     UpdateHomebrew: ${{ parameters.UpdateHomebrew }}
     HomebrewTapRepo: ${{ parameters.HomebrewTapRepo }}
+    MacosArm64Image: ${{ variables.macos_arm64_pool }}
+    MacosIntelImage: ${{ variables.macos_intel_pool }}

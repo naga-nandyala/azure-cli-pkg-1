@@ -5,6 +5,10 @@ parameters:
   - name: HomebrewTapRepo
     type: string
     default: 'naga-nandyala/homebrew-mycli-app'
+  - name: MacosArm64Image
+    type: string
+  - name: MacosIntelImage
+    type: string
 
 stages:
 - stage: TestInstallation
@@ -20,10 +24,10 @@ stages:
       matrix:
         ARM64:
           ARCH: 'arm64'
-          VM_IMAGE: 'macos-15-arm64'
+          VM_IMAGE: ${{ parameters.MacosArm64Image }}
         Intel:
           ARCH: 'x86_64'
-          VM_IMAGE: 'macos-15'
+          VM_IMAGE: ${{ parameters.MacosIntelImage }}
     pool:
       vmImage: $(VM_IMAGE)
 
@@ -100,10 +104,10 @@ stages:
       matrix:
         ARM64:
           ARCH: 'arm64'
-          VM_IMAGE: 'macos-15-arm64'
+          VM_IMAGE: ${{ parameters.MacosArm64Image }}
         Intel:
           ARCH: 'x86_64'
-          VM_IMAGE: 'macos-15'
+          VM_IMAGE: ${{ parameters.MacosIntelImage }}
     pool:
       vmImage: $(VM_IMAGE)
 

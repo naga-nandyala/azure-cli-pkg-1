@@ -14,6 +14,8 @@ parameters:
   - name: Debug
     type: boolean
     default: false
+  - name: UbuntuImage
+    type: string
 
 stages:
 - stage: PublishToGitHub
@@ -24,7 +26,7 @@ stages:
   - job: CreateRelease
     displayName: 'Create GitHub Release'
     pool:
-      vmImage: 'ubuntu-latest'
+      vmImage: ${{ parameters.UbuntuImage }}
 
     steps:
     - checkout: none
@@ -144,7 +146,7 @@ stages:
   - job: UpdateCask
     displayName: 'Update Homebrew Cask Definition'
     pool:
-      vmImage: 'ubuntu-latest'
+      vmImage: ${{ parameters.UbuntuImage }}
 
     steps:
     - checkout: self

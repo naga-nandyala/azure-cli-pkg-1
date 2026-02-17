@@ -5,6 +5,10 @@ parameters:
   - name: BundleId
     type: string
     default: 'com.microsoft.azure.cli'
+  - name: MacosArm64Image
+    type: string
+  - name: MacosIntelImage
+    type: string
 
 stages:
 - stage: DownloadAndAnalyze
@@ -17,11 +21,11 @@ stages:
       matrix:
         ARM64:
           ARCH: 'arm64'
-          VM_IMAGE: ${{ variables.macos_arm64_pool }}
+          VM_IMAGE: ${{ parameters.MacosArm64Image }}
           ARTIFACT_NAME: 'cli-build-unsigned-arm64'
         Intel:
           ARCH: 'x86_64'
-          VM_IMAGE: ${{ variables.macos_intel_pool }}
+          VM_IMAGE: ${{ parameters.MacosIntelImage }}
           ARTIFACT_NAME: 'cli-build-unsigned-x86_64'
     pool:
       vmImage: $(VM_IMAGE)
@@ -538,7 +542,7 @@ stages:
         Intel:
           ARCH: 'x86_64'
     pool:
-      vmImage: 'macos-15'
+      vmImage: ${{ parameters.MacosIntelImage }}
 
     steps:
     - checkout: none

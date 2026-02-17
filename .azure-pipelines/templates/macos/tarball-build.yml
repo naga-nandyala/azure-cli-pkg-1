@@ -2,6 +2,10 @@ parameters:
   - name: PythonVersion
     type: string
     default: '3.13'
+  - name: MacosArm64Image
+    type: string
+  - name: MacosIntelImage
+    type: string
 
 stages:
 - stage: BuildAzureCli
@@ -13,10 +17,10 @@ stages:
       matrix:
         ARM64:
           Architecture: 'arm64'
-          vmImageName: ${{ variables.macos_arm64_pool }}
+          vmImageName: ${{ parameters.MacosArm64Image }}
         Intel:
           Architecture: 'x86_64'
-          vmImageName: ${{ variables.macos_intel_pool }}
+          vmImageName: ${{ parameters.MacosIntelImage }}
     pool:
       vmImage: $(vmImageName)
     timeoutInMinutes: 60
@@ -87,10 +91,10 @@ stages:
       matrix:
         ARM64:
           Architecture: 'arm64'
-          vmImageName: 'macos-15-arm64'
+          vmImageName: ${{ parameters.MacosArm64Image }}
         Intel:
           Architecture: 'x86_64'
-          vmImageName: 'macos-15'
+          vmImageName: ${{ parameters.MacosIntelImage }}
     pool:
       vmImage: $(vmImageName)
     steps:
