@@ -248,8 +248,9 @@ jobs:
 
       python3 "$REPO_ROOT/scripts/release/macos/cask_generate.py" \
         --version "$VERSION" \
-        --arm64-sha256 "$ARM64_SHA256" \
-        --x86-64-sha256 "$X86_64_SHA256" \
+        --arm64-sha "$ARM64_SHA256" \
+        --x86-64-sha "$X86_64_SHA256" \
+        --github-repo "$GITHUB_REPO" \
         --template "$TEMPLATE_PATH" \
         --output "$OUTPUT_PATH"
 
