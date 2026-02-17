@@ -40,10 +40,10 @@ parameters:
 
 jobs:
 # ============================================================================
-# JOB: TEST CASK WITH TEMPORARY TAP (Both Architectures)
+# JOB: GENERATE CASK AND TEST VIA TEMP HOMEBREW TAP (Both Architectures)
 # ============================================================================
 - job: TestTempTapCask
-  displayName: 'Test Cask via Temporary Tap'
+  displayName: 'Generate Cask and Test Via Temp HomebrewTap'
   dependsOn: ${{ parameters.dependsOn }}
   condition: succeeded()
   strategy:
