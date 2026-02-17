@@ -738,7 +738,6 @@ jobs:
     PythonVersion: $(macos_cask_python_version)
     MacosArm64Image: ${{ variables.macos_arm64_pool }}
     MacosIntelImage: ${{ variables.macos_pool }}
-    Debug: false
     condition: and(succeeded(), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI', 'Manual', 'Schedule'))
     dependsOn: ['ExtractMetadata']
 
