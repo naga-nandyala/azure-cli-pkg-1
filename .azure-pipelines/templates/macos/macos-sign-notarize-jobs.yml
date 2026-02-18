@@ -575,90 +575,111 @@ jobs:
       tar -xzf "$TARBALL" -C "$TEST_DIR"
       
       echo ""
-      echo "=== Verifying Code Signing ==="
+      echo "=== Verifying ALL Binaries ==="
       
-      # Count all signable binaries
+      # Counters for all checks
+      TOTAL_COUNT=0
       SIGNED_COUNT=0
       UNSIGNED_COUNT=0
-      INVALID_COUNT=0
+      STRICT_PASS=0
+      STRICT_FAIL=0
+      DEVID_PASS=0
+      DEVID_FAIL=0
       
-      # Check .so files
+      # Collect all binaries (.so, .dylib, and Mach-O executables)
+      BINARIES=()
       while IFS= read -r -d '' file; do
-        if codesign -v "$file" 2>/dev/null; then
-          ((SIGNED_COUNT++))
-        else
-          ((UNSIGNED_COUNT++))
-          echo "WARNING: Unsigned: $file"
-        fi
-      done < <(find "$TEST_DIR" -name "*.so" -type f -print0)
+        BINARIES+=("$file")
+      done < <(find "$TEST_DIR" \( -name "*.so" -o -name "*.dylib" \) -type f -print0)
       
-      # Check .dylib files
-      while IFS= read -r -d '' file; do
-        if codesign -v "$file" 2>/dev/null; then
-          ((SIGNED_COUNT++))
-        else
-          ((UNSIGNED_COUNT++))
-          echo "WARNING: Unsigned: $file"
-        fi
-      done < <(find "$TEST_DIR" -name "*.dylib" -type f -print0)
-      
-      # Check executables in bin/
+      # Also check Mach-O executables in bin/ and libexec/bin/
       while IFS= read -r -d '' file; do
         if file "$file" | grep -q "Mach-O"; then
-          if codesign -v "$file" 2>/dev/null; then
-            ((SIGNED_COUNT++))
-          else
-            ((UNSIGNED_COUNT++))
-            echo "WARNING: Unsigned executable: $file"
-          fi
+          BINARIES+=("$file")
         fi
       done < <(find "$TEST_DIR/bin" "$TEST_DIR/libexec/bin" -type f -print0 2>/dev/null || true)
       
-      echo ""
-      echo "Signing Summary:"
-      echo "  Signed binaries: $SIGNED_COUNT"
-      echo "  Unsigned binaries: $UNSIGNED_COUNT"
+      TOTAL_COUNT=${#BINARIES[@]}
+      echo "Found $TOTAL_COUNT binaries to verify"
       
-      if [ "$UNSIGNED_COUNT" -gt 0 ]; then
-        echo "##vso[task.logissue type=warning]Found $UNSIGNED_COUNT unsigned binaries"
+      # Track failed files for detailed reporting
+      UNSIGNED_FILES=()
+      STRICT_FAILED_FILES=()
+      DEVID_FAILED_FILES=()
+      FIRST_SIGNED=
+      
+      for file in "${BINARIES[@]}"; do
+        filename=$(basename "$file")
+        
+        # 1. Basic signature check
+        if codesign -v "$file" 2>/dev/null; then
+          ((SIGNED_COUNT++))
+          [ -z "$FIRST_SIGNED" ] && FIRST_SIGNED="$file"
+          
+          # 2. Strict verification (only for signed files)
+          if codesign --verify --deep --strict "$file" 2>/dev/null; then
+            ((STRICT_PASS++))
+          else
+            ((STRICT_FAIL++))
+            STRICT_FAILED_FILES+=("$filename")
+          fi
+          
+          # 3. Developer ID check (only for signed files)
+          if codesign -dvv "$file" 2>&1 | grep -q "Developer ID"; then
+            ((DEVID_PASS++))
+          else
+            ((DEVID_FAIL++))
+            DEVID_FAILED_FILES+=("$filename")
+          fi
+        else
+          ((UNSIGNED_COUNT++))
+          UNSIGNED_FILES+=("$filename")
+        fi
+      done
+      
+      echo ""
+      echo "========================================"
+      echo "VERIFICATION SUMMARY ($ARCH)"
+      echo "========================================"
+      echo "Total binaries:        $TOTAL_COUNT"
+      echo ""
+      echo "Basic Signature:"
+      echo "  Signed:              $SIGNED_COUNT"
+      echo "  Unsigned:            $UNSIGNED_COUNT"
+      echo ""
+      echo "Strict Verification (--deep --strict):"
+      echo "  Passed:              $STRICT_PASS"
+      echo "  Failed:              $STRICT_FAIL"
+      echo ""
+      echo "Developer ID Certificate:"
+      echo "  Has Developer ID:    $DEVID_PASS"
+      echo "  Missing Developer ID: $DEVID_FAIL"
+      echo "========================================"
+      
+      # Report failures in detail
+      if [ ${#UNSIGNED_FILES[@]} -gt 0 ]; then
+        echo ""
+        echo "UNSIGNED FILES:"
+        printf '  - %s\n' "${UNSIGNED_FILES[@]}"
       fi
       
-      echo ""
-      echo "=== Sample Signature Details ==="
-      SAMPLE_SO=$(find "$TEST_DIR" -name "*.so" -type f | head -1)
-      if [ -n "$SAMPLE_SO" ]; then
-        echo "Checking: $(basename "$SAMPLE_SO")"
-        codesign -dvvv "$SAMPLE_SO" 2>&1 | grep -E "^(Identifier|TeamIdentifier|Authority|Signature|CDHash)" || true
+      if [ ${#STRICT_FAILED_FILES[@]} -gt 0 ]; then
+        echo ""
+        echo "STRICT VERIFICATION FAILED:"
+        printf '  - %s\n' "${STRICT_FAILED_FILES[@]}"
       fi
       
-      echo ""
-      echo "=== Verifying Signing Authority Chain ==="
-      # For individual binaries (.so, .dylib), notarization tickets are stored on Apple's servers
-      # macOS checks online via Gatekeeper/OCSP when the binary is first executed
-      # stapler only works for .app, .dmg, .pkg bundles - not individual binaries
+      if [ ${#DEVID_FAILED_FILES[@]} -gt 0 ]; then
+        echo ""
+        echo "MISSING DEVELOPER ID:"
+        printf '  - %s\n' "${DEVID_FAILED_FILES[@]}"
+      fi
       
-      if [ -n "$SAMPLE_SO" ]; then
-        echo "Sample binary: $(basename "$SAMPLE_SO")"
+      # Show sample signature details (just for reference)
+      if [ -n "$FIRST_SIGNED" ]; then
         echo ""
-        echo "Authority chain:"
-        codesign -d --verbose=4 "$SAMPLE_SO" 2>&1 | grep "Authority" || echo "Could not extract authority chain"
-        
-        echo ""
-        echo "Signature validity:"
-        if codesign --verify --deep --strict "$SAMPLE_SO" 2>&1; then
-          echo "  Signature: VALID (strict verification passed)"
-        else
-          echo "  Signature: May have issues"
-        fi
-        
-        echo ""
-        echo "Developer ID check:"
-        # Check if signed with Developer ID (required for notarization)
-        if codesign -dvv "$SAMPLE_SO" 2>&1 | grep -q "Developer ID"; then
-          echo "  Signed with: Developer ID certificate (notarization-eligible)"
-        else
-          echo "  WARNING: Not signed with Developer ID certificate"
-        fi
+        echo "=== Sample Signature Details ($(basename $FIRST_SIGNED)) ==="
+        codesign -dvvv "$FIRST_SIGNED" 2>&1 | grep -E "^(Identifier|TeamIdentifier|Authority|CDHash)" || true
       fi
       
       echo ""
@@ -667,6 +688,21 @@ jobs:
       echo "The notarization is registered with Apple's servers and verified online"
       echo "via Gatekeeper/OCSP when the binary is first executed by end users."
       echo "To verify notarization was successful, check the ESRP notarization job logs."
+      
+      # Fail if any issues found
+      ERRORS=0
+      if [ "$UNSIGNED_COUNT" -gt 0 ]; then
+        echo "##vso[task.logissue type=error]Found $UNSIGNED_COUNT unsigned binaries"
+        ERRORS=1
+      fi
+      if [ "$STRICT_FAIL" -gt 0 ]; then
+        echo "##vso[task.logissue type=error]$STRICT_FAIL binaries failed strict verification"
+        ERRORS=1
+      fi
+      if [ "$DEVID_FAIL" -gt 0 ]; then
+        echo "##vso[task.logissue type=error]$DEVID_FAIL binaries missing Developer ID certificate"
+        ERRORS=1
+      fi
       
       echo ""
       echo "=== Functional Test ==="
@@ -679,7 +715,7 @@ jobs:
           echo "CLI functional test: PASSED ($ARCH)"
         else
           echo "##vso[task.logissue type=error]CLI functional test failed"
-          exit 1
+          ERRORS=1
         fi
       else
         echo "Skipping functional test - Python ${{ parameters.PythonVersion }} not available"
@@ -687,10 +723,16 @@ jobs:
       
       rm -rf "$TEST_DIR"
       
+      if [ "$ERRORS" -eq 1 ]; then
+        echo ""
+        echo "##vso[task.logissue type=error]Verification failed - see above for details"
+        exit 1
+      fi
+      
       echo ""
       echo "=== Verification Complete ==="
+      echo "All $TOTAL_COUNT binaries passed verification"
       echo "Architecture: $ARCH"
-      echo "Signed binaries: $SIGNED_COUNT"
       echo "Tarball: $(basename "$TARBALL")"
       
     displayName: 'Verify signing & notarization ($(Architecture))'
