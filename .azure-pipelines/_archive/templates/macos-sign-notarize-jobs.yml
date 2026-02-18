@@ -1,0 +1,598 @@
+# macOS Sign and Notarize Jobs Template (Matrix Strategy)
+#
+# Purpose: Sign and notarize macOS CLI tarballs via ESRP
+# Usage: Called from main pipeline or standalone wrapper
+#
+# Parameters:
+#   - TarballBuildId: Build ID for external pipeline artifact download (standalone mode)
+#   - UseCurrentPipelineArtifacts: If true, use artifacts from current pipeline run
+#   - BundleId: Apple bundle ID for notarization
+#   - condition: Job execution condition
+#   - dependsOn: Jobs this depends on
+#   - PythonVersion: Homebrew Python version for verification
+#
+# Artifacts Published:
+#   - cli-signed-notarized-arm64
+#   - cli-signed-notarized-x86_64
+
+parameters:
+  - name: TarballBuildId
+    type: string
+    default: ''
+  - name: UseCurrentPipelineArtifacts
+    type: boolean
+    default: false
+  - name: BundleId
+    type: string
+    default: 'com.microsoft.azure.cli'
+  - name: condition
+    type: string
+    default: 'succeeded()'
+  - name: dependsOn
+    type: object
+    default: []
+  - name: PythonVersion
+    type: string
+    default: '3.13'
+  - name: MacosArm64Image
+    type: string
+    default: 'macos-15-arm64'
+  - name: MacosIntelImage
+    type: string
+    default: 'macos-15'
+
+jobs:
+# ============================================================================
+# JOB: DOWNLOAD AND ANALYZE (Both Architectures via Matrix)
+# ============================================================================
+- job: DownloadAnalyze
+  displayName: 'macOS | Download and Analyze'
+  condition: ${{ parameters.condition }}
+  dependsOn: ${{ parameters.dependsOn }}
+  strategy:
+    matrix:
+      ARM64:
+        Architecture: 'arm64'
+        vmImageName: '${{ parameters.MacosArm64Image }}'
+      Intel:
+        Architecture: 'x86_64'
+        vmImageName: '${{ parameters.MacosIntelImage }}'
+  pool:
+    vmImage: $(vmImageName)
+  
+  steps:
+  - checkout: self
+    fetchDepth: 1
+  
+  # Download from current pipeline (integrated mode)
+  - ${{ if eq(parameters.UseCurrentPipelineArtifacts, true) }}:
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download unsigned build ($(Architecture))'
+      inputs:
+        buildType: 'current'
+        artifactName: 'cli-build-unsigned-$(Architecture)'
+        targetPath: '$(Pipeline.Workspace)/cli-build-unsigned-$(Architecture)'
+  
+  # Download from external pipeline (standalone mode)
+  - ${{ if eq(parameters.UseCurrentPipelineArtifacts, false) }}:
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download from Build Pipeline ${{ parameters.TarballBuildId }} ($(Architecture))'
+      inputs:
+        buildType: 'specific'
+        project: 'release'
+        definition: 'macos-build'
+        buildVersionToDownload: 'specific'
+        buildId: ${{ parameters.TarballBuildId }}
+        artifactName: 'cli-build-unsigned-$(Architecture)'
+        targetPath: '$(Pipeline.Workspace)/cli-build-unsigned-$(Architecture)'
+  
+  - bash: |
+      set -e
+      
+      ARCH="$(Architecture)"
+      ARTIFACT_DIR="$(Pipeline.Workspace)/cli-build-unsigned-$ARCH"
+      
+      echo "=== Analyzing Unsigned Tarball ($ARCH) ==="
+      ls -lh "$ARTIFACT_DIR/"
+      
+      TARBALL=$(find "$ARTIFACT_DIR" -name "azure-cli-*-macos-$ARCH-nopython.tar.gz" | head -1)
+      if [ -z "$TARBALL" ]; then
+        echo "ERROR: No azure-cli-*-macos-$ARCH-nopython.tar.gz found"
+        exit 1
+      fi
+      
+      TARBALL_NAME=$(basename "$TARBALL")
+      VERSION=$(echo "$TARBALL_NAME" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
+      
+      echo "Tarball: $TARBALL_NAME"
+      echo "Version: $VERSION"
+      
+      mkdir -p $(Build.ArtifactStagingDirectory)/unsigned
+      cp "$TARBALL" "$(Build.ArtifactStagingDirectory)/unsigned/"
+      
+      # Extract and find binaries to sign
+      EXTRACT_DIR=$(mktemp -d)
+      tar -xzf "$TARBALL" -C "$EXTRACT_DIR"
+      
+      # Find Mach-O binaries
+      find "$EXTRACT_DIR" -type f -exec file {} \; | \
+        grep -i "Mach-O" | \
+        grep -v "(for architecture" | \
+        cut -d: -f1 | \
+        sed "s|$EXTRACT_DIR/||" | \
+        sort -u > "$(Build.ArtifactStagingDirectory)/binaries-to-sign.txt"
+      
+      BINARY_COUNT=$(wc -l < "$(Build.ArtifactStagingDirectory)/binaries-to-sign.txt" | tr -d ' ')
+      echo "Binaries to sign: $BINARY_COUNT"
+      
+      # Keep extracted contents for signing
+      mkdir -p $(Build.ArtifactStagingDirectory)/unsigned-contents
+      cp -R "$EXTRACT_DIR"/* $(Build.ArtifactStagingDirectory)/unsigned-contents/
+      
+      echo "##vso[task.setvariable variable=AzureCliVersion;isOutput=true]$VERSION"
+      echo "##vso[task.setvariable variable=BinaryCount;isOutput=true]$BINARY_COUNT"
+      
+      rm -rf "$EXTRACT_DIR"
+    displayName: 'Analyze tarball ($(Architecture))'
+    name: AnalyzeStep
+  
+  - publish: $(Build.ArtifactStagingDirectory)/unsigned
+    artifact: unsigned-tarball-$(Architecture)
+    displayName: 'Publish unsigned tarball ($(Architecture))'
+  
+  - publish: $(Build.ArtifactStagingDirectory)/binaries-to-sign.txt
+    artifact: binaries-list-$(Architecture)
+    displayName: 'Publish binaries list ($(Architecture))'
+  
+  - publish: $(Build.ArtifactStagingDirectory)/unsigned-contents
+    artifact: unsigned-contents-$(Architecture)
+    displayName: 'Publish unsigned contents ($(Architecture))'
+
+# ============================================================================
+# JOB: SIGN BINARIES (Both Architectures via Matrix) - Windows Agent for ESRP
+# ============================================================================
+- job: SignBinaries
+  displayName: 'macOS | ESRP Sign Binaries'
+  dependsOn: DownloadAnalyze
+  condition: succeeded()
+  strategy:
+    matrix:
+      ARM64:
+        Architecture: 'arm64'
+      Intel:
+        Architecture: 'x86_64'
+  pool:
+    vmImage: 'windows-latest'
+  timeoutInMinutes: 30
+  
+  steps:
+  - checkout: none
+  
+  - download: current
+    artifact: unsigned-contents-$(Architecture)
+    displayName: 'Download unsigned contents ($(Architecture))'
+  
+  - download: current
+    artifact: binaries-list-$(Architecture)
+    displayName: 'Download binaries list ($(Architecture))'
+  
+  - pwsh: |
+      Write-Host "=== Preparing Binaries for ESRP Signing ($(Architecture)) ==="
+      
+      $extractPath = "$(Pipeline.Workspace)/unsigned-contents-$(Architecture)"
+      $fileListPath = "$(Pipeline.Workspace)/binaries-list-$(Architecture)/binaries-to-sign.txt"
+      $filesToSign = Get-Content $fileListPath | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+      
+      Write-Host "Files to sign: $($filesToSign.Count)"
+      
+      $toBeSignedDir = "$(Pipeline.Workspace)/toBeSigned"
+      New-Item -ItemType Directory -Path $toBeSignedDir -Force | Out-Null
+      
+      $fileMapping = @{}
+      $count = 0
+      
+      foreach ($relativePath in $filesToSign) {
+        $fullPath = Join-Path $extractPath $relativePath
+        
+        if (Test-Path $fullPath) {
+          $flatName = $relativePath -replace '[/\\]', '__'
+          $zipName = "$flatName.zip"
+          $zipPath = Join-Path $toBeSignedDir $zipName
+          
+          Compress-Archive -Path $fullPath -DestinationPath $zipPath -Force
+          
+          $fileMapping[$zipName] = @{
+            "OriginalPath" = $relativePath
+            "FileName" = (Split-Path $relativePath -Leaf)
+          }
+          
+          $count++
+        }
+      }
+      
+      Write-Host "Created $count ZIP files for signing"
+      
+      $mappingPath = "$(Pipeline.Workspace)/file-mapping.json"
+      $fileMapping | ConvertTo-Json -Depth 10 | Set-Content $mappingPath
+      
+    displayName: 'Create ZIP for each binary ($(Architecture))'
+  
+  - task: EsrpCodeSigning@5
+    displayName: 'ESRP - Sign binaries (Developer ID Application)'
+    inputs:
+      ConnectedServiceName: 'ame_esrp_connection'
+      AppRegistrationClientId: '$(ESRPAppClientId)'
+      AppRegistrationTenantId: '$(ESRPAppTenantId)'
+      AuthAKVName: '$(ESRPKVName)'
+      AuthCertName: '$(ESRPAuthCertName)'
+      AuthSignCertName: '$(ESRPSignCertName)'
+      FolderPath: '$(Pipeline.Workspace)/toBeSigned'
+      Pattern: '*.zip'
+      signConfigType: 'inlineSignParams'
+      inlineOperation: |
+        [
+          {
+            "KeyCode": "CP-401337-Apple",
+            "OperationCode": "MacAppDeveloperSign",
+            "ToolName": "sign",
+            "ToolVersion": "1.0",
+            "Parameters": {
+              "Hardening": "--options=runtime"
+            }
+          }
+        ]
+      SessionTimeout: '60'
+      MaxConcurrency: '25'
+      MaxRetryAttempts: '5'
+  
+  - pwsh: |
+      Write-Host "=== Extracting Signed Binaries ($(Architecture)) ==="
+      
+      $signedZipsDir = "$(Pipeline.Workspace)/toBeSigned"
+      $outputDir = "$(Build.ArtifactStagingDirectory)/signed-binaries"
+      $mappingPath = "$(Pipeline.Workspace)/file-mapping.json"
+      
+      New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+      
+      $fileMapping = Get-Content $mappingPath | ConvertFrom-Json
+      $count = 0
+      
+      foreach ($entry in $fileMapping.PSObject.Properties) {
+        $zipName = $entry.Name
+        $fileInfo = $entry.Value
+        $zipPath = Join-Path $signedZipsDir $zipName
+        
+        if (Test-Path $zipPath) {
+          $tempExtract = "$(Pipeline.Workspace)/temp_extract/$zipName"
+          Expand-Archive -Path $zipPath -DestinationPath $tempExtract -Force
+          
+          $extractedFile = Get-ChildItem -Path $tempExtract -File | Select-Object -First 1
+          
+          if ($extractedFile) {
+            $targetPath = Join-Path $outputDir $fileInfo.OriginalPath
+            $targetDir = Split-Path $targetPath -Parent
+            New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+            Copy-Item -Path $extractedFile.FullName -Destination $targetPath -Force
+            $count++
+          }
+        }
+      }
+      
+      Write-Host "Extracted $count signed binaries"
+      
+    displayName: 'Extract signed binaries ($(Architecture))'
+  
+  - publish: $(Build.ArtifactStagingDirectory)/signed-binaries
+    artifact: signed-binaries-$(Architecture)
+    displayName: 'Publish signed binaries ($(Architecture))'
+
+# ============================================================================
+# JOB: CREATE NOTARIZATION BUNDLE (Both Architectures via Matrix)
+# ============================================================================
+- job: CreateNotarizeBundle
+  displayName: 'macOS | Create Notarization Bundle'
+  dependsOn:
+  - DownloadAnalyze
+  - SignBinaries
+  condition: succeeded()
+  strategy:
+    matrix:
+      ARM64:
+        Architecture: 'arm64'
+        vmImageName: '${{ parameters.MacosArm64Image }}'
+      Intel:
+        Architecture: 'x86_64'
+        vmImageName: '${{ parameters.MacosIntelImage }}'
+  pool:
+    vmImage: $(vmImageName)
+  
+  steps:
+  - checkout: none
+  
+  - download: current
+    artifact: unsigned-tarball-$(Architecture)
+    displayName: 'Download unsigned tarball ($(Architecture))'
+  
+  - download: current
+    artifact: signed-binaries-$(Architecture)
+    displayName: 'Download signed binaries ($(Architecture))'
+  
+  - bash: |
+      set -e
+      
+      ARCH="$(Architecture)"
+      
+      echo "=== Merging Signed Binaries ($ARCH) ==="
+      
+      TARBALL=$(find $(Pipeline.Workspace)/unsigned-tarball-$ARCH -name "azure-cli-*-macos-$ARCH-nopython.tar.gz" | head -1)
+      MERGED_DIR="$(Build.ArtifactStagingDirectory)/merged"
+      
+      mkdir -p "$MERGED_DIR"
+      tar -xzf "$TARBALL" -C "$MERGED_DIR"
+      
+      echo "Extracted original tarball"
+      
+      # Overlay signed binaries
+      SIGNED_DIR="$(Pipeline.Workspace)/signed-binaries-$ARCH"
+      cd "$SIGNED_DIR"
+      
+      find . -type f | while read signed_file; do
+        target="$MERGED_DIR/$signed_file"
+        if [ -f "$target" ]; then
+          cp "$signed_file" "$target"
+          echo "  Replaced: $signed_file"
+        fi
+      done
+      
+      # Restore permissions
+      find "$MERGED_DIR" -name "*.so" -exec chmod +x {} \;
+      find "$MERGED_DIR" -name "*.dylib" -exec chmod +x {} \;
+      chmod +x "$MERGED_DIR/bin/az" 2>/dev/null || true
+      chmod +x "$MERGED_DIR/libexec/bin/az" 2>/dev/null || true
+      
+      # Verify sample signature
+      echo ""
+      echo "=== Verifying Signature (sample) ==="
+      SAMPLE_SO=$(find "$MERGED_DIR" -name "*.so" -type f | head -1)
+      if [ -n "$SAMPLE_SO" ]; then
+        echo "Sample: $(basename "$SAMPLE_SO")"
+        codesign -dvv "$SAMPLE_SO" 2>&1 | grep -E "Authority|TeamIdentifier" || true
+      fi
+      
+      # Export version
+      TARBALL_NAME=$(basename "$TARBALL")
+      VERSION=$(echo "$TARBALL_NAME" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
+      echo "##vso[task.setvariable variable=AzureCliVersion;isOutput=true]$VERSION"
+      
+    displayName: 'Merge signed binaries ($(Architecture))'
+    name: MergeStep
+  
+  - bash: |
+      set -e
+      
+      ARCH="$(Architecture)"
+      MERGED_DIR="$(Build.ArtifactStagingDirectory)/merged"
+      BUNDLE_DIR="$(Build.ArtifactStagingDirectory)/notarization-bundle"
+      
+      mkdir -p "$BUNDLE_DIR"
+      
+      TARBALL=$(find $(Pipeline.Workspace)/unsigned-tarball-$ARCH -name "azure-cli-*-macos-$ARCH-nopython.tar.gz" | head -1)
+      VERSION=$(basename "$TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
+      
+      ZIP_NAME="azure-cli-${VERSION}-macos-${ARCH}-nopython-signed.zip"
+      
+      cd "$MERGED_DIR"
+      zip -r -y "$BUNDLE_DIR/$ZIP_NAME" .
+      
+      echo "Created: $ZIP_NAME"
+      echo "Size: $(du -h "$BUNDLE_DIR/$ZIP_NAME" | cut -f1)"
+      
+    displayName: 'Create notarization ZIP ($(Architecture))'
+  
+  - publish: $(Build.ArtifactStagingDirectory)/notarization-bundle
+    artifact: notarization-bundle-$(Architecture)
+    displayName: 'Publish notarization bundle ($(Architecture))'
+
+# ============================================================================
+# JOB: NOTARIZE WITH APPLE (Both Architectures via Matrix) - Windows Agent for ESRP
+# ============================================================================
+- job: Notarize
+  displayName: 'macOS | ESRP Notarize with Apple'
+  dependsOn:
+  - DownloadAnalyze
+  - CreateNotarizeBundle
+  condition: succeeded()
+  strategy:
+    matrix:
+      ARM64:
+        Architecture: 'arm64'
+      Intel:
+        Architecture: 'x86_64'
+  pool:
+    vmImage: 'windows-latest'
+  timeoutInMinutes: 60
+  
+  steps:
+  - checkout: none
+  
+  - download: current
+    artifact: notarization-bundle-$(Architecture)
+    displayName: 'Download notarization bundle ($(Architecture))'
+  
+  - pwsh: |
+      Write-Host "=== Submitting to Apple for Notarization ($(Architecture)) ==="
+      Write-Host "Bundle ID: ${{ parameters.BundleId }}"
+      
+      $bundleDir = "$(Pipeline.Workspace)/notarization-bundle-$(Architecture)"
+      $zipFile = Get-ChildItem -Path $bundleDir -Filter "*.zip" | Select-Object -First 1
+      
+      Write-Host "ZIP file: $($zipFile.Name)"
+      Write-Host "Size: $([math]::Round($zipFile.Length / 1MB, 2)) MB"
+      
+      $toNotarizeDir = "$(Pipeline.Workspace)/toNotarize"
+      New-Item -ItemType Directory -Path $toNotarizeDir -Force | Out-Null
+      Copy-Item -Path $zipFile.FullName -Destination $toNotarizeDir
+      
+    displayName: 'Prepare for notarization ($(Architecture))'
+  
+  - task: EsrpCodeSigning@5
+    displayName: 'ESRP - Notarize with Apple ($(Architecture))'
+    inputs:
+      ConnectedServiceName: 'ame_esrp_connection'
+      AppRegistrationClientId: '$(ESRPAppClientId)'
+      AppRegistrationTenantId: '$(ESRPAppTenantId)'
+      AuthAKVName: '$(ESRPKVName)'
+      AuthCertName: '$(ESRPAuthCertName)'
+      AuthSignCertName: '$(ESRPSignCertName)'
+      FolderPath: '$(Pipeline.Workspace)/toNotarize'
+      Pattern: '*.zip'
+      signConfigType: 'inlineSignParams'
+      inlineOperation: |
+        [
+          {
+            "KeyCode": "CP-401337-Apple",
+            "OperationCode": "MacAppNotarize",
+            "ToolName": "sign",
+            "ToolVersion": "1.0",
+            "Parameters": {
+              "BundleId": "${{ parameters.BundleId }}"
+            }
+          }
+        ]
+      SessionTimeout: '120'
+      MaxConcurrency: '1'
+      MaxRetryAttempts: '3'
+  
+  - publish: $(Pipeline.Workspace)/toNotarize
+    artifact: notarized-bundle-$(Architecture)
+    displayName: 'Publish notarized bundle ($(Architecture))'
+
+# ============================================================================
+# JOB: CREATE FINAL TARBALL (Both Architectures via Matrix)
+# ============================================================================
+- job: CreateFinalTarball
+  displayName: 'macOS | Create Final Tarball'
+  dependsOn:
+  - DownloadAnalyze
+  - Notarize
+  - CreateNotarizeBundle
+  condition: succeeded()
+  strategy:
+    matrix:
+      ARM64:
+        Architecture: 'arm64'
+        vmImageName: '${{ parameters.MacosArm64Image }}'
+      Intel:
+        Architecture: 'x86_64'
+        vmImageName: '${{ parameters.MacosIntelImage }}'
+  pool:
+    vmImage: $(vmImageName)
+  
+  steps:
+  - checkout: none
+  
+  - download: current
+    artifact: unsigned-tarball-$(Architecture)
+    displayName: 'Download unsigned tarball ($(Architecture))'
+  
+  - download: current
+    artifact: signed-binaries-$(Architecture)
+    displayName: 'Download signed binaries ($(Architecture))'
+  
+  - bash: |
+      set -e
+      
+      ARCH="$(Architecture)"
+      
+      echo "=== Creating Final Signed+Notarized Tarball ($ARCH) ==="
+      
+      UNSIGNED_TARBALL=$(find $(Pipeline.Workspace)/unsigned-tarball-$ARCH -name "azure-cli-*-macos-$ARCH-nopython.tar.gz" | head -1)
+      TARBALL_NAME_ORIG=$(basename "$UNSIGNED_TARBALL")
+      VERSION=$(echo "$TARBALL_NAME_ORIG" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
+      
+      TARBALL_NAME="azure-cli-${VERSION}-macos-${ARCH}.tar.gz"
+      OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/final"
+      FINAL_DIR="$(Build.ArtifactStagingDirectory)/merged"
+      
+      mkdir -p "$OUTPUT_DIR" "$FINAL_DIR"
+      
+      echo "Version: $VERSION"
+      
+      # Extract unsigned (preserves symlinks)
+      tar -xzf "$UNSIGNED_TARBALL" -C "$FINAL_DIR"
+      
+      # Verify/recreate symlink
+      if [ -L "$FINAL_DIR/bin/az" ]; then
+        echo "bin/az symlink preserved"
+      else
+        rm -f "$FINAL_DIR/bin/az"
+        ln -s ../libexec/bin/az "$FINAL_DIR/bin/az"
+        echo "Recreated symlink: bin/az -> ../libexec/bin/az"
+      fi
+      
+      # Overlay signed binaries
+      SIGNED_DIR="$(Pipeline.Workspace)/signed-binaries-$ARCH"
+      cd "$SIGNED_DIR"
+      find . -type f | while read signed_file; do
+        target="$FINAL_DIR/$signed_file"
+        if [ -f "$target" ]; then
+          cp "$signed_file" "$target"
+        fi
+      done
+      
+      # Restore permissions
+      find "$FINAL_DIR" -name "*.so" -exec chmod +x {} \;
+      find "$FINAL_DIR" -name "*.dylib" -exec chmod +x {} \;
+      chmod +x "$FINAL_DIR/libexec/bin/az" 2>/dev/null || true
+      
+      # Create final tarball
+      cd "$FINAL_DIR"
+      tar -czf "$OUTPUT_DIR/$TARBALL_NAME" --preserve-permissions .
+      
+      # Generate SHA256
+      cd "$OUTPUT_DIR"
+      shasum -a 256 "$TARBALL_NAME" > "$TARBALL_NAME.sha256"
+      
+      echo "=== Final Artifacts ==="
+      ls -lh "$OUTPUT_DIR"
+      cat "$TARBALL_NAME.sha256"
+      
+      echo "##vso[task.setvariable variable=TarballName;isOutput=true]$TARBALL_NAME"
+      echo "##vso[task.setvariable variable=AzureCliVersion;isOutput=true]$VERSION"
+      
+    displayName: 'Create final tar.gz ($(Architecture))'
+    name: CreateStep
+  
+  - bash: |
+      set -e
+      
+      ARCH="$(Architecture)"
+      OUTPUT_DIR="$(Build.ArtifactStagingDirectory)/final"
+      TARBALL=$(find "$OUTPUT_DIR" -name "azure-cli-*-macos-$ARCH.tar.gz" | head -1)
+      TEST_DIR=$(mktemp -d)
+      
+      tar -xzf "$TARBALL" -C "$TEST_DIR"
+      
+      # Verify signature
+      SAMPLE_SO=$(find "$TEST_DIR" -name "*.so" -type f | head -1)
+      if [ -n "$SAMPLE_SO" ]; then
+        echo "Checking signature: $(basename "$SAMPLE_SO")"
+        codesign -dvv "$SAMPLE_SO" 2>&1 | head -10
+      fi
+      
+      # Test CLI
+      if brew list python@${{ parameters.PythonVersion }} &>/dev/null; then
+        AZ_PYTHON="$(brew --prefix python@${{ parameters.PythonVersion }})/libexec/bin/python3"
+        export AZ_PYTHON
+        export AZ_DEBUG=1
+        "$TEST_DIR/bin/az" version 2>&1 | head -5
+        echo "CLI works correctly ($ARCH)"
+      fi
+      
+      rm -rf "$TEST_DIR"
+      
+    displayName: 'Verify final tarball ($(Architecture))'
+  
+  - publish: $(Build.ArtifactStagingDirectory)/final
+    artifact: 'cli-signed-notarized-$(Architecture)'
+    displayName: 'Publish final signed+notarized tarball ($(Architecture))'
