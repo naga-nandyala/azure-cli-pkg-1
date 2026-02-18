@@ -1,8 +1,12 @@
-# Test Pipeline: Homebrew Cask with Temporary Tap
+# Test Pipeline: Signing & Notarization Verification
 #
-# Purpose: Test cask generation, artifact publishing, and installation using a local temporary tap
-# This mirrors the flow in macos-cask-generation-and-tests.yml and macos-publish-jobs.yml
-# Usage: Downloads artifacts from a previous pipeline run and tests locally
+# Purpose: Verify code signing and notarization of macOS binaries
+# Usage: Downloads signed tarballs from a previous pipeline run and verifies signing
+#
+# This pipeline is useful for:
+# - Testing signing verification logic without running the full pipeline
+# - Validating artifacts from previous builds
+# - Quick iteration on verification scripts
 
 trigger: none
 
@@ -21,37 +25,18 @@ parameters:
     displayName: 'Python Version (Homebrew)'
     type: string
     default: '3.13'
-  
-  - name: GitHubRepo
-    displayName: 'GitHub Repo (for cask URLs)'
-    type: string
-    default: 'naga-nandyala/azure-cli-pkg-1'
 
 variables:
-  # Disable auto-injection tasks
   - name: Codeql.Enabled
     value: false
   - name: Codeql.SkipTaskAutoInjection
     value: true
-  - name: CodeQL.enabled
-    value: false
   - name: runCodesignValidationInjection
     value: false
-  - name: DOTNET_CLI_TELEMETRY_OPTOUT
-    value: 1
-  - name: DOTNET_NOLOGO
-    value: 1
-  - name: NugetSecurityAnalysisWarningLevel
-    value: none
-  - name: skipNugetSecurityAnalysis
-    value: true
 
 jobs:
-# ============================================================================
-# JOB: GENERATE CASK AND TEST VIA TEMP HOMEBREW TAP (Both Architectures)
-# ============================================================================
-- job: TestTempTapCask
-  displayName: 'Generate Cask and Test Via Temp HomebrewTap'
+- job: VerifySigningNotarization
+  displayName: 'Verify Signing & Notarization'
   strategy:
     matrix:
       ARM64:
@@ -64,258 +49,113 @@ jobs:
     vmImage: $(VM_IMAGE)
 
   steps:
-  - checkout: self
-    fetchDepth: 1
+  - checkout: none
 
-  # Download tarballs for this architecture
   - task: DownloadPipelineArtifact@2
-    displayName: 'Download ARM64 tarball'
+    displayName: 'Download signed tarball ($(ARCH))'
     inputs:
       buildType: 'specific'
       project: '$(System.TeamProjectId)'
       pipeline: '${{ parameters.SourcePipelineId }}'
       buildVersionToDownload: 'specific'
       buildId: ${{ parameters.SourceBuildId }}
-      artifactName: 'cli-signed-notarized-arm64'
-      targetPath: '$(Pipeline.Workspace)/cli-signed-notarized-arm64'
-
-  - task: DownloadPipelineArtifact@2
-    displayName: 'Download Intel tarball'
-    inputs:
-      buildType: 'specific'
-      project: '$(System.TeamProjectId)'
-      pipeline: '${{ parameters.SourcePipelineId }}'
-      buildVersionToDownload: 'specific'
-      buildId: ${{ parameters.SourceBuildId }}
-      artifactName: 'cli-signed-notarized-x86_64'
-      targetPath: '$(Pipeline.Workspace)/cli-signed-notarized-x86_64'
+      artifactName: 'cli-signed-notarized-$(ARCH)'
+      targetPath: '$(Pipeline.Workspace)/cli-signed-notarized-$(ARCH)'
 
   - bash: |
       echo "=== Environment Info ($(ARCH)) ==="
-      echo "HOMEBREW_CASK_OPTS: $HOMEBREW_CASK_OPTS"
       echo "macOS version: $(sw_vers -productVersion)"
-      echo "Homebrew version: $(brew --version | head -1)"
-      echo "Homebrew prefix: $(brew --prefix)"
-      echo "Homebrew repository: $(brew --repository)"
+      echo "Architecture: $(uname -m)"
     displayName: 'Show environment info'
 
   - bash: |
-      echo "Cleanup: Remove pre-installed Azure CLI ($(ARCH))"
-      
-      if command -v az &> /dev/null; then
-        echo "Pre-installed Azure CLI detected: $(which az)"
-        brew uninstall azure-cli 2>/dev/null || true
-        brew uninstall --cask azure-cli 2>/dev/null || true
-        sudo rm -f /usr/local/bin/az
-        sudo rm -f /opt/homebrew/bin/az
-        hash -r
+      set -e
+      ARCH="$(ARCH)"
+      TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-$ARCH -name "azure-cli-*-macos-$ARCH.tar.gz" | head -1)
+      if [ -z "$TARBALL" ]; then
+        echo "##vso[task.logissue type=error]No tarball found for $ARCH"
+        exit 1
       fi
+      TEST_DIR=$(mktemp -d)
+      echo "Tarball: $(basename $TARBALL)"
+      tar -xzf "$TARBALL" -C "$TEST_DIR"
       
-    displayName: 'Cleanup pre-installed Azure CLI'
-
-  - bash: |
-      set -ev
+      SIGNED_COUNT=0
+      UNSIGNED_COUNT=0
       
-      # Get tarballs
-      ARM64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-arm64 -name "azure-cli-*-macos-arm64.tar.gz" | head -1)
-      X86_64_TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-x86_64 -name "azure-cli-*-macos-x86_64.tar.gz" | head -1)
-      
-      VERSION=$(basename "$ARM64_TARBALL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+([a-z0-9]+)?' | head -1)
-      
-      ARM64_SHA256=$(cat ${ARM64_TARBALL}.sha256 | cut -d' ' -f1)
-      X86_64_SHA256=$(cat ${X86_64_TARBALL}.sha256 | cut -d' ' -f1)
-      
-      echo "=== Generating Cask using template ==="
-      echo "Version: $VERSION"
-      echo "ARM64 tarball: $ARM64_TARBALL"
-      echo "ARM64 SHA256: $ARM64_SHA256"
-      echo "x86_64 tarball: $X86_64_TARBALL"
-      echo "x86_64 SHA256: $X86_64_SHA256"
-      
-      # Resolve repo root
-      REPO_NAME="$(Build.Repository.Name)"
-      REPO_DIR="${REPO_NAME##*/}"
-      REPO_ROOT=""
-      for candidate in \
-        "$(Build.SourcesDirectory)/$REPO_DIR" \
-        "$(Build.SourcesDirectory)/$REPO_NAME" \
-        "$(Build.SourcesDirectory)"; do
-        if [ -d "$candidate" ]; then
-          REPO_ROOT="$candidate"
-          break
+      while IFS= read -r -d '' file; do
+        if codesign -v "$file" 2>/dev/null; then
+          ((SIGNED_COUNT++))
+        else
+          ((UNSIGNED_COUNT++))
+          echo "WARNING: Unsigned: $(basename $file)"
         fi
-      done
+      done < <(find "$TEST_DIR" -name "*.so" -type f -print0)
       
-      if [ -z "$REPO_ROOT" ]; then
-        echo "ERROR: Unable to resolve repo root"
-        exit 1
+      while IFS= read -r -d '' file; do
+        if codesign -v "$file" 2>/dev/null; then
+          ((SIGNED_COUNT++))
+        else
+          ((UNSIGNED_COUNT++))
+        fi
+      done < <(find "$TEST_DIR" -name "*.dylib" -type f -print0)
+      
+      echo "Signing Summary:"
+      echo "  Signed: $SIGNED_COUNT"
+      echo "  Unsigned: $UNSIGNED_COUNT"
+      
+      if [ "$UNSIGNED_COUNT" -gt 0 ]; then
+        echo "##vso[task.logissue type=warning]Found $UNSIGNED_COUNT unsigned binaries"
       fi
       
-      # Generate cask using template with GitHub URLs (for publishing artifact)
-      mkdir -p $(Pipeline.Workspace)/cask-definition
-      python3 "$REPO_ROOT/scripts/release/macos/cask_generate.py" \
-        --version "$VERSION" \
-        --arm64-sha "$ARM64_SHA256" \
-        --x86-64-sha "$X86_64_SHA256" \
-        --github-repo "${{ parameters.GitHubRepo }}" \
-        --template "$REPO_ROOT/scripts/release/macos/templates/azure-cli.rb.in" \
-        --output "$(Pipeline.Workspace)/cask-definition/azure-cli.rb"
-      
-      echo "=== Generated Cask (GitHub URLs - for publishing) ==="
-      cat $(Pipeline.Workspace)/cask-definition/azure-cli.rb
-      
-      # Copy to staging and modify for local file:// testing
-      mkdir -p $(Pipeline.Workspace)/cask-staging
-      cp $(Pipeline.Workspace)/cask-definition/azure-cli.rb $(Pipeline.Workspace)/cask-staging/azure-cli.rb
-      
-      # Replace GitHub URL with file:// URL for local testing
-      WORKSPACE_PATH="$(Pipeline.Workspace)"
-      sed -i.bak "s|url \"https://github.com/[^\"]*\"|url \"file://${WORKSPACE_PATH}/cli-signed-notarized-#{arch}/azure-cli-#{version}-macos-#{arch}.tar.gz\"|" \
-        $(Pipeline.Workspace)/cask-staging/azure-cli.rb
-      
-      # Remove the livecheck block since we're testing locally
-      sed -i.bak '/livecheck do/,/^  end$/d' $(Pipeline.Workspace)/cask-staging/azure-cli.rb
-      
-      echo "=== Generated Cask (file:// URLs - for local testing) ==="
-      cat $(Pipeline.Workspace)/cask-staging/azure-cli.rb
-      
-      # Export tarball paths for verification
-      echo "##vso[task.setvariable variable=ARM64_TARBALL]$ARM64_TARBALL"
-      echo "##vso[task.setvariable variable=X86_64_TARBALL]$X86_64_TARBALL"
-      
-    displayName: 'Generate cask definition'
+      SAMPLE_SO=$(find "$TEST_DIR" -name "*.so" -type f | head -1)
+      if [ -n "$SAMPLE_SO" ]; then
+        echo "=== Sample Signature Details ==="
+        codesign -dvvv "$SAMPLE_SO" 2>&1 | grep -E "^(Identifier|TeamIdentifier|Authority|CDHash)" || true
+        echo "=== Authority Chain ==="
+        codesign -d --verbose=4 "$SAMPLE_SO" 2>&1 | grep "Authority" || true
+        echo "=== Strict Verification ==="
+        if codesign --verify --deep --strict "$SAMPLE_SO" 2>&1; then
+          echo "Signature: VALID"
+        else
+          echo "Signature: Has issues"
+        fi
+        echo "=== Developer ID Check ==="
+        if codesign -dvv "$SAMPLE_SO" 2>&1 | grep -q "Developer ID"; then
+          echo "Signed with Developer ID certificate"
+        else
+          echo "WARNING: May not be signed with Developer ID"
+        fi
+      fi
+      rm -rf "$TEST_DIR"
+    displayName: 'Verify code signing ($(ARCH))'
 
   - bash: |
-      set -ev
+      set -e
+      ARCH="$(ARCH)"
+      TARBALL=$(find $(Pipeline.Workspace)/cli-signed-notarized-$ARCH -name "azure-cli-*-macos-$ARCH.tar.gz" | head -1)
+      TEST_DIR=$(mktemp -d)
+      tar -xzf "$TARBALL" -C "$TEST_DIR"
       
-      echo "=== Creating Temporary Homebrew Tap ($(ARCH)) ==="
+      if ! brew list python@${{ parameters.PythonVersion }} &>/dev/null; then
+        brew install python@${{ parameters.PythonVersion }}
+      fi
       
-      # Configure git (required for tap creation)
-      git config --global user.email "test@pipeline.local"
-      git config --global user.name "Test Pipeline"
+      AZ_PYTHON="$(brew --prefix python@${{ parameters.PythonVersion }})/libexec/bin/python3"
+      export AZ_PYTHON
       
-      # Create a temporary tap
-      brew tap-new test/azure-cli
-      
-      # Get tap path
-      TAP_PATH="$(brew --repository)/Library/Taps/test/homebrew-azure-cli"
-      echo "Tap path: $TAP_PATH"
-      
-      # Create Casks directory and copy cask
-      mkdir -p "$TAP_PATH/Casks"
-      cp $(Pipeline.Workspace)/cask-staging/azure-cli.rb "$TAP_PATH/Casks/"
-      
-      echo "=== Cask copied to tap ==="
-      ls -la "$TAP_PATH/Casks/"
-      
-      # Commit the cask (required for installation)
-      cd "$TAP_PATH"
-      git add Casks/azure-cli.rb
-      git commit -m "Add azure-cli cask for testing"
-      
-      echo "=== Tap Structure ==="
-      ls -la "$TAP_PATH"
-      
-    displayName: 'Create temporary tap'
-
-  - bash: |
-      set -ev
-      
-      echo "=== Installing Cask from Temporary Tap ($(ARCH)) ==="
-      
-      # List available casks in our tap
-      brew tap test/azure-cli
-      echo "Tapped casks:"
-      brew list --cask --full-name 2>/dev/null || true
-      
-      # Install the cask from our temporary tap
-      brew install --cask test/azure-cli/azure-cli
-      
-      # Verify installation
-      echo "=== Verifying Installation ==="
-      which az
-      az --version
-      
-      echo "=== Temporary Tap Cask Test PASSED ($(ARCH)) ==="
-      
-    displayName: 'Install and test cask'
-
-  - bash: |
-      echo "=== Cleanup ($(ARCH)) ==="
-      
-      # Uninstall the cask
-      brew uninstall --cask azure-cli 2>/dev/null || true
-      
-      # Remove temporary tap
-      brew untap test/azure-cli 2>/dev/null || true
-      
-      echo "Cleanup complete"
-    displayName: 'Cleanup'
-    condition: always()
-
-  # Publish cask artifact (only from ARM64 job - cask.rb is identical for both archs)
-  - task: PublishPipelineArtifact@1
-    displayName: 'Publish cask definition artifact'
-    condition: and(succeeded(), eq(variables['ARCH'], 'arm64'))
-    inputs:
-      targetPath: '$(Pipeline.Workspace)/cask-definition'
-      artifactName: 'cask-definition'
-
-# ============================================================================
-# JOB: SIMULATE PUBLISH (Test artifact handoff)
-# ============================================================================
-- job: SimulatePublish
-  displayName: 'Simulate Publish (Test Artifact Handoff)'
-  dependsOn: TestTempTapCask
-  condition: succeeded()
-  pool:
-    vmImage: 'ubuntu-latest'
-  
-  steps:
-  - checkout: none
-  
-  - download: current
-    artifact: 'cask-definition'
-    displayName: 'Download cask definition artifact'
-  
-  - bash: |
-      echo "╔══════════════════════════════════════════════════════════════════╗"
-      echo "║      SIMULATE PUBLISH - ARTIFACT HANDOFF TEST                    ║"
-      echo "╠══════════════════════════════════════════════════════════════════╣"
-      echo "║ This job simulates the publish workflow by downloading the       ║"
-      echo "║ cask-definition artifact generated by TestTempTapCask.           ║"
-      echo "╚══════════════════════════════════════════════════════════════════╝"
-      echo ""
-      echo "=== Downloaded Artifact Contents ==="
-      ls -la $(Pipeline.Workspace)/cask-definition/
-      echo ""
-      echo "=== Cask Definition (Ready for Homebrew tap publish) ==="
-      cat $(Pipeline.Workspace)/cask-definition/azure-cli.rb
-      echo ""
-      echo "=== Verification ==="
-      # Extract version from cask
-      VERSION=$(grep -oP 'version "\K[^"]+' $(Pipeline.Workspace)/cask-definition/azure-cli.rb | head -1)
-      echo "Version: $VERSION"
-      
-      # Verify URLs point to GitHub (not file://)
-      if grep -q "https://github.com" $(Pipeline.Workspace)/cask-definition/azure-cli.rb; then
-        echo "✓ URLs correctly point to GitHub"
+      if "$TEST_DIR/bin/az" version 2>&1; then
+        echo "CLI functional test: PASSED ($ARCH)"
       else
-        echo "✗ ERROR: URLs should point to GitHub, not file://"
+        echo "##vso[task.logissue type=error]CLI functional test failed"
         exit 1
       fi
-      
-      # Verify both architectures are present (cask uses 'arm:' and 'intel:' syntax)
-      if grep -q "arm:" $(Pipeline.Workspace)/cask-definition/azure-cli.rb && \
-         grep -q "intel:" $(Pipeline.Workspace)/cask-definition/azure-cli.rb; then
-        echo "✓ Both arm64 and x86_64 architectures present"
-      else
-        echo "✗ ERROR: Missing architecture definitions"
-        exit 1
-      fi
-      
-      echo ""
-      echo "=== ARTIFACT HANDOFF TEST PASSED ==="
-      echo "The cask-definition artifact is ready for actual publishing."
-    displayName: 'Verify artifact and simulate publish'
+      rm -rf "$TEST_DIR"
+    displayName: 'Functional test ($(ARCH))'
+
+  - bash: |
+      echo "=== VERIFICATION COMPLETE ($(ARCH)) ==="
+      echo "Build ID: ${{ parameters.SourceBuildId }}"
+      echo "Pipeline: ${{ parameters.SourcePipelineId }}"
+    displayName: 'Summary'
 

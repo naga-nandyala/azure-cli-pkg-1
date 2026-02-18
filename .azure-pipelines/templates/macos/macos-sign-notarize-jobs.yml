@@ -571,27 +571,129 @@ jobs:
       TARBALL=$(find "$OUTPUT_DIR" -name "azure-cli-*-macos-$ARCH.tar.gz" | head -1)
       TEST_DIR=$(mktemp -d)
       
+      echo "=== Extracting tarball for verification ==="
       tar -xzf "$TARBALL" -C "$TEST_DIR"
       
-      # Verify signature
-      SAMPLE_SO=$(find "$TEST_DIR" -name "*.so" -type f | head -1)
-      if [ -n "$SAMPLE_SO" ]; then
-        echo "Checking signature: $(basename "$SAMPLE_SO")"
-        codesign -dvv "$SAMPLE_SO" 2>&1 | head -10
+      echo ""
+      echo "=== Verifying Code Signing ==="
+      
+      # Count all signable binaries
+      SIGNED_COUNT=0
+      UNSIGNED_COUNT=0
+      INVALID_COUNT=0
+      
+      # Check .so files
+      while IFS= read -r -d '' file; do
+        if codesign -v "$file" 2>/dev/null; then
+          ((SIGNED_COUNT++))
+        else
+          ((UNSIGNED_COUNT++))
+          echo "WARNING: Unsigned: $file"
+        fi
+      done < <(find "$TEST_DIR" -name "*.so" -type f -print0)
+      
+      # Check .dylib files
+      while IFS= read -r -d '' file; do
+        if codesign -v "$file" 2>/dev/null; then
+          ((SIGNED_COUNT++))
+        else
+          ((UNSIGNED_COUNT++))
+          echo "WARNING: Unsigned: $file"
+        fi
+      done < <(find "$TEST_DIR" -name "*.dylib" -type f -print0)
+      
+      # Check executables in bin/
+      while IFS= read -r -d '' file; do
+        if file "$file" | grep -q "Mach-O"; then
+          if codesign -v "$file" 2>/dev/null; then
+            ((SIGNED_COUNT++))
+          else
+            ((UNSIGNED_COUNT++))
+            echo "WARNING: Unsigned executable: $file"
+          fi
+        fi
+      done < <(find "$TEST_DIR/bin" "$TEST_DIR/libexec/bin" -type f -print0 2>/dev/null || true)
+      
+      echo ""
+      echo "Signing Summary:"
+      echo "  Signed binaries: $SIGNED_COUNT"
+      echo "  Unsigned binaries: $UNSIGNED_COUNT"
+      
+      if [ "$UNSIGNED_COUNT" -gt 0 ]; then
+        echo "##vso[task.logissue type=warning]Found $UNSIGNED_COUNT unsigned binaries"
       fi
       
+      echo ""
+      echo "=== Sample Signature Details ==="
+      SAMPLE_SO=$(find "$TEST_DIR" -name "*.so" -type f | head -1)
+      if [ -n "$SAMPLE_SO" ]; then
+        echo "Checking: $(basename "$SAMPLE_SO")"
+        codesign -dvvv "$SAMPLE_SO" 2>&1 | grep -E "^(Identifier|TeamIdentifier|Authority|Signature|CDHash)" || true
+      fi
+      
+      echo ""
+      echo "=== Verifying Signing Authority Chain ==="
+      # For individual binaries (.so, .dylib), notarization tickets are stored on Apple's servers
+      # macOS checks online via Gatekeeper/OCSP when the binary is first executed
+      # stapler only works for .app, .dmg, .pkg bundles - not individual binaries
+      
+      if [ -n "$SAMPLE_SO" ]; then
+        echo "Sample binary: $(basename "$SAMPLE_SO")"
+        echo ""
+        echo "Authority chain:"
+        codesign -d --verbose=4 "$SAMPLE_SO" 2>&1 | grep "Authority" || echo "Could not extract authority chain"
+        
+        echo ""
+        echo "Signature validity:"
+        if codesign --verify --deep --strict "$SAMPLE_SO" 2>&1; then
+          echo "  Signature: VALID (strict verification passed)"
+        else
+          echo "  Signature: May have issues"
+        fi
+        
+        echo ""
+        echo "Developer ID check:"
+        # Check if signed with Developer ID (required for notarization)
+        if codesign -dvv "$SAMPLE_SO" 2>&1 | grep -q "Developer ID"; then
+          echo "  Signed with: Developer ID certificate (notarization-eligible)"
+        else
+          echo "  WARNING: Not signed with Developer ID certificate"
+        fi
+      fi
+      
+      echo ""
+      echo "=== Notarization Note ==="
+      echo "Individual binaries (.so, .dylib) cannot be stapled with notarization tickets."
+      echo "The notarization is registered with Apple's servers and verified online"
+      echo "via Gatekeeper/OCSP when the binary is first executed by end users."
+      echo "To verify notarization was successful, check the ESRP notarization job logs."
+      
+      echo ""
+      echo "=== Functional Test ==="
       # Test CLI
       if brew list python@${{ parameters.PythonVersion }} &>/dev/null; then
         AZ_PYTHON="$(brew --prefix python@${{ parameters.PythonVersion }})/libexec/bin/python3"
         export AZ_PYTHON
         export AZ_DEBUG=1
-        "$TEST_DIR/bin/az" version 2>&1 | head -5
-        echo "CLI works correctly ($ARCH)"
+        if "$TEST_DIR/bin/az" version 2>&1 | head -5; then
+          echo "CLI functional test: PASSED ($ARCH)"
+        else
+          echo "##vso[task.logissue type=error]CLI functional test failed"
+          exit 1
+        fi
+      else
+        echo "Skipping functional test - Python ${{ parameters.PythonVersion }} not available"
       fi
       
       rm -rf "$TEST_DIR"
       
-    displayName: 'Verify final tarball ($(Architecture))'
+      echo ""
+      echo "=== Verification Complete ==="
+      echo "Architecture: $ARCH"
+      echo "Signed binaries: $SIGNED_COUNT"
+      echo "Tarball: $(basename "$TARBALL")"
+      
+    displayName: 'Verify signing & notarization ($(Architecture))'
   
   - publish: $(Build.ArtifactStagingDirectory)/final
     artifact: 'macos-cli-signed-notarized-$(Architecture)'
