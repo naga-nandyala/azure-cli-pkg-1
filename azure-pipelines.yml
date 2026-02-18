@@ -737,7 +737,7 @@ jobs:
 # DISABLED: # ============================================================================
 # DISABLED: 
 # DISABLED: # Phase 1: Build unsigned tarballs (ARM64 + Intel)
-- template: .azure-pipelines/templates/macos-build-jobs.yml
+- template: .azure-pipelines/templates/macos/macos-build-jobs.yml
   parameters:
     PythonVersion: $(macos_cask_python_version)
     MacosArm64Image: ${{ variables.macos_arm64_pool }}
@@ -746,7 +746,7 @@ jobs:
     dependsOn: ['ExtractMetadata']
 
 # Phase 2: Sign and notarize via ESRP
-- template: .azure-pipelines/templates/macos-sign-notarize-jobs.yml
+- template: .azure-pipelines/templates/macos/macos-sign-notarize-jobs.yml
   parameters:
     MacosArm64Image: ${{ variables.macos_arm64_pool }}
     MacosIntelImage: ${{ variables.macos_pool }}
@@ -756,7 +756,7 @@ jobs:
     dependsOn: ['VerifyMacOSCli']
 
 # Phase 3: Generate cask and test via temp tap
-- template: .azure-pipelines/templates/macos-cask-generation-and-tests.yml
+- template: .azure-pipelines/templates/macos/macos-cask-generation-and-tests.yml
   parameters:
     MacosArm64Image: ${{ variables.macos_arm64_pool }}
     MacosIntelImage: ${{ variables.macos_pool }}

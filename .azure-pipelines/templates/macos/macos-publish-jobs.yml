@@ -16,7 +16,7 @@
 #   - dependsOn: Jobs this depends on (typically test jobs)
 #
 # Requires:
-#   - Artifacts: cli-signed-notarized-arm64, cli-signed-notarized-x86_64, cask-definition
+#   - Artifacts: macos-cli-signed-notarized-arm64, macos-cli-signed-notarized-x86_64, macos-cask-definition
 #   - Repository resource: homebrewtap (for Homebrew cask updates)
 
 parameters:
@@ -70,17 +70,17 @@ jobs:
     - checkout: none
     
     - download: current
-      artifact: 'cli-signed-notarized-arm64'
+      artifact: 'macos-cli-signed-notarized-arm64'
       displayName: 'Download signed tarball (ARM64)'
     
     - download: current
-      artifact: 'cli-signed-notarized-x86_64'
+      artifact: 'macos-cli-signed-notarized-x86_64'
       displayName: 'Download signed tarball (Intel)'
     
     - task: CopyFiles@2
       displayName: 'Copy ARM64 release files'
       inputs:
-        SourceFolder: '$(Pipeline.Workspace)/cli-signed-notarized-arm64'
+        SourceFolder: '$(Pipeline.Workspace)/macos-cli-signed-notarized-arm64'
         Contents: |
           azure-cli-*.tar.gz
           azure-cli-*.tar.gz.sha256
@@ -90,7 +90,7 @@ jobs:
     - task: CopyFiles@2
       displayName: 'Copy Intel release files'
       inputs:
-        SourceFolder: '$(Pipeline.Workspace)/cli-signed-notarized-x86_64'
+        SourceFolder: '$(Pipeline.Workspace)/macos-cli-signed-notarized-x86_64'
         Contents: |
           azure-cli-*.tar.gz
           azure-cli-*.tar.gz.sha256
@@ -169,7 +169,7 @@ jobs:
       path: homebrew-tap
     
     - download: current
-      artifact: 'cask-definition'
+      artifact: 'macos-cask-definition'
       displayName: 'Download cask definition'
     
     - bash: |
@@ -181,7 +181,7 @@ jobs:
         mkdir -p Casks
         
         # Copy the pre-generated cask from artifact
-        cp $(Pipeline.Workspace)/cask-definition/azure-cli.rb Casks/azure-cli.rb
+        cp $(Pipeline.Workspace)/macos-cask-definition/azure-cli.rb Casks/azure-cli.rb
         
         echo "=== Cask Definition ==="
         cat Casks/azure-cli.rb
@@ -296,8 +296,8 @@ jobs:
       echo "╠══════════════════════════════════════════════════════════════════╣"
       echo "║ ARTIFACTS CONSUMED                                               ║"
       echo "╠══════════════════════════════════════════════════════════════════╣"
-      echo "║ • cli-signed-notarized-arm64 (tarballs)                          ║"
-      echo "║ • cli-signed-notarized-x86_64 (tarballs)                         ║"
-      echo "║ • cask-definition (azure-cli.rb)                                 ║"
+      echo "║ • macos-cli-signed-notarized-arm64 (tarballs)                          ║"
+      echo "║ • macos-cli-signed-notarized-x86_64 (tarballs)                         ║"
+      echo "║ • macos-cask-definition (azure-cli.rb)                                 ║"
       echo "╚══════════════════════════════════════════════════════════════════╝"
     displayName: 'Print Summary'
