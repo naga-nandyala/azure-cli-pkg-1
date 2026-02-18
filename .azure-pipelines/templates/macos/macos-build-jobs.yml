@@ -94,6 +94,11 @@ jobs:
       
     displayName: 'Build Azure CLI Tarball'
   
+  - task: AzureArtifacts.manifest-generator-task.manifest-generator-task.ManifestGeneratorTask@0
+    displayName: 'Generate SBOM'
+    inputs:
+      BuildDropPath: $(Build.ArtifactStagingDirectory)/cli-build
+  
   - publish: $(Build.ArtifactStagingDirectory)/cli-build
     artifact: 'macos-cli-build-unsigned-$(Architecture)'
     displayName: 'Publish Unsigned CLI Build ($(Architecture))'

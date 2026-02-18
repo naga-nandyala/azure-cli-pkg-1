@@ -737,6 +737,11 @@ jobs:
       
     displayName: 'Verify signing & notarization ($(Architecture))'
   
+  - task: AzureArtifacts.manifest-generator-task.manifest-generator-task.ManifestGeneratorTask@0
+    displayName: 'Generate SBOM'
+    inputs:
+      BuildDropPath: $(Build.ArtifactStagingDirectory)/final
+  
   - publish: $(Build.ArtifactStagingDirectory)/final
     artifact: 'macos-cli-signed-notarized-$(Architecture)'
     displayName: 'Publish final signed+notarized tarball ($(Architecture))'
