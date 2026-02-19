@@ -57,6 +57,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 SRC_DIR = PROJECT_ROOT / "src"
 AZURE_CLI_CORE_DIR = SRC_DIR / "azure-cli-core"
+REQUIREMENTS_FILE = SRC_DIR / "azure-cli" / "requirements.py3.MacOS.txt"
 
 # Package configuration
 APP_NAME = "azure-cli"
@@ -167,38 +168,46 @@ def create_venv(python_path: Path, venv_dir: Path) -> Path:
 
 
 def install_azure_cli(venv_python: Path) -> None:
-    """Install Azure CLI and all dependencies using the pinned requirements file."""
-    print("\n=== Installing Azure CLI from requirements file ===")
+    """Install Azure CLI components from source, then install pinned dependencies.
 
-    requirements_file = SRC_DIR / "azure-cli" / "requirements.py3.MacOS.txt"
-    if not requirements_file.exists():
-        raise BuildError(f"Requirements file not found: {requirements_file}")
+    Mirrors the run.sh approach:
+      1. Install all src packages with --no-deps (local source code takes precedence)
+      2. Install pinned dependencies from requirements.py3.MacOS.txt
+    """
+    # Step 1: install every package found under SRC_DIR from source, without pulling
+    # transitive deps from PyPI (--no-deps). This ensures the locally-built wheels
+    # are used for the CLI components themselves.
+    print("\n=== Step 1: Installing Azure CLI components from source (--no-deps) ===")
 
-    print(f"  Using: {requirements_file}")
+    # Install from local source first so in-tree patches are picked up
+    components = [
+        SRC_DIR / "azure-cli-telemetry",
+        SRC_DIR / "azure-cli-core",
+        SRC_DIR / "azure-cli",
+    ]
+
+    for component in components:
+        print(f"  Installing {component.name} (--no-deps)...")
+        subprocess.run(
+            [str(venv_python), "-m", "pip", "install", "--no-deps", str(component)],
+            check=True,
+        )
+
+    # Step 2: install all pinned transitive dependencies so every package
+    # resolves to the exact version recorded in the requirements file.
+    print("\n=== Step 2: Installing pinned dependencies from requirements file ===")
+
+    if not REQUIREMENTS_FILE.exists():
+        raise BuildError(f"Requirements file not found: {REQUIREMENTS_FILE}")
+
+    print(f"  Using: {REQUIREMENTS_FILE}")
     subprocess.run(
-        [str(venv_python), "-m", "pip", "install", "--only-binary", ":all:", "-r", str(requirements_file)],
+        [str(venv_python), "-m", "pip", "install", "-r", str(REQUIREMENTS_FILE)],
         check=True,
     )
 
-    # Previously installed from local source directories:
-    # components = [
-    #     SRC_DIR / "azure-cli-telemetry",
-    #     SRC_DIR / "azure-cli-core",
-    #     SRC_DIR / "azure-cli",
-    # ]
-    # for component in components:
-    #     if not component.exists():
-    #         raise BuildError(f"Component not found: {component}")
-    #     print(f"  Installing {component.name}...")
-    #     # Prefer wheels so native extensions are pre-built and signed consistently.
-    #     subprocess.run(
-    #         [str(venv_python), "-m", "pip", "install", "--only-binary", ":all:", str(component)],
-    #         check=True,
-    #     )
-
     print("\nVerifying Azure CLI installation...")
     subprocess.run([str(venv_python), "-m", "azure.cli", "--version"], check=True)
-
 
 def create_install_structure(venv_dir: Path, install_dir: Path, version: str, platform_tag: str) -> None:
     """Create the final installation directory structure."""
