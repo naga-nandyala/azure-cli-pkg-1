@@ -167,24 +167,34 @@ def create_venv(python_path: Path, venv_dir: Path) -> Path:
 
 
 def install_azure_cli(venv_python: Path) -> None:
-    """Install Azure CLI from local source into the venv."""
-    print("\n=== Installing Azure CLI from source ===")
+    """Install Azure CLI and all dependencies using the pinned requirements file."""
+    print("\n=== Installing Azure CLI from requirements file ===")
 
-    components = [
-        SRC_DIR / "azure-cli-telemetry",
-        SRC_DIR / "azure-cli-core",
-        SRC_DIR / "azure-cli",
-    ]
+    requirements_file = SRC_DIR / "azure-cli" / "requirements.py3.MacOS.txt"
+    if not requirements_file.exists():
+        raise BuildError(f"Requirements file not found: {requirements_file}")
 
-    for component in components:
-        if not component.exists():
-            raise BuildError(f"Component not found: {component}")
-        print(f"  Installing {component.name}...")
-        # Prefer wheels so native extensions are pre-built and signed consistently.
-        subprocess.run(
-            [str(venv_python), "-m", "pip", "install", "--only-binary", ":all:", str(component)],
-            check=True,
-        )
+    print(f"  Using: {requirements_file}")
+    subprocess.run(
+        [str(venv_python), "-m", "pip", "install", "--only-binary", ":all:", "-r", str(requirements_file)],
+        check=True,
+    )
+
+    # Previously installed from local source directories:
+    # components = [
+    #     SRC_DIR / "azure-cli-telemetry",
+    #     SRC_DIR / "azure-cli-core",
+    #     SRC_DIR / "azure-cli",
+    # ]
+    # for component in components:
+    #     if not component.exists():
+    #         raise BuildError(f"Component not found: {component}")
+    #     print(f"  Installing {component.name}...")
+    #     # Prefer wheels so native extensions are pre-built and signed consistently.
+    #     subprocess.run(
+    #         [str(venv_python), "-m", "pip", "install", "--only-binary", ":all:", str(component)],
+    #         check=True,
+    #     )
 
     print("\nVerifying Azure CLI installation...")
     subprocess.run([str(venv_python), "-m", "azure.cli", "--version"], check=True)
