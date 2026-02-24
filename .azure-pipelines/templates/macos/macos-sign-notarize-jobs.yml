@@ -237,7 +237,8 @@ jobs:
             "ToolName": "sign",
             "ToolVersion": "1.0",
             "Parameters": {
-              "Hardening": "--options=runtime"
+              "Hardening": "--options=runtime",
+              "OpusInfo": "http://Microsoft.com"
             }
           }
         ]
@@ -455,7 +456,8 @@ jobs:
             "ToolName": "sign",
             "ToolVersion": "1.0",
             "Parameters": {
-              "BundleId": "${{ parameters.BundleId }}"
+              "BundleId": "${{ parameters.BundleId }}",
+              "OpusInfo": "http://Microsoft.com"
             }
           }
         ]
