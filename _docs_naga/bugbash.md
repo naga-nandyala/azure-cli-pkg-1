@@ -21,7 +21,7 @@ Run on both **ARM64** and **Intel** machines. Work through sections in order —
     - [S1-3: Login and run a command against azclienttools](#s1-3-login-and-run-a-command-against-azclienttools)
     - [S1-4: Uninstall homebrew-core azure-cli](#s1-4-uninstall-homebrew-core-azure-cli)
   - [Section 2 — New install via homebrew-cask](#section-2--new-install-via-homebrew-cask)
-    - [S2-1: Tap and inspect formula](#s2-1-tap-and-inspect-formula)
+    - [S2-1: Tap and inspect cask](#s2-1-tap-and-inspect-cask)
     - [S2-2: Install](#s2-2-install)
     - [S2-3: Verify signatures](#s2-3-verify-signatures)
     - [S2-4: Basic functionality](#s2-4-basic-functionality)
@@ -126,7 +126,7 @@ Expected: `az` removed from PATH, formula gone, `~/.azure` directory and all its
 
 ## Section 2 — New install via homebrew-cask
 
-### S2-1: Tap and inspect formula
+### S2-1: Tap and inspect cask
 
 ```bash
 brew tap naga-nandyala/mycli-app https://github.com/naga-nandyala/homebrew-mycli-app
@@ -360,7 +360,19 @@ az account show --output table
 
 Expected: Login succeeds via browser fallback.
 
-> **After this test**: Reinstall Company Portal from the Mac App Store before continuing.
+> ⚠️ **Mandatory — do not skip**: Company Portal is a **required component on Microsoft enterprise laptops**. It enforces device compliance, delivers the Enterprise SSO extension, and is governed by IT policy. Uninstalling it was a deliberate test step — you must reinstall it immediately before continuing. Leaving an enterprise machine without Company Portal is a compliance and security gap.
+
+**Reinstall Company Portal:**
+
+1. Open the **Mac App Store** and search for **Microsoft Intune Company Portal**.
+2. Install and launch it — sign in with your corporate account if prompted.
+3. Verify the SSO extension is re-registered:
+
+```bash
+pluginkit -m -v | grep com.microsoft.CompanyPortalMac.ssoextension
+```
+
+Expected: Extension is listed with an enabled status. **Do not proceed to S3-6 until this output appears.**
 
 ### S3-6: Login into azclienttools tenant
 
