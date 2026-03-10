@@ -4,7 +4,7 @@
 |---|---|
 | **Cask source** | `naga-nandyala/homebrew-mycli-app` |
 | **Release repo** | `naga-nandyala/azure-cli-latest` |
-| **Version** | 2.83.0 |
+| **Version** | 2.84.0 |
 | **Changes under test** | homebrew-cask install approach + broker-based authentication |
 
 Run on both **ARM64** and **Intel** machines. Work through sections in order — each section's end state is the start state for the next.
@@ -18,7 +18,7 @@ Run on both **ARM64** and **Intel** machines. Work through sections in order —
   - [Section 1 — Current state (homebrew-core baseline)](#section-1--current-state-homebrew-core-baseline)
     - [S1-1: Installation check](#s1-1-installation-check)
     - [S1-2: Capture extensions and config](#s1-2-capture-extensions-and-config)
-    - [S1-3: Login and run a command against azclienttools](#s1-3-login-and-run-a-command-against-azclienttools)
+    - [S1-3: Login and run a command against azclitools](#s1-3-login-and-run-a-command-against-azclitools)
     - [S1-4: Uninstall homebrew-core azure-cli](#s1-4-uninstall-homebrew-core-azure-cli)
   - [Section 2 — New install via homebrew-cask](#section-2--new-install-via-homebrew-cask)
     - [S2-1: Tap and inspect cask](#s2-1-tap-and-inspect-cask)
@@ -35,7 +35,7 @@ Run on both **ARM64** and **Intel** machines. Work through sections in order —
     - [S3-3: Disable broker (config = false) → falls back to browser](#s3-3-disable-broker-config--false--falls-back-to-browser)
     - [S3-4: Re-enable broker (config = true) → broker invoked again](#s3-4-re-enable-broker-config--true--broker-invoked-again)
     - [S3-5: Uninstall Company Portal but config = true → falls back to browser](#s3-5-uninstall-company-portal-but-config--true--falls-back-to-browser)
-    - [S3-6: Login into azclienttools tenant](#s3-6-login-into-azclienttools-tenant)
+    - [S3-6: Login into azclitools tenant](#s3-6-login-into-azclitools-tenant)
   - [Section 4 — Telemetry verification](#section-4--telemetry-verification)
     - [ST-1: Capture a successful broker login](#st-1-capture-a-successful-broker-login)
     - [ST-2: Capture a cancelled broker login](#st-2-capture-a-cancelled-broker-login)
@@ -85,11 +85,11 @@ ls ~/.azure/
 
 Save this output — you'll verify it survives uninstall.
 
-### S1-3: Login and run a command against azclienttools
+### S1-3: Login and run a command against azclitools
 
 ```bash
 az login
-# Select the azclienttools tenant when prompted
+# Select the azclitools tenant when prompted
 
 az account show --output table
 
@@ -97,7 +97,7 @@ az account show --output table
 az extension add --name azure-devops 2>/dev/null || true
 
 # Verify access
-az devops project list --org https://dev.azure.com/azclienttools --output table
+az devops project list --org https://dev.azure.com/azclitools --output table
 ```
 
 Expected: Login succeeds, project list returns. Note the extension was installed or was already present.
@@ -129,7 +129,7 @@ Expected: `az` removed from PATH, formula gone, `~/.azure` directory and all its
 ### S2-1: Tap and inspect cask
 
 ```bash
-brew tap naga-nandyala/mycli-app https://github.com/naga-nandyala/homebrew-mycli-app
+brew tap naga-nandyala/mycli-app
 
 # Inspect tap
 brew tap-info naga-nandyala/mycli-app
@@ -139,7 +139,7 @@ brew info --cask naga-nandyala/mycli-app/azure-cli
 cat $(brew --repository naga-nandyala/mycli-app)/Casks/azure-cli.rb
 ```
 
-Expected: Tap lists correctly, cask shows version 2.83.0, URL points to `naga-nandyala/azure-cli-latest` releases, `depends_on formula: "python@3.13"`.
+Expected: Tap lists correctly, cask shows version 2.84.0, URL points to `naga-nandyala/azure-cli-latest` releases, `depends_on formula: "python@3.13"`.
 
 ### S2-2: Install
 
@@ -155,13 +155,13 @@ az --version
 ls -la /opt/homebrew/Caskroom/azure-cli/
 ```
 
-Expected: `az` resolves, version prints as 2.83.0, install lives under `/opt/homebrew/Caskroom/azure-cli/2.83.0/`.
+Expected: `az` resolves, version prints as 2.84.0, install lives under `/opt/homebrew/Caskroom/azure-cli/2.84.0/`.
 
 ### S2-3: Verify signatures
 
 ```bash
 AZ_BIN=$(which az)
-INSTALL_DIR=/opt/homebrew/Caskroom/azure-cli/2.83.0
+INSTALL_DIR=/opt/homebrew/Caskroom/azure-cli/2.84.0
 
 # Check the launcher itself
 codesign -dv --verbose=4 "${AZ_BIN}" 2>&1 | grep -E "Authority|TeamIdentifier|Signature"
@@ -194,7 +194,7 @@ The `~/.azure/cliextensions/` directory was retained from the homebrew-core inst
 az extension list --output table
 
 # Run the azure-devops extension that was installed pre-uninstall
-az devops project list --org https://dev.azure.com/azclienttools --output table
+az devops project list --org https://dev.azure.com/azclitools --output table
 ```
 
 Expected: Extension is still listed and functional — no re-install needed, no version mismatch errors.
@@ -274,8 +274,8 @@ With a fresh logout, verify `az login` opens the broker UI automatically without
 ```bash
 az logout 2>/dev/null || true
 
-# Check current broker config (should be unset or true)
-az config get core.enable_broker_on_windows 2>/dev/null || echo "not set (defaults to broker on macOS)"
+# Check current broker config (should be unset or true — broker on by default)
+az config get core.enable_broker_on_mac 2>/dev/null || echo "not set (defaults to broker enabled on macOS)"
 
 az login
 ```
@@ -303,8 +303,8 @@ Expected: Token acquired via broker, subscription returned.
 az logout
 
 # Disable broker
-az config set core.login_experience_v2=off
-az config get core.login_experience_v2
+az config set core.enable_broker_on_mac=false
+az config get core.enable_broker_on_mac
 
 az login
 ```
@@ -323,8 +323,8 @@ Expected: Login succeeds via browser, account accessible.
 az logout
 
 # Re-enable broker
-az config set core.login_experience_v2=on
-az config get core.login_experience_v2
+az config set core.enable_broker_on_mac=true
+az config get core.enable_broker_on_mac
 
 az login
 ```
@@ -347,7 +347,7 @@ sudo rm -rf /Applications/Company\ Portal.app
 ls /Applications/Company\ Portal.app 2>/dev/null && echo "still present" || echo "REMOVED"
 
 # Config still set to broker
-az config get core.login_experience_v2
+az config get core.enable_broker_on_mac
 
 az login
 ```
@@ -374,15 +374,15 @@ pluginkit -m -v | grep com.microsoft.CompanyPortalMac.ssoextension
 
 Expected: Extension is listed with an enabled status. **Do not proceed to S3-6 until this output appears.**
 
-### S3-6: Login into azclienttools tenant
+### S3-6: Login into azclitools tenant
 
 ```bash
 az logout
-az login --tenant <azclienttools-tenant-id>
-az devops project list --org https://dev.azure.com/azclienttools --output table
+az login --tenant <azclitools-tenant-id>
+az devops project list --org https://dev.azure.com/azclitools --output table
 ```
 
-Expected: Broker acquires token scoped to azclienttools tenant, project list returns.
+Expected: Broker acquires token scoped to azclitools tenant, project list returns.
 
 ---
 
@@ -400,7 +400,7 @@ Prerequisite: cask install from S2-2 in place, broker re-enabled (`core.login_ex
 az logout 2>/dev/null || true
 
 # Run login with --debug to capture correlation ID
-az login --tenant <azclienttools-tenant-id> --debug 2>&1 | grep -E "correlation.id|CorrelationId|telemetry" | head -20
+az login --tenant <azclitools-tenant-id> --debug 2>&1 | grep -E "correlation.id|CorrelationId|telemetry" | head -20
 
 # Note the correlation ID from debug output
 az account show --output table
@@ -426,7 +426,7 @@ Record the `CorrelationId` from debug output. After ~1 hour, query the backend (
 az logout 2>/dev/null || true
 
 # Start broker login, then dismiss/cancel the SSO dialog
-az login --tenant <azclienttools-tenant-id> --debug 2>&1 | grep -E "correlation.id|CorrelationId" | head -5
+az login --tenant <azclitools-tenant-id> --debug 2>&1 | grep -E "correlation.id|CorrelationId" | head -5
 ```
 
 When the macOS SSO / Keychain broker dialog appears, click **Cancel** or close it.
@@ -482,7 +482,7 @@ After ~1 hour, query backend and check:
 |---|---|---|
 | `context.default.azurecli.installer` | `HOMEBREW_CASK` | Confirm it is NOT `HOMEBREW` (formula value) |
 | `context.default.vs.core.os.platform` | `macos-X.X-arm64-...` (ARM64) or `macos-X.X-x86_64-...` (Intel) | Matches machine |
-| `CoreVersion` | `2.83.0` | Matches cask version |
+| `CoreVersion` | `2.84.0` | Matches cask version |
 
 > **If `installer` still shows `HOMEBREW`**: note as a bug — the cask packaging should set a distinct installer identifier so cask-sourced installs can be distinguished in telemetry.
 
@@ -545,7 +545,7 @@ Test the raw tarball with a Python that has no relationship to Homebrew.
 ### S5-1: Download and extract tarball
 
 ```bash
-VERSION=2.83.0
+VERSION=2.84.0
 ARCH=$(uname -m)   # arm64 or x86_64
 TARBALL="azure-cli-${VERSION}-macos-${ARCH}.tar.gz"
 
@@ -603,14 +603,14 @@ AZ_PYTHON="${NON_HB_PYTHON}" /tmp/az-offline/bin/az --version
 AZ_PYTHON="${NON_HB_PYTHON}" /tmp/az-offline/bin/az find "create storage account"
 ```
 
-Expected: `az --version` succeeds, shows 2.83.0. No errors about missing packages.
+Expected: `az --version` succeeds, shows 2.84.0. No errors about missing packages.
 
 ### S5-6: Verify old extensions work in offline mode
 
 ```bash
 AZ_PYTHON="${NON_HB_PYTHON}" /tmp/az-offline/bin/az extension list --output table
 AZ_PYTHON="${NON_HB_PYTHON}" /tmp/az-offline/bin/az devops project list \
-  --org https://dev.azure.com/azclienttools --output table
+  --org https://dev.azure.com/azclitools --output table
 ```
 
 Expected: Extensions in `~/.azure/cliextensions/` load correctly under the tarball install.
@@ -655,9 +655,9 @@ Expected: Homebrew-core azure-cli back in place, pre-existing extensions still p
 |------|-------------|-------|-------|-------|
 | S1-1 | Current install check | | | |
 | S1-2 | Capture extensions/config | | | |
-| S1-3 | Login + azclienttools project list | | | |
+| S1-3 | Login + azclitools project list | | | |
 | S1-4 | Uninstall homebrew-core, ~/.azure retained | | | |
-| S2-1 | Tap + inspect formula | | | |
+| S2-1 | Tap + inspect cask | | | |
 | S2-2 | Cask install, verify location | | | |
 | S2-3 | Verify signatures | | | |
 | S2-4 | Basic az commands | | | |
@@ -670,7 +670,7 @@ Expected: Homebrew-core azure-cli back in place, pre-existing extensions still p
 | S3-3 | Config=false → browser login | | | |
 | S3-4 | Config=true → broker login | | | |
 | S3-5 | No Company Portal + config=true → browser fallback | | | |
-| S3-6 | Broker login to azclienttools tenant | | | |
+| S3-6 | Broker login to azclitools tenant | | | |
 | ST-1 | Successful broker login — telemetry fields | | | |
 | ST-2 | Cancelled broker login — `UserCanceled` telemetry | | | |
 | ST-3 | Non-broker login — absent from broker query | | | |
