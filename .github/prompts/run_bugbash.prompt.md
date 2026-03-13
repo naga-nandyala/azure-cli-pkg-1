@@ -1,93 +1,86 @@
 ---
-agent: agent
-description: "Execute the Azure CLI macOS bug bash tests and capture results"
+description: "Run the Azure CLI macOS bug bash — executes test steps one at a time, captures output to per-step markdown files"
+mode: "agent"
 ---
 
-You are running the Azure CLI macOS bug bash on a participant's machine. Your job is to execute the tests defined in `_docs_naga/bugbash_tests.md`, capture results, and push them to the repository.
+# Azure CLI macOS Bug Bash
 
-## CRITICAL RULES
+**Setup**: Run `whoami` to get the current username. Use this to create the results folder named `results_{username}/` (e.g. `results_naga/`).
 
-1. Execute tests IN ORDER — each section's end state is the start state for the next.
-2. Capture ALL command output verbatim in the results file.
-3. For **interactive** tests (marked `[interactive]`): tell the user what will happen, run the command, wait for it to finish, then ask the user to confirm the visual result (e.g., "Did the broker UI appear, or did a browser tab open?").
-4. For **destructive** tests (marked `[destructive]`): ask the user for explicit YES/NO confirmation before running. If they say NO, mark the test SKIP.
-5. Never fabricate output. If a command fails, record the actual error.
-6. Do NOT use heredoc syntax (cat << EOF) — it will fail in this environment.
-7. After ALL tests are done (or the user says to stop), finalize the results file AND push to git.
-
-## WORKFLOW
-
-### Phase 1: Setup
-
-1. Read the test plan file: `_docs_naga/bugbash_tests.md`
-2. Gather machine info by running these commands:
+Gather machine info:
 
 ```bash
 echo "ARCH: $(uname -m)"
 echo "OS: $(sw_vers -productName) $(sw_vers -productVersion) (Build $(sw_vers -buildVersion))"
-echo "USER: $(whoami)"
 echo "HOSTNAME: $(hostname -s)"
 echo "DATE: $(date +%Y-%m-%d)"
 ```
 
-3. Store the USERNAME, ARCH, OS_VERSION, and DATE values for use throughout.
+Store USERNAME, ARCH, OS_VERSION, HOSTNAME, and DATE for use throughout.
 
-### Phase 2: Create results file
+Read the test steps from [bugbash_tests.md](../../_docs_naga/bugbash_related/bugbash_tests.md). Steps are organized into sections (phases).
 
-Create the file `_docs_naga/<USERNAME>_bugbash_results.md` using the template in `_docs_naga/bugbash_results_template.md`.
+Each step in `bugbash_tests.md` includes a tag indicating its type:
+- `[auto]` — Safe, low-risk command. Run immediately with no user input needed.
+- `[interactive]` — Warn the user what will happen (login prompt, dialog, etc.), run the command, wait for it to finish, then ask the user to confirm what they observed.
+- `[destructive]` — Potentially dangerous command (e.g. uninstall, remove app). Print a warning and ask "Proceed? (yes/no)" before running. If the user says no, mark the step as **SKIP**.
+- `[manual]` — Show the command to the user but do **not** run it. Let the user run it themselves and paste the result back.
 
-Fill in the header table with the machine info from Phase 1.
+Use the step's tag from `bugbash_tests.md` as the source of truth for run behavior.
 
-### Phase 3: Execute tests
+**Ask the user which section(s) to run** before starting. Present the available sections as a numbered list and let the user choose:
+- A single section (e.g. "2")
+- Multiple sections (e.g. "1, 3")
+- "all" to run every section
 
-Read `_docs_naga/bugbash_tests.md` and execute each test section in order.
+Then execute only the selected section(s), **one step at a time**. Before starting each section, display the section name and the steps it contains.
 
-For each test:
+## CRITICAL RULES
 
-1. Print the test ID and name to the user: "Running S1-1: Installation check..."
-2. Check the test type tag:
-   - `[auto]` — Run all commands, capture output, auto-determine PASS/FAIL based on the pass criteria
-   - `[interactive]` — Announce what is about to happen, run the command, wait for completion, then ask the user to describe the result
-   - `[destructive]` — Ask the user "This test will <description>. Proceed? (yes/no)" before running
-   - `[manual]` — Tell the user to perform the action manually, then ask them for the result
-3. Write the test result section to the results file immediately after completing each test (do not batch)
-4. Use this format in the results file for each test:
+1. Execute tests IN ORDER — each section's end state is the start state for the next.
+2. Capture ALL command output verbatim.
+3. Never fabricate output. If a command fails, record the actual error.
+4. Do NOT use heredoc syntax (cat << EOF) — it will fail in this environment.
+5. Do NOT batch multiple terminal commands in a single call. Run exactly one command per step and follow that step's type tag.
 
+## For each step:
+
+1. **Display the step description** (the blockquote/description text from bugbash_tests.md) prominently based on step type:
+   - If `[auto]`, `[interactive]`, or `[manual]`, use this exact format:
+     ```
+     > ## 🟠 {step description}
+     ```
+   - If `[destructive]`, use this exact format:
+     ```
+     > ## 🔴 {step description}
+     ```
+   Then show the section, step number (e.g. S1-1), title, step type tag, and the command you are about to run.
+
+2. **Execute based on the step type**:
+   - If `[auto]`, run the command immediately. No user input needed.
+   - If `[interactive]`, warn the user what will happen (e.g. "A login prompt will appear"), run the command, wait for it to finish, then ask the user to confirm what they observed.
+   - If `[destructive]`, print a warning (use the **Warning** text from the test definition if present) and ask "Proceed? (yes/no)" before running. If the user says no, mark the step as **SKIP**.
+   - If `[manual]`, show the command to the user but do **not** run it. Wait for the user to run it themselves and paste the result back.
+
+3. **Capture the terminal output** and create a markdown file named `{step_id}-{short-name}-{YYYYMMDDHHMMSS}.md` inside the `results_{username}/` folder, where the timestamp uses 24-hour format (e.g. `S1-1-installation-check-20260313143025.md`). Use a per-step runtime/current-context timestamp directly, and do **not** run a separate `date` command for each step. Each file should contain:
+   - Section name
+   - Step ID and title
+   - Execution mode (the type tag)
+   - The exact command(s) run
+   - The full terminal output (in a code block)
+   - Pass criteria from the test definition
+   - Result: `PASS`, `FAIL`, `SKIP`, or `BLOCKED`
+   - A timestamp of when it was executed
+   - Any notes (e.g. CorrelationId for telemetry tests)
+
+4. **Confirm completion** of the step, then move on to the next step.
+
+**After the last step of each section**, display a bold completion banner using this exact format:
 ```
-### S<id>: <Name> — <STATUS>
-
-\`\`\`
-<captured command output>
-\`\`\`
-
-<any notes about the result>
+> ## ✅ Section {N} — {Section Name} — COMPLETE
 ```
 
-Where STATUS is: `PASS`, `FAIL`, `SKIP`, `BLOCKED`
-
-### Phase 4: Summary table
-
-After all tests are done, append the summary table to the results file:
-
-```
-## Result Summary
-
-| Test | Description | Result | Notes |
-|------|-------------|--------|-------|
-| S1-1 | Installation check | <STATUS> | <brief note> |
-...
-```
-
-### Phase 5: Git push
-
-1. Determine the current git remote: `git remote get-url origin`
-2. Create a branch: `git checkout -b bugbash/results-<USERNAME>-<ARCH>-<DATE>`
-3. Stage the results file: `git add _docs_naga/<USERNAME>_bugbash_results.md`
-4. Commit: `git commit -m "Bug bash results: <USERNAME> on <ARCH> — <DATE>"`
-5. Push: `git push origin bugbash/results-<USERNAME>-<ARCH>-<DATE>`
-6. Tell the user the branch name and suggest they open a PR.
-
-If push fails due to permissions, tell the user to fork the repo first, add their fork as a remote, and push there.
+---
 
 ## HANDLING SPECIAL CASES
 
@@ -95,8 +88,32 @@ If push fails due to permissions, tell the user to fork the repo first, add thei
 
 - **Telemetry tests (ST-1 through ST-5)**: These require checking backend data ~1 hour later. Record the CorrelationId from debug output and mark the test as `PASS (telemetry pending)`. Add a note that backend verification is needed later.
 
-- **Company Portal uninstall (S3-5)**: This is a high-risk test. Make it absolutely clear to the user that they MUST reinstall Company Portal immediately after. If the user declines, mark as SKIP.
+- **Company Portal uninstall (S3-5)**: This is a high-risk test. Use the `🔴` destructive banner. Make it absolutely clear to the user that they MUST reinstall Company Portal immediately after. If the user declines, mark as SKIP.
 
 - **Non-Homebrew Python (S5-4 through S5-6)**: Ask the user which Python path to use. If no non-Homebrew Python is available, suggest pyenv or mark as SKIP.
 
-- **Partial runs**: If the user wants to stop mid-way, write all completed results, update the summary table with remaining tests as `PENDING`, and still push to git.
+- **Partial runs**: If the user wants to stop mid-way, write all completed results and still generate the summary with remaining tests as `PENDING`.
+
+---
+
+## Final Step — Generate Summary
+
+After all steps are complete (or the user says to stop), create a `results_{username}/S{N}-Summary.md` file (e.g. `S1-Summary.md`) for each completed section that contains:
+- Machine info (ARCH, OS, hostname)
+- A table listing every section, step ID, description, step type, result (PASS/FAIL/SKIP/BLOCKED/PENDING), and notes
+- Total number of steps completed vs total
+- Timestamp of the full run
+
+---
+
+## Git Push (optional)
+
+After the summary is generated, ask the user if they want to push results to git. If yes:
+
+1. Create a branch: `git checkout -b bugbash/results-{USERNAME}-{ARCH}-{DATE}`
+2. Stage results: `git add results_{USERNAME}/`
+3. Commit: `git commit -m "Bug bash results: {USERNAME} on {ARCH} — {DATE}"`
+4. Push: `git push origin bugbash/results-{USERNAME}-{ARCH}-{DATE}`
+5. Tell the user the branch name and suggest they open a PR.
+
+If push fails due to permissions, tell the user to fork the repo first.

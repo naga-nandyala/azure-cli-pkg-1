@@ -34,7 +34,19 @@ Status legend: `PASS` `FAIL` `SKIP` `BLOCKED` `PASS (telemetry pending)`
 (output will be captured here)
 ```
 
-### S1-4: Uninstall homebrew-core azure-cli — PENDING
+### S1-4: az upgrade — PENDING
+
+```
+(output will be captured here)
+```
+
+### S1-5: Reinstall homebrew-core formula — PENDING
+
+```
+(output will be captured here)
+```
+
+### S1-6: Uninstall homebrew-core azure-cli — PENDING
 
 ```
 (output will be captured here)
@@ -80,13 +92,19 @@ Status legend: `PASS` `FAIL` `SKIP` `BLOCKED` `PASS (telemetry pending)`
 (output will be captured here)
 ```
 
-### S2-7: Reinstall and upgrade simulation — PENDING
+### S2-7: az upgrade — PENDING
 
 ```
 (output will be captured here)
 ```
 
-### S2-8: Uninstall cask — PENDING
+### S2-8: Reinstall and upgrade simulation — PENDING
+
+```
+(output will be captured here)
+```
+
+### S2-9: Uninstall cask — PENDING
 
 ```
 (output will be captured here)
@@ -235,15 +253,18 @@ Verified via KQL after ST-1. Fields to check: `MsalVersion`, `MsalRuntimeVersion
 | S1-1 | Installation check | | |
 | S1-2 | Capture extensions/config | | |
 | S1-3 | Login + azclitools project list | | |
-| S1-4 | Uninstall homebrew-core, ~/.azure retained | | |
+| S1-4 | az upgrade | | |
+| S1-5 | Reinstall homebrew-core formula | | |
+| S1-6 | Uninstall homebrew-core, ~/.azure retained | | |
 | S2-1 | Tap + inspect cask | | |
 | S2-2 | Cask install, verify location | | |
 | S2-3 | Verify signatures | | |
 | S2-4 | Basic az commands | | |
 | S2-5 | Old extensions still work | | |
 | S2-6 | New extension install/uninstall | | |
-| S2-7 | Reinstall + upgrade simulation | | |
-| S2-8 | Cask uninstall, ~/.azure retained | | |
+| S2-7 | az upgrade on cask | | |
+| S2-8 | Reinstall + upgrade simulation | | |
+| S2-9 | Cask uninstall, ~/.azure retained | | |
 | S3-1 | Company Portal present + version | | |
 | S3-2 | Broker auto-invoked (default config) | | |
 | S3-3 | Config=off → browser login | | |

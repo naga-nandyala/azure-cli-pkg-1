@@ -68,7 +68,38 @@ az devops project list --org https://dev.azure.com/azclitools --output table
 
 ---
 
-### S1-4: Uninstall homebrew-core azure-cli `[destructive]`
+### S1-4: az upgrade `[auto]`
+
+**Commands:**
+
+```bash
+az upgrade 2>&1
+```
+
+**Pass criteria:** Command reports already up-to-date or completes an upgrade without errors. No Python tracebacks.
+
+---
+
+### S1-5: Reinstall homebrew-core formula `[auto]`
+
+**Commands:**
+
+```bash
+brew reinstall azure-cli && az --version
+```
+
+**Verify:**
+
+```bash
+az extension list --output table
+cat ~/.azure/config 2>/dev/null || echo "no config file"
+```
+
+**Pass criteria:** Reinstall completes without errors. `az --version` shows expected version. Config and extensions are intact.
+
+---
+
+### S1-6: Uninstall homebrew-core azure-cli `[destructive]`
 
 **Warning:** This will remove the current azure-cli installation.
 
@@ -189,7 +220,19 @@ az extension list --output table
 
 ---
 
-### S2-7: Reinstall and upgrade simulation `[auto]`
+### S2-7: az upgrade `[auto]`
+
+**Commands:**
+
+```bash
+az upgrade 2>&1
+```
+
+**Pass criteria:** Cask-installed CLI handles the self-update path without errors. Reports up-to-date or completes upgrade. No Python tracebacks.
+
+---
+
+### S2-8: Reinstall and upgrade simulation `[auto]`
 
 **Commands:**
 
@@ -204,7 +247,7 @@ az --version
 
 ---
 
-### S2-8: Uninstall cask `[destructive]`
+### S2-9: Uninstall cask `[destructive]`
 
 **Warning:** This will remove the cask-installed azure-cli.
 

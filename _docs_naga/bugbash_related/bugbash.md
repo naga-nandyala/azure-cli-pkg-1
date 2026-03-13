@@ -19,7 +19,9 @@ Run on both **ARM64** and **Intel** machines. Work through sections in order —
     - [S1-1: Installation check](#s1-1-installation-check)
     - [S1-2: Capture extensions and config](#s1-2-capture-extensions-and-config)
     - [S1-3: Login and run a command against azclitools](#s1-3-login-and-run-a-command-against-azclitools)
-    - [S1-4: Uninstall homebrew-core azure-cli](#s1-4-uninstall-homebrew-core-azure-cli)
+    - [S1-4: az upgrade](#s1-4-az-upgrade)
+    - [S1-5: Reinstall homebrew-core formula](#s1-5-reinstall-homebrew-core-formula)
+    - [S1-6: Uninstall homebrew-core azure-cli](#s1-6-uninstall-homebrew-core-azure-cli)
   - [Section 2 — New install via homebrew-cask](#section-2--new-install-via-homebrew-cask)
     - [S2-1: Tap and inspect cask](#s2-1-tap-and-inspect-cask)
     - [S2-2: Install](#s2-2-install)
@@ -27,8 +29,9 @@ Run on both **ARM64** and **Intel** machines. Work through sections in order —
     - [S2-4: Basic functionality](#s2-4-basic-functionality)
     - [S2-5: Verify old extensions still work](#s2-5-verify-old-extensions-still-work)
     - [S2-6: Install a new extension, then uninstall it](#s2-6-install-a-new-extension-then-uninstall-it)
-    - [S2-7: Reinstall and upgrade simulation](#s2-7-reinstall-and-upgrade-simulation)
-    - [S2-8: Uninstall cask](#s2-8-uninstall-cask)
+    - [S2-7: az upgrade on cask install](#s2-7-az-upgrade-on-cask-install)
+    - [S2-8: Reinstall and upgrade simulation](#s2-8-reinstall-and-upgrade-simulation)
+    - [S2-9: Uninstall cask](#s2-9-uninstall-cask)
   - [Section 3 — Broker authentication](#section-3--broker-authentication)
     - [S3-1: Check Company Portal](#s3-1-check-company-portal)
     - [S3-2: Broker auto-invoked on az login (config = default)](#s3-2-broker-auto-invoked-on-az-login-config--default)
@@ -102,7 +105,24 @@ az devops project list --org https://dev.azure.com/azclitools --output table
 
 Expected: Login succeeds, project list returns. Note the extension was installed or was already present.
 
-### S1-4: Uninstall homebrew-core azure-cli
+### S1-4: az upgrade
+
+```bash
+az upgrade 2>&1
+```
+
+Expected: `az upgrade` either upgrades from an older version or reports the CLI is already up to date. This verifies the self-update path works for users on the homebrew-core formula.
+
+### S1-5: Reinstall homebrew-core formula
+
+```bash
+brew reinstall azure-cli
+az --version
+```
+
+Expected: Reinstall completes without errors, `az --version` reports the same version, and all config/extensions in `~/.azure/` remain intact.
+
+### S1-6: Uninstall homebrew-core azure-cli
 
 ```bash
 brew uninstall azure-cli
@@ -211,7 +231,15 @@ az extension list --output table
 
 Expected: Extension installs to `~/.azure/cliextensions/`, works, removes cleanly.
 
-### S2-7: Reinstall and upgrade simulation
+### S2-7: az upgrade on cask install
+
+```bash
+az upgrade 2>&1
+```
+
+Expected: `az upgrade` either reports the CLI is up to date or completes an upgrade. Verify the cask-installed CLI handles the self-update path correctly (should not break the cask install).
+
+### S2-8: Reinstall and upgrade simulation
 
 ```bash
 # Reinstall over existing
@@ -225,7 +253,7 @@ az --version
 
 Expected: Both commands complete without errors or broken symlinks.
 
-### S2-8: Uninstall cask
+### S2-9: Uninstall cask
 
 ```bash
 brew uninstall --cask naga-nandyala/mycli-app/azure-cli
@@ -656,15 +684,18 @@ Expected: Homebrew-core azure-cli back in place, pre-existing extensions still p
 | S1-1 | Current install check | | | |
 | S1-2 | Capture extensions/config | | | |
 | S1-3 | Login + azclitools project list | | | |
-| S1-4 | Uninstall homebrew-core, ~/.azure retained | | | |
+| S1-4 | az upgrade (homebrew-core) | | | |
+| S1-5 | Reinstall homebrew-core formula | | | |
+| S1-6 | Uninstall homebrew-core, ~/.azure retained | | | |
 | S2-1 | Tap + inspect cask | | | |
 | S2-2 | Cask install, verify location | | | |
 | S2-3 | Verify signatures | | | |
 | S2-4 | Basic az commands | | | |
 | S2-5 | Old extensions still work | | | |
 | S2-6 | New extension install/uninstall | | | |
-| S2-7 | Reinstall + upgrade simulation | | | |
-| S2-8 | Cask uninstall, ~/.azure retained | | | |
+| S2-7 | az upgrade on cask install | | | |
+| S2-8 | Reinstall + upgrade simulation | | | |
+| S2-9 | Cask uninstall, ~/.azure retained | | | |
 | S3-1 | Company Portal present + version | | | |
 | S3-2 | Broker auto-invoked (default config) | | | |
 | S3-3 | Config=false → browser login | | | |
